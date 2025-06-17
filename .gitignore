@@ -1,3 +1,13 @@
 *.deb
 .env
 venv/
+*.exe
+*.msi
+*.wixobj
+*.wixpdb
+*.wixlib
+*.wixlib
+*.wixlib
+venv/
+build/
+dist/

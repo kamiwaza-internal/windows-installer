@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Product Id="*" 
+             Name="Kamiwaza Installer" 
+             Language="1033" 
+             Version="1.0.0.0" 
+             Manufacturer="Kamiwaza" 
+             UpgradeCode="PUT-GUID-HERE">
+        
+        <Package InstallerVersion="200" 
+                 Compressed="yes" 
+                 InstallScope="perMachine" />
+
+        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+        <MediaTemplate EmbedCab="yes" />
+
+        <Feature Id="ProductFeature" Title="KamiwazaInstaller" Level="1">
+            <ComponentGroupRef Id="ProductComponents" />
+        </Feature>
+
+        <!-- Define the directory structure -->
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="ProgramFilesFolder">
+                <Directory Id="INSTALLFOLDER" Name="Kamiwaza">
+                    <Component Id="ProductComponents" Guid="*">
+                        <!-- Add the main executable -->
+                        <File Id="WindowsInstallerEXE" 
+                              Source="dist/windows_installer.exe" 
+                              KeyPath="yes" />
+                    </Component>
+                </Directory>
+            </Directory>
+        </Directory>
+
+        <!-- Define the components -->
+        <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+            <Component Id="MainExecutable" Guid="*">
+                <File Id="WindowsInstallerEXE" 
+                      Source="dist/windows_installer.exe" 
+                      KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- Define the shortcuts -->
+        <DirectoryRef Id="INSTALLFOLDER">
+            <Component Id="ApplicationShortcut" Guid="*">
+                <Shortcut Id="ApplicationStartMenuShortcut" 
+                         Name="Kamiwaza Installer" 
+                         Description="Kamiwaza Installation Tool" 
+                         Target="[#WindowsInstallerEXE]" 
+                         WorkingDirectory="INSTALLFOLDER" />
+                <RemoveFolder Id="CleanUpShortCut" 
+                            Directory="ApplicationProgramsFolder" 
+                            On="uninstall" />
+                <RegistryValue Root="HKCU" 
+                             Key="Software\Kamiwaza\KamiwazaInstaller" 
+                             Name="installed" 
+                             Type="integer" 
+                             Value="1" 
+                             KeyPath="yes" />
+            </Component>
+        </DirectoryRef>
+
+        <!-- Add the shortcut to the Start Menu -->
+        <DirectoryRef Id="ApplicationProgramsFolder">
+            <Component Id="ApplicationShortcut" Guid="*">
+                <Shortcut Id="ApplicationStartMenuShortcut" 
+                         Name="Kamiwaza Installer" 
+                         Description="Kamiwaza Installation Tool" 
+                         Target="[#WindowsInstallerEXE]" 
+                         WorkingDirectory="INSTALLFOLDER" />
+                <RemoveFolder Id="CleanUpShortCut" 
+                            Directory="ApplicationProgramsFolder" 
+                            On="uninstall" />
+                <RegistryValue Root="HKCU" 
+                             Key="Software\Kamiwaza\KamiwazaInstaller" 
+                             Name="installed" 
+                             Type="integer" 
+                             Value="1" 
+                             KeyPath="yes" />
+            </Component>
+        </DirectoryRef>
+
+        <!-- Define the UI -->
+        <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+        <UIRef Id="WixUI_InstallDir" />
+    </Product>
+</Wix> 
