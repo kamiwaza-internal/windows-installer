@@ -74,7 +74,7 @@ class KamiwazaInstaller(tk.Tk):
             self.log_output("Downloading .deb package in WSL...")
             self.update_progress(40)
             deb_url = "https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_0.4.0-rc1_build01_amd64.deb"
-            download_cmd = f"wget {deb_url} -O /tmp/kamiwaza.deb"
+            download_cmd = f"wget {deb_url} -P /tmp/"
             ret, out, err = self.run_command(['wsl', 'bash', '-c', download_cmd])
             if ret != 0:
                 raise Exception("Failed to download .deb package in WSL.")
