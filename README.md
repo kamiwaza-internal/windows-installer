@@ -1,89 +1,91 @@
 # Kamiwaza Windows Installer
 
-A Windows installer for setting up the Kamiwaza development environment. This installer handles the setup of WSL (Windows Subsystem for Linux), Docker, and other required components.
+## Overview
+This project provides a graphical Windows installer for deploying the Kamiwaza .deb package into WSL Ubuntu. It features a progress bar, log output, and automates the download and installation process inside WSL.
 
-## Quick Start
+---
 
-### Option 1: Using the Executable (Recommended)
-1. Download `kamiwaza_installer.exe` from the latest release
-2. Right-click the installer and select "Run as Administrator"
-3. Follow the on-screen instructions
+## For Developers
 
-### Option 2: Running from Source
-If you prefer to run from source, you'll need Python 3.8+ installed.
+### Prerequisites
+- Python 3.10+ (64-bit recommended)
+- [PyInstaller](https://pyinstaller.org/)
+- [WiX Toolset](https://wixtoolset.org/) (for MSI packaging, optional)
+- Windows with WSL enabled
 
-1. Clone this repository:
-```bash
-git clone https://github.com/yourusername/kamiwaza-installer
-cd kamiwaza-installer
-```
+### Setup & Build
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+1. **Clone the repository**
+   ```sh
+   git clone <your-repo-url>
+   cd windows-installer
+   ```
 
-3. Run the installer:
-```bash
-python windows_installer.py
-```
+2. **Create and activate a virtual environment**
+   ```sh
+   python -m venv venv
+   venv\Scripts\activate  # On Windows
+   ```
 
-## Features
+3. **Install dependencies**
+   ```sh
+   pip install -r requirements.txt
+   pip install pyinstaller
+   ```
 
-- Automated WSL2 installation and configuration
-- Docker Desktop setup assistance
-- Kamiwaza deployment in WSL Ubuntu
-- User-friendly graphical interface
-- Progress tracking and logging
+4. **Build the standalone executable**
+   ```sh
+   pyinstaller --onefile --noconsole windows_installer.py
+   # The EXE will be in the dist/ folder
+   ```
 
-## System Requirements
+5. **(Optional) Build an MSI installer**
+   - Make sure WiX Toolset is installed and in your PATH.
+   - Run:
+     ```sh
+     candle installer.wxs
+     light -ext WixUIExtension installer.wixobj
+     ```
+   - The MSI will be created in your project directory.
 
-- Windows 10 version 2004 and higher (Build 19041 and higher) or Windows 11
-- 64-bit processor with Second Level Address Translation (SLAT)
-- At least 4GB of RAM
-- BIOS-level hardware virtualization support must be enabled
+---
 
-## Troubleshooting
+## For End Users
 
-### Common Issues
+### Prerequisites
+- Windows 10/11 with WSL enabled (Ubuntu recommended)
+- Internet connection
 
-1. **"Run as Administrator" not working**
-   - Make sure you're using a Windows account with administrative privileges
-   - Try right-clicking and selecting "Run as Administrator" explicitly
+### How to Use
 
-2. **WSL Installation Fails**
-   - Ensure Windows is up to date
-   - Enable virtualization in BIOS/UEFI
-   - Run `wsl --update` in PowerShell as administrator
+1. **Run the Installer**
+   - Double-click the `windows_installer.exe` (or run the MSI if provided).
+   - If prompted by Windows, allow the installer to run as administrator.
 
-3. **Docker Desktop Installation Issues**
-   - Verify WSL2 is properly installed
-   - Check that virtualization is enabled in Windows Features
-   - Ensure Hyper-V is available and enabled
+2. **Follow the UI**
+   - Click the "Install in WSL" button.
+   - The installer will:
+     - Check for WSL and install if missing
+     - Download the latest Kamiwaza `.deb` package into WSL
+     - Install the package in WSL Ubuntu
+     - Show progress and log output in the window
 
-### Getting Help
+3. **Completion**
+   - When finished, a "Close" button will appear.
+   - You can review the log output for details or errors.
 
-If you encounter any issues:
-1. Check the log output in the installer window
-2. Refer to the [GitHub Issues](https://github.com/yourusername/kamiwaza-installer/issues)
-3. Submit a new issue with the log output and error details
+### Troubleshooting
+- If the installer fails to download or install, check your WSL internet connectivity by opening a WSL terminal and running `ping google.com` or `wget <deb-url>`.
+- Make sure WSL is set up and Ubuntu is installed. You can install Ubuntu from the Microsoft Store.
+- If you see permission errors, try running the installer as administrator.
 
-## Building from Source
+---
 
-To create your own executable:
+## Customization
+- To change the `.deb` package URL, edit the `deb_url` variable in `windows_installer.py`.
+- To add more installation steps (e.g., Docker), extend the `perform_installation` method.
 
-1. Install PyInstaller:
-```bash
-pip install pyinstaller
-```
-
-2. Build the executable:
-```bash
-pyinstaller --onefile --noconsole --icon=kamiwaza.ico windows_installer.py
-```
-
-The executable will be created in the `dist` directory.
+---
 
 ## License
-
-[Add your license information here] 
+MIT or your chosen license. 
