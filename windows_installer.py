@@ -82,13 +82,12 @@ class KamiwazaInstaller(tk.Tk):
             self.log_output(".deb download complete.")
 
             # 3. Install the .deb in WSL
-            self.log_output("Installing .deb package in WSL...")
+            self.log_output("Updating apt and installing .deb package in WSL...")
             self.update_progress(70)
             install_cmds = [
-                "sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock",
-                "sudo dpkg --unpack /tmp/kamiwaza.deb",
-                "sudo dpkg --configure -a",
-                "rm /tmp/kamiwaza.deb"
+                "sudo apt update",
+                "sudo apt install -f -y /tmp/kamiwaza_0.4.1-rc1_build01_amd64.deb",
+                "rm /tmp/kamiwaza_0.4.1-rc1_build01_amd64.deb"
             ]
             for cmd in install_cmds:
                 ret, out, err = self.run_command(['wsl', 'bash', '-c', cmd])
@@ -96,6 +95,16 @@ class KamiwazaInstaller(tk.Tk):
                     raise Exception(f"WSL command failed: {cmd}\nError: {err}")
 
             self.log_output(".deb install complete.")
+
+            self.log_output("""
+Post-Installation Details:
+- Kamiwaza is located at /opt/kamiwaza/kamiwaza
+- A 'kamiwaza' user will be created if not present.
+
+To start Kamiwaza:
+    su kamiwaza
+    kamiwaza start
+""")
 
             self.update_progress(100)
             self.log_output("Installation finished successfully!")
