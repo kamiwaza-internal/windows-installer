@@ -24,7 +24,7 @@
                 <Directory Id="INSTALLFOLDER" Name="Kamiwaza">
                     <!-- Main executable component -->
                     <Component Id="MainExecutable" Guid="*">
-                        <File Id="WindowsInstallerEXE" 
+                        <File Id="KamiwazaInstallerEXE" 
                               Source="dist/kamiwaza_installer.exe" 
                               KeyPath="yes" />
                     </Component>
@@ -37,7 +37,7 @@
                         <Shortcut Id="ApplicationStartMenuShortcut" 
                                  Name="Kamiwaza Installer" 
                                  Description="Kamiwaza Installation Tool" 
-                                 Target="[INSTALLFOLDER]WindowsInstallerEXE" 
+                                 Target="[INSTALLFOLDER]KamiwazaInstallerEXE" 
                                  WorkingDirectory="INSTALLFOLDER" />
                         <RemoveFolder Id="CleanUpShortCut" 
                                     Directory="ApplicationProgramsFolder" 
@@ -62,6 +62,11 @@
         <!-- Define the UI -->
         <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
         <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+        <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Kamiwaza Installer" />
+        <CustomAction Id="LaunchKamiwaza" FileKey="KamiwazaInstallerEXE" ExeCommand="" Return="asyncNoWait" Impersonate="yes" />
         <UIRef Id="WixUI_InstallDir" />
+        <UI>
+            <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchKamiwaza">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1</Publish>
+        </UI>
     </Product>
 </Wix> 
