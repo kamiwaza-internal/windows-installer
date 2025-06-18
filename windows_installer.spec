@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['windows_installer.py'],
+    ['kamiwaza_installer.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='windows_installer',
+    name='kamiwaza_installer',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -35,5 +35,4 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    manifest='uac_admin.manifest',
 )

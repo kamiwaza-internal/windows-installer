@@ -5,7 +5,7 @@
              Language="1033" 
              Version="1.0.0.0" 
              Manufacturer="Kamiwaza" 
-             UpgradeCode="PUT-GUID-HERE">
+             UpgradeCode="12345678-1234-1234-1234-123456789012">
         
         <Package InstallerVersion="200" 
                  Compressed="yes" 
@@ -22,11 +22,32 @@
         <Directory Id="TARGETDIR" Name="SourceDir">
             <Directory Id="ProgramFilesFolder">
                 <Directory Id="INSTALLFOLDER" Name="Kamiwaza">
-                    <Component Id="ProductComponents" Guid="*">
-                        <!-- Add the main executable -->
+                    <!-- Main executable component -->
+                    <Component Id="MainExecutable" Guid="*">
                         <File Id="WindowsInstallerEXE" 
-                              Source="dist/windows_installer.exe" 
+                              Source="dist/kamiwaza_installer.exe" 
                               KeyPath="yes" />
+                    </Component>
+                </Directory>
+            </Directory>
+            <!-- Start Menu -->
+            <Directory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsFolder" Name="Kamiwaza">
+                    <Component Id="ApplicationShortcut" Guid="*">
+                        <Shortcut Id="ApplicationStartMenuShortcut" 
+                                 Name="Kamiwaza Installer" 
+                                 Description="Kamiwaza Installation Tool" 
+                                 Target="[INSTALLFOLDER]WindowsInstallerEXE" 
+                                 WorkingDirectory="INSTALLFOLDER" />
+                        <RemoveFolder Id="CleanUpShortCut" 
+                                    Directory="ApplicationProgramsFolder" 
+                                    On="uninstall" />
+                        <RegistryValue Root="HKCU" 
+                                     Key="Software\Kamiwaza\KamiwazaInstaller" 
+                                     Name="installed" 
+                                     Type="integer" 
+                                     Value="1" 
+                                     KeyPath="yes" />
                     </Component>
                 </Directory>
             </Directory>
@@ -34,55 +55,13 @@
 
         <!-- Define the components -->
         <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-            <Component Id="MainExecutable" Guid="*">
-                <File Id="WindowsInstallerEXE" 
-                      Source="dist/windows_installer.exe" 
-                      KeyPath="yes" />
-            </Component>
+            <ComponentRef Id="MainExecutable" />
+            <ComponentRef Id="ApplicationShortcut" />
         </ComponentGroup>
-
-        <!-- Define the shortcuts -->
-        <DirectoryRef Id="INSTALLFOLDER">
-            <Component Id="ApplicationShortcut" Guid="*">
-                <Shortcut Id="ApplicationStartMenuShortcut" 
-                         Name="Kamiwaza Installer" 
-                         Description="Kamiwaza Installation Tool" 
-                         Target="[#WindowsInstallerEXE]" 
-                         WorkingDirectory="INSTALLFOLDER" />
-                <RemoveFolder Id="CleanUpShortCut" 
-                            Directory="ApplicationProgramsFolder" 
-                            On="uninstall" />
-                <RegistryValue Root="HKCU" 
-                             Key="Software\Kamiwaza\KamiwazaInstaller" 
-                             Name="installed" 
-                             Type="integer" 
-                             Value="1" 
-                             KeyPath="yes" />
-            </Component>
-        </DirectoryRef>
-
-        <!-- Add the shortcut to the Start Menu -->
-        <DirectoryRef Id="ApplicationProgramsFolder">
-            <Component Id="ApplicationShortcut" Guid="*">
-                <Shortcut Id="ApplicationStartMenuShortcut" 
-                         Name="Kamiwaza Installer" 
-                         Description="Kamiwaza Installation Tool" 
-                         Target="[#WindowsInstallerEXE]" 
-                         WorkingDirectory="INSTALLFOLDER" />
-                <RemoveFolder Id="CleanUpShortCut" 
-                            Directory="ApplicationProgramsFolder" 
-                            On="uninstall" />
-                <RegistryValue Root="HKCU" 
-                             Key="Software\Kamiwaza\KamiwazaInstaller" 
-                             Name="installed" 
-                             Type="integer" 
-                             Value="1" 
-                             KeyPath="yes" />
-            </Component>
-        </DirectoryRef>
 
         <!-- Define the UI -->
         <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+        <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
         <UIRef Id="WixUI_InstallDir" />
     </Product>
 </Wix> 

@@ -1,3 +1,4 @@
 requests>=2.31.0
 Pillow
-pywin32 
+pywin32
+pyinstaller>=5.0.0 

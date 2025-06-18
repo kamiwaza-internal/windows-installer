@@ -1,2 +1,0 @@
-requests>=2.31.0
-acryl-datahub>=0.12.0 
