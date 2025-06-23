@@ -13,3 +13,5 @@ License.rtf
 Kamiwaza_Installer.zip
 windows_installer.spec
 kamiwaza_installer.spec
+*.log
+*.log.*
