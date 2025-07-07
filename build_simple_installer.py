@@ -41,7 +41,7 @@ def build_executable():
             "--noconsole",                  # Don't show console window
             "--name", "kamiwaza_installer", # Name of the executable
             "--clean",                      # Clean PyInstaller cache
-            "kamiwaza_installer.py"          # Main script
+            "windows_installer.py"          # Main script
         ]
         
         # Add manifest if it exists

@@ -18,6 +18,19 @@
             <ComponentGroupRef Id="ProductComponents" />
         </Feature>
 
+        <!-- Properties for WSL memory configuration -->
+        <Property Id="WSLMEMORY" Value="14GB" />
+        <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+        <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+        <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Kamiwaza Installer" />
+        
+        <!-- Custom Action to launch installer with memory parameter -->
+        <CustomAction Id="LaunchKamiwaza" 
+                     FileKey="KamiwazaInstallerEXE" 
+                     ExeCommand="--memory=[WSLMEMORY]" 
+                     Return="asyncNoWait" 
+                     Impersonate="yes" />
+
         <!-- Define the directory structure -->
         <Directory Id="TARGETDIR" Name="SourceDir">
             <Directory Id="ProgramFilesFolder">
@@ -39,6 +52,12 @@
                                  Description="Kamiwaza Installation Tool" 
                                  Target="[INSTALLFOLDER]KamiwazaInstallerEXE" 
                                  WorkingDirectory="INSTALLFOLDER" />
+                        <Shortcut Id="ApplicationStartMenuShortcutDev" 
+                                 Name="Kamiwaza Installer (Developer Mode)" 
+                                 Description="Kamiwaza Installation Tool (Debug Mode)" 
+                                 Target="[INSTALLFOLDER]KamiwazaInstallerEXE" 
+                                 WorkingDirectory="INSTALLFOLDER"
+                                 Arguments="--debug" />
                         <RemoveFolder Id="CleanUpShortCut" 
                                     Directory="ApplicationProgramsFolder" 
                                     On="uninstall" />
@@ -59,13 +78,40 @@
             <ComponentRef Id="ApplicationShortcut" />
         </ComponentGroup>
 
-        <!-- Define the UI -->
-        <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
-        <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
-        <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Kamiwaza Installer" />
-        <CustomAction Id="LaunchKamiwaza" FileKey="KamiwazaInstallerEXE" ExeCommand="" Return="asyncNoWait" Impersonate="yes" />
+        <!-- Custom UI with memory configuration dialog -->
         <UIRef Id="WixUI_InstallDir" />
-        <UI>
+        <UI Id="WixUI_InstallDir">
+            <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+            
+            <!-- Custom dialog for WSL memory configuration -->
+            <Dialog Id="WSLMemoryDlg" Width="370" Height="270" Title="WSL Memory Configuration">
+                <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes" NoPrefix="yes" Text="WSL Memory Configuration" />
+                <Control Id="Description" Type="Text" X="25" Y="23" Width="280" Height="15" Transparent="yes" NoPrefix="yes" Text="Configure the amount of memory allocated to WSL" />
+                <Control Id="BannerBitmap" Type="Bitmap" X="11" Y="11" Width="370" Height="44" TabSkip="no" Text="[BannerBitmap]" />
+                <Control Id="BannerLine" Type="Line" X="11" Y="54" Width="348" Height="0" />
+                <Control Id="BottomLine" Type="Line" X="11" Y="234" Width="348" Height="0" />
+                
+                <Control Id="MemoryLabel" Type="Text" X="25" Y="70" Width="320" Height="15" Text="Memory allocation for WSL (e.g., 8GB, 14GB, 16GB):" />
+                <Control Id="MemoryEdit" Type="Edit" X="25" Y="90" Width="320" Height="18" Property="WSLMEMORY" Text="14GB" />
+                
+                <Control Id="InfoText" Type="Text" X="25" Y="120" Width="320" Height="40" Text="This will configure the .wslconfig file in your C:\ drive to set the memory limit for WSL. The default is 14GB, but you can adjust based on your system's available RAM." />
+                
+                <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="Back" />
+                <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="Next" />
+                <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel" />
+            </Dialog>
+            
+            <!-- Modify the existing dialogs to include our custom dialog -->
+            <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+            <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
+            <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="WSLMemoryDlg">LicenseAccepted = "1"</Publish>
+            <Publish Dialog="WSLMemoryDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+            <Publish Dialog="WSLMemoryDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg">1</Publish>
+            <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="WSLMemoryDlg">1</Publish>
+            <Publish Dialog="InstallDirDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
+            <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="InstallDirDlg">1</Publish>
+            <Publish Dialog="VerifyReadyDlg" Control="Install" Event="NewDialog" Value="ProgressDlg">1</Publish>
+            <Publish Dialog="ProgressDlg" Control="Back" Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
             <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchKamiwaza">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1</Publish>
         </UI>
     </Product>

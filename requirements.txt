@@ -2,3 +2,4 @@ requests>=2.31.0
 Pillow
 pywin32
 pyinstaller>=5.0.0 
+ftfy
