@@ -3,3 +3,4 @@ Pillow
 pywin32
 pyinstaller>=5.0.0 
 ftfy
+PyYAML

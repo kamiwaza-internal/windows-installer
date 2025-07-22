@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
     <Product Id="*" 
-             Name="Kamiwaza Installer" 
+             Name="Kamiwaza Installer $(var.KAMIWAZA_VERSION) ($(var.ARCH))" 
              Language="1033" 
              Version="1.0.0.0" 
              Manufacturer="Kamiwaza" 
@@ -18,44 +18,44 @@
             <ComponentGroupRef Id="ProductComponents" />
         </Feature>
 
-        <!-- Properties for WSL memory configuration -->
+        <!-- Properties for WSL memory configuration and versioning -->
         <Property Id="WSLMEMORY" Value="14GB" />
+        <Property Id="KAMIWAZA_VERSION" Value="$(var.KAMIWAZA_VERSION)" />
+        <Property Id="CODENAME" Value="$(var.CODENAME)" />
+        <Property Id="BUILD_NUMBER" Value="$(var.BUILD_NUMBER)" />
+        <Property Id="ARCH" Value="$(var.ARCH)" />
         <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
         <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+        <WixVariable Id="WixUICostingPopupOptOut" Value="1" />
         <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Kamiwaza Installer" />
         
-        <!-- Custom Action to launch installer with memory parameter -->
-        <CustomAction Id="LaunchKamiwaza" 
-                     FileKey="KamiwazaInstallerEXE" 
-                     ExeCommand="--memory=[WSLMEMORY]" 
-                     Return="asyncNoWait" 
-                     Impersonate="yes" />
+        <!-- Custom Action to launch installer with memory and version parameters -->
+        <CustomAction Id="LaunchKamiwaza"
+            Directory="INSTALLFOLDER"
+            ExeCommand="kamiwaza_installer.exe --memory=[WSLMEMORY] --version=[KAMIWAZA_VERSION] --codename=[CODENAME] --build=[BUILD_NUMBER] --arch=[ARCH]"
+            Return="asyncNoWait"
+            Impersonate="yes" />
 
         <!-- Define the directory structure -->
         <Directory Id="TARGETDIR" Name="SourceDir">
             <Directory Id="ProgramFilesFolder">
                 <Directory Id="INSTALLFOLDER" Name="Kamiwaza">
-                    <!-- Main executable component -->
-                    <Component Id="MainExecutable" Guid="*">
-                        <File Id="KamiwazaInstallerEXE" 
-                              Source="dist/kamiwaza_installer.exe" 
-                              KeyPath="yes" />
-                    </Component>
+                    <!-- MainExecutable component removed -->
                 </Directory>
             </Directory>
             <!-- Start Menu -->
             <Directory Id="ProgramMenuFolder">
                 <Directory Id="ApplicationProgramsFolder" Name="Kamiwaza">
-                    <Component Id="ApplicationShortcut" Guid="*">
+                    <Component Id="ApplicationShortcut" Guid="8B6A1B2C-3D4E-5F60-7A8B-9C0D1E2F3A4B">
                         <Shortcut Id="ApplicationStartMenuShortcut" 
                                  Name="Kamiwaza Installer" 
                                  Description="Kamiwaza Installation Tool" 
-                                 Target="[INSTALLFOLDER]KamiwazaInstallerEXE" 
+                                 Target="[INSTALLFOLDER]kamiwaza_installer.exe" 
                                  WorkingDirectory="INSTALLFOLDER" />
                         <Shortcut Id="ApplicationStartMenuShortcutDev" 
                                  Name="Kamiwaza Installer (Developer Mode)" 
                                  Description="Kamiwaza Installation Tool (Debug Mode)" 
-                                 Target="[INSTALLFOLDER]KamiwazaInstallerEXE" 
+                                 Target="[INSTALLFOLDER]kamiwaza_installer.exe" 
                                  WorkingDirectory="INSTALLFOLDER"
                                  Arguments="--debug" />
                         <RemoveFolder Id="CleanUpShortCut" 
@@ -72,47 +72,29 @@
             </Directory>
         </Directory>
 
+        <!-- Download EXE from R2 at install time -->
+        <Property Id="EXE_URL" Value="https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_installer_$(var.KAMIWAZA_VERSION)_$(var.ARCH)_build$(var.BUILD_NUMBER).exe" />
+        <CustomAction Id="DownloadKamiwazaExe"
+            Directory="INSTALLFOLDER"
+            ExeCommand="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;try { Write-Host 'Downloading from [EXE_URL]'; Invoke-WebRequest -Uri '[EXE_URL]' -OutFile 'kamiwaza_installer.exe' -UseBasicParsing; Write-Host 'Download completed successfully'; exit 0 } catch { Write-Host 'Download failed:' $_.Exception.Message; exit 1 }&quot;"
+            Execute="deferred"
+            Return="check"
+            Impersonate="no" />
+
+        <InstallExecuteSequence>
+            <Custom Action="DownloadKamiwazaExe" Before="CreateShortcuts">NOT Installed</Custom>
+        </InstallExecuteSequence>
+
         <!-- Define the components -->
         <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-            <ComponentRef Id="MainExecutable" />
+            <!-- <ComponentRef Id="MainExecutable" /> removed -->
             <ComponentRef Id="ApplicationShortcut" />
         </ComponentGroup>
 
         <!-- Custom UI with memory configuration dialog -->
         <UIRef Id="WixUI_InstallDir" />
-        <UI Id="WixUI_InstallDir">
-            <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
-            
-            <!-- Custom dialog for WSL memory configuration -->
-            <Dialog Id="WSLMemoryDlg" Width="370" Height="270" Title="WSL Memory Configuration">
-                <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes" NoPrefix="yes" Text="WSL Memory Configuration" />
-                <Control Id="Description" Type="Text" X="25" Y="23" Width="280" Height="15" Transparent="yes" NoPrefix="yes" Text="Configure the amount of memory allocated to WSL" />
-                <Control Id="BannerBitmap" Type="Bitmap" X="11" Y="11" Width="370" Height="44" TabSkip="no" Text="[BannerBitmap]" />
-                <Control Id="BannerLine" Type="Line" X="11" Y="54" Width="348" Height="0" />
-                <Control Id="BottomLine" Type="Line" X="11" Y="234" Width="348" Height="0" />
-                
-                <Control Id="MemoryLabel" Type="Text" X="25" Y="70" Width="320" Height="15" Text="Memory allocation for WSL (e.g., 8GB, 14GB, 16GB):" />
-                <Control Id="MemoryEdit" Type="Edit" X="25" Y="90" Width="320" Height="18" Property="WSLMEMORY" Text="14GB" />
-                
-                <Control Id="InfoText" Type="Text" X="25" Y="120" Width="320" Height="40" Text="This will configure the .wslconfig file in your C:\ drive to set the memory limit for WSL. The default is 14GB, but you can adjust based on your system's available RAM." />
-                
-                <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="Back" />
-                <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="Next" />
-                <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel" />
-            </Dialog>
-            
-            <!-- Modify the existing dialogs to include our custom dialog -->
-            <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
-            <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
-            <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="WSLMemoryDlg">LicenseAccepted = "1"</Publish>
-            <Publish Dialog="WSLMemoryDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
-            <Publish Dialog="WSLMemoryDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg">1</Publish>
-            <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="WSLMemoryDlg">1</Publish>
-            <Publish Dialog="InstallDirDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
-            <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="InstallDirDlg">1</Publish>
-            <Publish Dialog="VerifyReadyDlg" Control="Install" Event="NewDialog" Value="ProgressDlg">1</Publish>
-            <Publish Dialog="ProgressDlg" Control="Back" Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
-            <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchKamiwaza">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1</Publish>
+        <UI>
+          <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchKamiwaza">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1</Publish>
         </UI>
     </Product>
 </Wix> 

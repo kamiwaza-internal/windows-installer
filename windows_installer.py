@@ -8,15 +8,37 @@ import ftfy
 import tempfile
 import shutil
 import argparse
+import yaml
+import platform
+
+try:
+    import yaml
+except ImportError:
+    import sys
+    import tkinter as tk
+    from tkinter import messagebox
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showerror("Missing Dependency", "PyYAML is not installed. Please run 'pip install -r requirements.txt' in your venv.")
+    sys.exit(1)
 
 class KamiwazaInstaller(tk.Tk):
-    def __init__(self, debug=False, memory="14GB"):
+    def __init__(self, debug=False, memory="14GB", config_path="config.yaml", version=None, codename=None, build=None, arch=None):
         super().__init__()
         self.title("Kamiwaza Installer")
         self.geometry("600x400")
         self.debug = debug
         self.memory = memory
         self.log_file = open("kamiwaza_installer_debug.log", "w") if debug else None
+
+        # Load config
+        self.config = self.load_config(config_path)
+        self.kamiwaza_version = version or self.config.get('kamiwaza_version', '0.5.0-rc1')
+        self.codename = codename or self.config.get('codename', 'noble')
+        self.build_number = build or self.config.get('build_number', 1)
+        self.arch = arch or self.config.get('arch', 'auto')
+        if self.arch == 'auto':
+            self.arch = self.detect_arch()
 
         # Progress bar
         self.progress_var = tk.DoubleVar()
@@ -109,6 +131,37 @@ localhostForwarding=true
             self.log_output(f"Error configuring .wslconfig: {e}")
             return False
 
+    def load_config(self, config_path):
+        try:
+            with open(config_path, 'r') as f:
+                return yaml.safe_load(f)
+        except Exception:
+            return {}
+
+    def detect_arch(self):
+        # Try to detect WSL arch from host
+        try:
+            ret, out, err = self.run_command(['wsl', 'uname', '-m'])
+            if ret == 0:
+                if 'aarch64' in out:
+                    return 'arm64'
+                elif 'x86_64' in out:
+                    return 'amd64'
+            # Fallback to host arch
+            if platform.machine().lower() in ['amd64', 'x86_64']:
+                return 'amd64'
+            elif platform.machine().lower() in ['arm64', 'aarch64']:
+                return 'arm64'
+        except Exception:
+            pass
+        return 'amd64'  # Default
+
+    def get_deb_url(self):
+        return f"https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_{self.kamiwaza_version}_{self.codename}_{self.arch}_build{self.build_number}.deb"
+
+    def get_deb_filename(self):
+        return f"kamiwaza_{self.kamiwaza_version}_{self.codename}_{self.arch}_build{self.build_number}.deb"
+
     def start_installation(self):
         self.install_button.config(state='disabled')
         Thread(target=self.perform_installation).start()
@@ -142,8 +195,9 @@ localhostForwarding=true
             self.status_label.config(text="Downloading Kamiwaza package...")
             self.log_output("Downloading .deb package in WSL...")
             self.update_progress(40)
-            deb_url = "https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_0.4.1-rc1_noble_amd64_build1.deb"
-            download_cmd = f"wget {deb_url} -P /tmp/"
+            deb_url = self.get_deb_url()
+            deb_filename = self.get_deb_filename()
+            download_cmd = f"wget {deb_url} -O /tmp/{deb_filename}"
             ret, out, err = self.run_command(['wsl', 'bash', '-c', download_cmd])
             if ret != 0:
                 raise Exception("Failed to download .deb package in WSL.")
@@ -159,10 +213,10 @@ localhostForwarding=true
                 "sudo apt-get install --reinstall -y python3-requests || true",
                 "sudo apt-get install -f -y || true",
                 "sudo apt update",
-                f"sudo apt install -f -y /tmp/kamiwaza_0.4.1-rc1_noble_amd64_build2.deb",
+                f"sudo apt install -f -y /tmp/{deb_filename}",
                 "sudo dpkg --configure -a",
                 "sudo apt-get install -f -y || true",
-                "rm /tmp/kamiwaza_0.4.1-rc1_noble_amd64_build2.deb"
+                f"rm /tmp/{deb_filename}"
             ]
             script_content = "\n".join(commands)
 

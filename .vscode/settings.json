@@ -1,0 +1,8 @@
+{
+    "window.title": "WINDOWS INSTALLER",
+    "workbench.colorCustomizations": {
+        "activityBar.background": "#020c9c",
+        "titleBar.activeBackground": "#020c9c",
+        "titleBar.activeForeground": "#ffffff"
+    }
+}   
