@@ -15,3 +15,4 @@ windows_installer.spec
 kamiwaza_installer.spec
 *.log
 *.log.*
+*.spec
