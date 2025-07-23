@@ -89,19 +89,47 @@ class KamiwazaInstaller(tk.Tk):
         self.progress_var.set(value)
         self.update()
 
-    def run_command(self, command):
+    def run_command(self, command, real_time=False):
         self.log_output(f"Running: {' '.join(command)}")
         try:
             # Ensure UTF-8 output from subprocess
             env = os.environ.copy()
             env["PYTHONIOENCODING"] = "UTF-8"
-            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=env)
-            stdout, stderr = process.communicate()
-            if stdout:
-                self.log_output(stdout)
-            if stderr:
-                self.log_output(stderr)
-            return process.returncode, stdout, stderr
+            
+            if real_time:
+                # For real-time output (like apt install)
+                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+                                         text=True, encoding='utf-8', env=env, bufsize=1, universal_newlines=True)
+                stdout_lines = []
+                if process.stdout:
+                    while True:
+                        output = process.stdout.readline()
+                        if output == '' and process.poll() is not None:
+                            break
+                        if output:
+                            output = output.strip()
+                            stdout_lines.append(output)
+                            self.log_output(output)  # Show immediately in UI
+                            
+                    # Get any remaining output
+                    remaining_output = process.stdout.read()
+                    if remaining_output:
+                        for line in remaining_output.strip().split('\n'):
+                            if line.strip():
+                                stdout_lines.append(line)
+                                self.log_output(line)
+                
+                return process.returncode, '\n'.join(stdout_lines), ""
+            else:
+                # Original method for quick commands
+                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=env)
+                stdout, stderr = process.communicate()
+                if stdout:
+                    self.log_output(stdout)
+                if stderr:
+                    self.log_output(stderr)
+                return process.returncode, stdout, stderr
+                
         except Exception as e:
             self.log_output(f"Error running command: {e}")
             return 1, "", str(e)
@@ -110,7 +138,7 @@ class KamiwazaInstaller(tk.Tk):
         """Configure WSL memory allocation in .wslconfig file"""
         try:
             self.log_output(f"Configuring WSL memory allocation to {self.memory}...")
-            wslconfig_path = "C:\\.wslconfig"
+            wslconfig_path = os.path.expanduser("~\\.wslconfig")  # Use user home directory
             
             # Create or update .wslconfig file
             config_content = f"""[wsl2]
@@ -118,6 +146,7 @@ memory={self.memory}
 processors=auto
 swap=0
 localhostForwarding=true
+networkingMode=mirrored
 """
             
             with open(wslconfig_path, 'w') as f:
@@ -129,6 +158,7 @@ localhostForwarding=true
             
         except Exception as e:
             self.log_output(f"Error configuring .wslconfig: {e}")
+            self.log_output("This is not critical - WSL will use default settings.")
             return False
 
     def load_config(self, config_path):
@@ -197,10 +227,67 @@ localhostForwarding=true
             self.update_progress(40)
             deb_url = self.get_deb_url()
             deb_filename = self.get_deb_filename()
-            download_cmd = f"wget {deb_url} -O /tmp/{deb_filename}"
-            ret, out, err = self.run_command(['wsl', 'bash', '-c', download_cmd])
+            
+            # First check WSL network connectivity
+            self.log_output("Testing WSL network connectivity...")
+            ret, out, err = self.run_command(['wsl', 'bash', '-c', 'ping -c 2 8.8.8.8'])
             if ret != 0:
-                raise Exception("Failed to download .deb package in WSL.")
+                self.log_output("WSL network connectivity issue detected. Restarting WSL...")
+                self.run_command(['wsl', '--shutdown'])
+                import time
+                time.sleep(3)
+                self.log_output("WSL restarted. Testing connectivity again...")
+                ret, out, err = self.run_command(['wsl', 'bash', '-c', 'ping -c 2 8.8.8.8'])
+                if ret != 0:
+                    self.log_output("WSL still has network issues. This may affect downloads.")
+                else:
+                    self.log_output("WSL network connectivity restored.")
+            else:
+                self.log_output("WSL network connectivity OK.")
+            
+            # Try multiple download methods
+            download_success = False
+            
+            # Method 1: wget with timeout and user agent
+            self.log_output("Attempting download with wget...")
+            download_cmd = f"timeout 300 wget --timeout=60 --tries=3 --user-agent='Mozilla/5.0 (Linux; Ubuntu)' {deb_url} -O /tmp/{deb_filename}"
+            ret, out, err = self.run_command(['wsl', 'bash', '-c', download_cmd])
+            if ret == 0:
+                download_success = True
+                self.log_output("Download successful with wget")
+            
+            # Method 2: curl fallback with user agent
+            if not download_success:
+                self.log_output("wget failed, trying curl...")
+                download_cmd = f"timeout 300 curl --connect-timeout 60 --max-time 300 -L -A 'Mozilla/5.0 (Linux; Ubuntu)' {deb_url} -o /tmp/{deb_filename}"
+                ret, out, err = self.run_command(['wsl', 'bash', '-c', download_cmd])
+                if ret == 0:
+                    download_success = True
+                    self.log_output("Download successful with curl")
+            
+            # Method 3: Try restarting WSL and retry
+            if not download_success:
+                self.log_output("Both download methods failed. Trying to restart WSL and retry...")
+                try:
+                    # Restart WSL
+                    self.log_output("Restarting WSL...")
+                    self.run_command(['wsl', '--shutdown'])
+                    import time
+                    time.sleep(3)
+                    
+                    # Try wget again after restart
+                    self.log_output("Retrying wget after WSL restart...")
+                    download_cmd = f"wget --timeout=120 --tries=2 --user-agent='Mozilla/5.0 (Linux; Ubuntu)' {deb_url} -O /tmp/{deb_filename}"
+                    ret, out, err = self.run_command(['wsl', 'bash', '-c', download_cmd])
+                    if ret == 0:
+                        download_success = True
+                        self.log_output("Download successful after WSL restart")
+                        
+                except Exception as e:
+                    self.log_output(f"WSL restart method failed: {e}")
+            
+            if not download_success:
+                raise Exception("Failed to download .deb package using all methods.")
 
             self.log_output(".deb download complete.")
 
@@ -208,22 +295,34 @@ localhostForwarding=true
             self.status_label.config(text="Installing Kamiwaza in WSL...")
             self.log_output("Updating apt and installing .deb package in WSL...")
             self.update_progress(70)
+            
+            # Run each command individually with real-time output
             commands = [
-                "sudo dpkg --configure -a",
-                "sudo apt-get install --reinstall -y python3-requests || true",
-                "sudo apt-get install -f -y || true",
-                "sudo apt update",
-                f"sudo apt install -f -y /tmp/{deb_filename}",
-                "sudo dpkg --configure -a",
-                "sudo apt-get install -f -y || true",
-                f"rm /tmp/{deb_filename}"
+                ("Configuring dpkg...", "sudo dpkg --configure -a"),
+                ("Installing python3-requests...", "sudo apt-get install --reinstall -y python3-requests || true"),
+                ("Fixing broken packages...", "sudo apt-get install -f -y || true"),
+                ("Updating package lists...", "sudo apt update"),
+                ("Installing Kamiwaza package...", f"sudo apt install -f -y /tmp/{deb_filename}"),
+                ("Final dpkg configuration...", "sudo dpkg --configure -a"),
+                ("Final package fix...", "sudo apt-get install -f -y || true"),
+                ("Cleaning up...", f"rm /tmp/{deb_filename}")
             ]
-            script_content = "\n".join(commands)
+            
+            for i, (description, command) in enumerate(commands):
+                self.log_output(f"\n=== {description} ===")
+                progress = 70 + (i * 3)  # Progress from 70% to 94%
+                self.update_progress(progress)
+                
+                # Use real-time output for apt commands
+                use_realtime = any(cmd in command for cmd in ['apt', 'dpkg'])
+                ret, out, err = self.run_command(['wsl', 'bash', '-c', command], real_time=use_realtime)
+                
+                if ret != 0 and not command.endswith("|| true"):
+                    self.log_output(f"Warning: Command failed with exit code {ret}")
+                else:
+                    self.log_output(f"✓ {description} completed")
 
-            heredoc = f"cat <<'EOF' > /tmp/fix_install.sh\n{script_content}\nEOF"
-            self.run_command(['wsl', 'bash', '-c', heredoc])
-
-            self.log_output(".deb install complete.")
+            self.log_output("\n.deb install complete.")
 
             self.log_output(f"""
 Post-Installation Details:
@@ -270,11 +369,30 @@ To start Kamiwaza:
             messagebox.showerror("Error", f"Failed to launch Ubuntu shell:\n{e}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Kamiwaza WSL Installer')
-    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
-    parser.add_argument('--memory', default='14GB', help='WSL memory allocation (e.g., 8GB, 14GB, 16GB)')
+    try:
+        parser = argparse.ArgumentParser(description='Kamiwaza WSL Installer')
+        parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+        parser.add_argument('--memory', default='14GB', help='WSL memory allocation (e.g., 8GB, 14GB, 16GB)')
+        parser.add_argument('--version', help='Kamiwaza version')
+        parser.add_argument('--codename', help='Ubuntu codename')
+        parser.add_argument('--build', help='Build number')
+        parser.add_argument('--arch', help='Architecture')
+        
+        args = parser.parse_args()
+        
+        app = KamiwazaInstaller(
+            debug=args.debug, 
+            memory=args.memory,
+            version=args.version,
+            codename=args.codename,
+            build=args.build,
+            arch=args.arch
+        )
+    except SystemExit:
+        # Handle argparse errors in GUI mode
+        app = KamiwazaInstaller(debug=False, memory='14GB')
+    except Exception as e:
+        # Fallback for any other errors
+        app = KamiwazaInstaller(debug=True, memory='14GB')
     
-    args = parser.parse_args()
-    
-    app = KamiwazaInstaller(debug=args.debug, memory=args.memory)
     app.mainloop() 

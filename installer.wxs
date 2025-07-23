@@ -9,7 +9,7 @@
         
         <Package InstallerVersion="200" 
                  Compressed="yes" 
-                 InstallScope="perMachine" />
+                 InstallScope="perUser" />
 
         <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
         <MediaTemplate EmbedCab="yes" />
@@ -25,22 +25,37 @@
         <Property Id="BUILD_NUMBER" Value="$(var.BUILD_NUMBER)" />
         <Property Id="ARCH" Value="$(var.ARCH)" />
         <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+        
+        <!-- Additional user configuration properties -->
+        <Property Id="USER_EMAIL" Value="default@kamiwaza.ai" />
+        <Property Id="LICENSE_KEY" Value="COMMUNITY-EDITION-ONLY" />
+        <Property Id="USAGE_REPORTING" Value="1" />
+        <Property Id="INSTALL_MODE" Value="lite" />
+        
         <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
         <WixVariable Id="WixUICostingPopupOptOut" Value="1" />
-        <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Kamiwaza Installer" />
-        
-        <!-- Custom Action to launch installer with memory and version parameters -->
-        <CustomAction Id="LaunchKamiwaza"
+        <!-- Custom Action to run Kamiwaza installer automatically after download -->
+        <CustomAction Id="RunKamiwazaInstaller"
             Directory="INSTALLFOLDER"
-            ExeCommand="kamiwaza_installer.exe --memory=[WSLMEMORY] --version=[KAMIWAZA_VERSION] --codename=[CODENAME] --build=[BUILD_NUMBER] --arch=[ARCH]"
+            ExeCommand="kamiwaza_installer.exe --memory=[WSLMEMORY] --version=[KAMIWAZA_VERSION] --codename=[CODENAME] --build=[BUILD_NUMBER] --arch=[ARCH] --email=[USER_EMAIL] --license-key=[LICENSE_KEY] --usage-reporting=[USAGE_REPORTING] --mode=[INSTALL_MODE]"
+            Execute="deferred"
             Return="asyncNoWait"
             Impersonate="yes" />
 
         <!-- Define the directory structure -->
         <Directory Id="TARGETDIR" Name="SourceDir">
-            <Directory Id="ProgramFilesFolder">
+            <Directory Id="LocalAppDataFolder">
                 <Directory Id="INSTALLFOLDER" Name="Kamiwaza">
                     <!-- MainExecutable component removed -->
+                    <Component Id="KamiwazaInstallerFiles" Guid="9C7B2A3D-4E5F-6071-8B9C-0D1E2F3A4B5C">
+                        <File Id="DownloadScriptFile" Name="download_exe.ps1" Source="download_exe.ps1"/>
+                        <File Id="InstallBatchFile" Name="install_kamiwaza.bat" Source="install_kamiwaza.bat"/>
+                        <File Id="InstallDevBatchFile" Name="install_kamiwaza_dev.bat" Source="install_kamiwaza_dev.bat"/>
+                        <File Id="WSLConfigScript" Name="configure_wsl_memory.ps1" Source="configure_wsl_memory.ps1"/>
+                        <File Id="DebconfSetupScript" Name="setup_debconf.sh" Source="setup_debconf.sh"/>
+                        <RegistryValue Root="HKCU" Key="Software\Kamiwaza\Installer" Name="installed" Type="string" Value="1" KeyPath="yes"/>
+                        <RemoveFolder Id="RemoveKamiwazaFolder" Directory="INSTALLFOLDER" On="uninstall"/>
+                    </Component>
                 </Directory>
             </Directory>
             <!-- Start Menu -->
@@ -48,16 +63,17 @@
                 <Directory Id="ApplicationProgramsFolder" Name="Kamiwaza">
                     <Component Id="ApplicationShortcut" Guid="8B6A1B2C-3D4E-5F60-7A8B-9C0D1E2F3A4B">
                         <Shortcut Id="ApplicationStartMenuShortcut" 
-                                 Name="Kamiwaza Installer" 
-                                 Description="Kamiwaza Installation Tool" 
-                                 Target="[INSTALLFOLDER]kamiwaza_installer.exe" 
+                                 Name="Install Kamiwaza" 
+                                 Description="Download and Install Kamiwaza with [WSLMEMORY] dedicated memory" 
+                                 Target="[INSTALLFOLDER]install_kamiwaza.bat" 
+                                 Arguments="&quot;[WSLMEMORY]&quot; &quot;[USER_EMAIL]&quot; &quot;[LICENSE_KEY]&quot; &quot;[USAGE_REPORTING]&quot; &quot;[INSTALL_MODE]&quot;"
                                  WorkingDirectory="INSTALLFOLDER" />
                         <Shortcut Id="ApplicationStartMenuShortcutDev" 
-                                 Name="Kamiwaza Installer (Developer Mode)" 
-                                 Description="Kamiwaza Installation Tool (Debug Mode)" 
-                                 Target="[INSTALLFOLDER]kamiwaza_installer.exe" 
-                                 WorkingDirectory="INSTALLFOLDER"
-                                 Arguments="--debug" />
+                                 Name="Install Kamiwaza (Developer Mode)" 
+                                 Description="Download and Install Kamiwaza in Debug Mode with [WSLMEMORY] dedicated memory" 
+                                 Target="[INSTALLFOLDER]install_kamiwaza_dev.bat" 
+                                 Arguments="&quot;[WSLMEMORY]&quot; &quot;[USER_EMAIL]&quot; &quot;[LICENSE_KEY]&quot; &quot;[USAGE_REPORTING]&quot; &quot;dev&quot;"
+                                 WorkingDirectory="INSTALLFOLDER" />
                         <RemoveFolder Id="CleanUpShortCut" 
                                     Directory="ApplicationProgramsFolder" 
                                     On="uninstall" />
@@ -74,27 +90,76 @@
 
         <!-- Download EXE from R2 at install time -->
         <Property Id="EXE_URL" Value="https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_installer_$(var.KAMIWAZA_VERSION)_$(var.ARCH)_build$(var.BUILD_NUMBER).exe" />
-        <CustomAction Id="DownloadKamiwazaExe"
-            Directory="INSTALLFOLDER"
-            ExeCommand="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;try { Write-Host 'Downloading from [EXE_URL]'; Invoke-WebRequest -Uri '[EXE_URL]' -OutFile 'kamiwaza_installer.exe' -UseBasicParsing; Write-Host 'Download completed successfully'; exit 0 } catch { Write-Host 'Download failed:' $_.Exception.Message; exit 1 }&quot;"
-            Execute="deferred"
-            Return="check"
-            Impersonate="no" />
+            <CustomAction Id="DownloadKamiwazaExe"
+      Directory="INSTALLFOLDER"
+      ExeCommand="powershell.exe -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]download_exe.ps1&quot; -DownloadUrl &quot;[EXE_URL]&quot; -OutputPath &quot;[INSTALLFOLDER]kamiwaza_installer.exe&quot;"
+      Execute="deferred"
+      Return="check"
+      Impersonate="no" />
 
-        <InstallExecuteSequence>
-            <Custom Action="DownloadKamiwazaExe" Before="CreateShortcuts">NOT Installed</Custom>
-        </InstallExecuteSequence>
+    <!-- Remove automatic download and execution - will be done via shortcut instead -->
 
         <!-- Define the components -->
         <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
             <!-- <ComponentRef Id="MainExecutable" /> removed -->
+            <ComponentRef Id="KamiwazaInstallerFiles" />
             <ComponentRef Id="ApplicationShortcut" />
         </ComponentGroup>
 
         <!-- Custom UI with memory configuration dialog -->
         <UIRef Id="WixUI_InstallDir" />
+        
+        <!-- Custom dialogs for user configuration -->
         <UI>
-          <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchKamiwaza">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1</Publish>
+            <Dialog Id="KamiwazaConfigDlg" Width="370" Height="280" Title="Kamiwaza Configuration">
+                <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Kamiwaza Configuration" />
+                
+                <!-- User Email -->
+                <Control Id="EmailLabel" Type="Text" X="15" Y="35" Width="65" Height="12" NoPrefix="yes" Text="Email Address:" />
+                <Control Id="EmailEdit" Type="Edit" X="85" Y="35" Width="200" Height="18" Property="USER_EMAIL" />
+                
+                <!-- License Key -->
+                <Control Id="LicenseKeyLabel" Type="Text" X="15" Y="60" Width="65" Height="12" NoPrefix="yes" Text="License Key:" />
+                <Control Id="LicenseKeyEdit" Type="Edit" X="85" Y="60" Width="200" Height="18" Property="LICENSE_KEY" />
+                
+                <!-- Usage Reporting -->
+                <Control Id="UsageReportingLabel" Type="Text" X="15" Y="85" Width="340" Height="24" NoPrefix="yes" Text="Help improve Kamiwaza by sending anonymous usage analytics. This helps us understand feature usage and improve performance." />
+                <Control Id="UsageReportingCheck" Type="CheckBox" X="15" Y="115" Width="200" Height="17" Property="USAGE_REPORTING" CheckBoxValue="1" Text="Enable usage reporting" />
+                
+                <!-- Installation Mode -->
+                <Control Id="ModeLabel" Type="Text" X="15" Y="140" Width="100" Height="12" NoPrefix="yes" Text="Installation Mode:" />
+                <Control Id="ModeCombo" Type="ComboBox" X="85" Y="140" Width="100" Height="18" Property="INSTALL_MODE" ComboList="yes">
+                    <ComboBox Property="INSTALL_MODE">
+                        <ListItem Text="Lite" Value="lite" />
+                        <ListItem Text="Full" Value="full" />
+                        <ListItem Text="Developer" Value="dev" />
+                    </ComboBox>
+                </Control>
+                
+                <!-- Memory Configuration -->
+                <Control Id="MemoryLabel" Type="Text" X="15" Y="165" Width="140" Height="12" NoPrefix="yes" Text="Kamiwaza Dedicated Memory:" />
+                <Control Id="MemoryEdit" Type="Edit" X="160" Y="165" Width="80" Height="18" Property="WSLMEMORY" />
+                <Control Id="MemoryHelp" Type="Text" X="15" Y="185" Width="340" Height="24" NoPrefix="yes" Text="This configures WSL memory allocation specifically for Kamiwaza. Higher values improve performance but use more system RAM. Your .wslconfig file will be automatically updated." />
+                
+                <!-- Navigation buttons -->
+                <Control Id="Back" Type="PushButton" X="180" Y="253" Width="56" Height="17" Text="&amp;Back">
+                    <Publish Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+                </Control>
+                <Control Id="Next" Type="PushButton" X="236" Y="253" Width="56" Height="17" Default="yes" Text="&amp;Next">
+                    <Publish Event="NewDialog" Value="InstallDirDlg">1</Publish>
+                </Control>
+                <Control Id="Cancel" Type="PushButton" X="304" Y="253" Width="56" Height="17" Cancel="yes" Text="Cancel">
+                    <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
+                </Control>
+            </Dialog>
+
+            <!-- Modify the InstallDirDlg to navigate to our custom dialog -->
+            <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="KamiwazaConfigDlg" Order="2">LicenseAccepted = "1"</Publish>
+            <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="KamiwazaConfigDlg">1</Publish>
+            
+            <!-- Customize the exit dialog title and message -->
+            <Property Id="WIXUI_EXITDIALOGTITLE" Value="Kamiwaza Setup Complete" />
+            <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Kamiwaza has been successfully configured with your preferences! Your settings have been saved and will be automatically applied when you launch the installer.&#xD;&#xA;&#xD;&#xA;Next Steps:&#xD;&#xA;• Open your Start Menu and look for 'Kamiwaza'&#xD;&#xA;• Click 'Install Kamiwaza' to begin the installation&#xD;&#xA;• The installer will automatically configure WSL memory&#xD;&#xA;• Ubuntu debconf will be set up with your saved preferences&#xD;&#xA;• Kamiwaza will be installed seamlessly with no additional configuration required&#xD;&#xA;&#xD;&#xA;Thank you for choosing Kamiwaza!" />
         </UI>
     </Product>
 </Wix> 
