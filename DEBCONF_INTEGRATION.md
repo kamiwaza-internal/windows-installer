@@ -58,8 +58,7 @@ The `setup_debconf.sh` script configures these debconf values:
 ├── installer.wxs                  # MSI installer definition
 ├── setup_debconf.sh              # Ubuntu debconf configuration script
 ├── configure_wsl_memory.ps1       # WSL memory configuration script
-├── install_kamiwaza.bat           # Main installation script
-└── install_kamiwaza_dev.bat       # Developer mode installation script
+└── install_kamiwaza.bat           # Installation script
 ```
 
 ## Usage

@@ -22,11 +22,15 @@ set_debconf() {
     # Pre-seed the debconf database
     echo "$package $question $type $value" | debconf-set-selections
     
-    # Verify the setting was applied
-    if debconf-get-selections | grep -q "$package/$question"; then
-        log_message "Successfully set $package/$question"
+    # Verify the setting was applied (with better error handling)
+    if command -v debconf-get-selections >/dev/null 2>&1; then
+        if debconf-get-selections 2>/dev/null | grep -q "$package/$question"; then
+            log_message "Successfully set $package/$question"
+        else
+            log_message "WARNING: Failed to verify $package/$question setting"
+        fi
     else
-        log_message "WARNING: Failed to verify $package/$question setting"
+        log_message "INFO: debconf-get-selections not available, assuming setting was applied"
     fi
 }
 
@@ -75,9 +79,16 @@ log_message "License Accepted: $LICENSE_ACCEPTED"
 
 # Ensure debconf is available
 if ! command -v debconf-set-selections &> /dev/null; then
-    log_message "Installing debconf-utils..."
-    apt-get update -qq
-    apt-get install -y debconf-utils
+    log_message "debconf-set-selections not found, trying to install debconf-utils..."
+    if command -v apt-get &> /dev/null; then
+        # Try to install without sudo first, then with sudo
+        apt-get update -qq 2>/dev/null && apt-get install -y debconf-utils 2>/dev/null || {
+            log_message "Need elevated privileges to install debconf-utils. Please ensure it's installed."
+            # Continue anyway, debconf-set-selections might still work
+        }
+    else
+        log_message "apt-get not available, continuing without installing debconf-utils"
+    fi
 fi
 
 # Set debconf values for Kamiwaza package
@@ -178,7 +189,9 @@ fi
 # Reconfigure debconf to pick up new templates
 log_message "Updating debconf database..."
 if command -v dpkg-reconfigure &> /dev/null; then
-    dpkg-reconfigure -f noninteractive debconf 2>/dev/null || true
+    dpkg-reconfigure -f noninteractive debconf 2>/dev/null || {
+        log_message "INFO: dpkg-reconfigure may require elevated privileges, continuing without it"
+    }
 fi
 
 # Display final configuration

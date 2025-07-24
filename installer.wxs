@@ -14,6 +14,9 @@
         <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
         <MediaTemplate EmbedCab="yes" />
 
+        <!-- Add icon reference -->
+        <Icon Id="KamiwazaIcon" SourceFile="kamiwaza.ico" />
+
         <Feature Id="ProductFeature" Title="KamiwazaInstaller" Level="1">
             <ComponentGroupRef Id="ProductComponents" />
         </Feature>
@@ -34,27 +37,35 @@
         
         <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
         <WixVariable Id="WixUICostingPopupOptOut" Value="1" />
-        <!-- Custom Action to run Kamiwaza installer automatically after download -->
-        <CustomAction Id="RunKamiwazaInstaller"
-            Directory="INSTALLFOLDER"
-            ExeCommand="kamiwaza_installer.exe --memory=[WSLMEMORY] --version=[KAMIWAZA_VERSION] --codename=[CODENAME] --build=[BUILD_NUMBER] --arch=[ARCH] --email=[USER_EMAIL] --license-key=[LICENSE_KEY] --usage-reporting=[USAGE_REPORTING] --mode=[INSTALL_MODE]"
-            Execute="deferred"
-            Return="asyncNoWait"
-            Impersonate="yes" />
+
+        <!-- Always enable verbose MSI logging to Temp -->
+        <Property Id="MsiLogging" Value="voicewarmupx!"/>
+        <Property Id="MsiLogFileLocation" Value="[TempFolder]kamiwaza_msi.log"/>
 
         <!-- Define the directory structure -->
         <Directory Id="TARGETDIR" Name="SourceDir">
             <Directory Id="LocalAppDataFolder">
                 <Directory Id="INSTALLFOLDER" Name="Kamiwaza">
-                    <!-- MainExecutable component removed -->
                     <Component Id="KamiwazaInstallerFiles" Guid="9C7B2A3D-4E5F-6071-8B9C-0D1E2F3A4B5C">
                         <File Id="DownloadScriptFile" Name="download_exe.ps1" Source="download_exe.ps1"/>
-                        <File Id="InstallBatchFile" Name="install_kamiwaza.bat" Source="install_kamiwaza.bat"/>
-                        <File Id="InstallDevBatchFile" Name="install_kamiwaza_dev.bat" Source="install_kamiwaza_dev.bat"/>
+                        <File Id="MainExecutable" Name="kamiwaza_installer.exe" Source="dist\kamiwaza_installer.exe"/>
                         <File Id="WSLConfigScript" Name="configure_wsl_memory.ps1" Source="configure_wsl_memory.ps1"/>
                         <File Id="DebconfSetupScript" Name="setup_debconf.sh" Source="setup_debconf.sh"/>
+                        <File Id="PasswordlessSudoScript" Name="setup_passwordless_sudo.sh" Source="setup_passwordless_sudo.sh"/>
                         <RegistryValue Root="HKCU" Key="Software\Kamiwaza\Installer" Name="installed" Type="string" Value="1" KeyPath="yes"/>
                         <RemoveFolder Id="RemoveKamiwazaFolder" Directory="INSTALLFOLDER" On="uninstall"/>
+                        <!-- Comprehensive cleanup during uninstall -->
+                        <RemoveFile Id="RemoveDownloadedExe" Directory="INSTALLFOLDER" Name="kamiwaza_installer*.exe" On="uninstall"/>
+                        <RemoveFile Id="RemoveLogFiles" Directory="INSTALLFOLDER" Name="*.log" On="uninstall"/>
+                        <RemoveFile Id="RemoveDebFiles" Directory="INSTALLFOLDER" Name="*.deb" On="uninstall"/>
+                        <RemoveFile Id="RemoveTempFiles" Directory="INSTALLFOLDER" Name="*.tmp" On="uninstall"/>
+                        <!-- Additional cleanup for WSL and debug files -->
+                        <RemoveFile Id="RemoveDebugLogs" Directory="INSTALLFOLDER" Name="*debug*.log" On="uninstall"/>
+                        <RemoveFile Id="RemoveWSLBackups" Directory="INSTALLFOLDER" Name=".wslconfig.backup.*" On="uninstall"/>
+                        <RemoveFile Id="RemoveSpecFiles" Directory="INSTALLFOLDER" Name="*.spec" On="uninstall"/>
+                        <RemoveFile Id="RemoveBackupFiles" Directory="INSTALLFOLDER" Name="*.backup*" On="uninstall"/>
+                        <RemoveFile Id="RemoveConfigFiles" Directory="INSTALLFOLDER" Name=".wslconfig*" On="uninstall"/>
+                        <RemoveFile Id="RemoveDownloadLogs" Directory="INSTALLFOLDER" Name="download*.log" On="uninstall"/>
                     </Component>
                 </Directory>
             </Directory>
@@ -65,15 +76,12 @@
                         <Shortcut Id="ApplicationStartMenuShortcut" 
                                  Name="Install Kamiwaza" 
                                  Description="Download and Install Kamiwaza with [WSLMEMORY] dedicated memory" 
-                                 Target="[INSTALLFOLDER]install_kamiwaza.bat" 
-                                 Arguments="&quot;[WSLMEMORY]&quot; &quot;[USER_EMAIL]&quot; &quot;[LICENSE_KEY]&quot; &quot;[USAGE_REPORTING]&quot; &quot;[INSTALL_MODE]&quot;"
-                                 WorkingDirectory="INSTALLFOLDER" />
-                        <Shortcut Id="ApplicationStartMenuShortcutDev" 
-                                 Name="Install Kamiwaza (Developer Mode)" 
-                                 Description="Download and Install Kamiwaza in Debug Mode with [WSLMEMORY] dedicated memory" 
-                                 Target="[INSTALLFOLDER]install_kamiwaza_dev.bat" 
-                                 Arguments="&quot;[WSLMEMORY]&quot; &quot;[USER_EMAIL]&quot; &quot;[LICENSE_KEY]&quot; &quot;[USAGE_REPORTING]&quot; &quot;dev&quot;"
-                                 WorkingDirectory="INSTALLFOLDER" />
+                                 Target="[INSTALLFOLDER]kamiwaza_installer.exe" 
+                                 Arguments="&quot;[WSLMEMORY]&quot; &quot;[USER_EMAIL]&quot; &quot;[LICENSE_KEY]&quot; &quot;[USAGE_REPORTING]&quot; &quot;[INSTALL_MODE]&quot; &quot;[KAMIWAZA_VERSION]&quot; &quot;[ARCH]&quot; &quot;[BUILD_NUMBER]&quot;"
+                                 WorkingDirectory="INSTALLFOLDER"
+                                 Icon="KamiwazaIcon"
+                                 IconIndex="0" />
+
                         <RemoveFolder Id="CleanUpShortCut" 
                                     Directory="ApplicationProgramsFolder" 
                                     On="uninstall" />
@@ -83,21 +91,14 @@
                                      Type="integer" 
                                      Value="1" 
                                      KeyPath="yes" />
+                        <!-- Clean up registry entries on uninstall -->
+                        <RegistryKey Root="HKCU" Key="Software\Kamiwaza" Action="createAndRemoveOnUninstall" />
                     </Component>
                 </Directory>
             </Directory>
         </Directory>
 
-        <!-- Download EXE from R2 at install time -->
-        <Property Id="EXE_URL" Value="https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_installer_$(var.KAMIWAZA_VERSION)_$(var.ARCH)_build$(var.BUILD_NUMBER).exe" />
-            <CustomAction Id="DownloadKamiwazaExe"
-      Directory="INSTALLFOLDER"
-      ExeCommand="powershell.exe -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]download_exe.ps1&quot; -DownloadUrl &quot;[EXE_URL]&quot; -OutputPath &quot;[INSTALLFOLDER]kamiwaza_installer.exe&quot;"
-      Execute="deferred"
-      Return="check"
-      Impersonate="no" />
-
-    <!-- Remove automatic download and execution - will be done via shortcut instead -->
+        <!-- DEB download is now handled directly within the Python installer -->
 
         <!-- Define the components -->
         <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
@@ -132,7 +133,6 @@
                     <ComboBox Property="INSTALL_MODE">
                         <ListItem Text="Lite" Value="lite" />
                         <ListItem Text="Full" Value="full" />
-                        <ListItem Text="Developer" Value="dev" />
                     </ComboBox>
                 </Control>
                 
@@ -158,8 +158,23 @@
             <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="KamiwazaConfigDlg">1</Publish>
             
             <!-- Customize the exit dialog title and message -->
-            <Property Id="WIXUI_EXITDIALOGTITLE" Value="Kamiwaza Setup Complete" />
-            <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Kamiwaza has been successfully configured with your preferences! Your settings have been saved and will be automatically applied when you launch the installer.&#xD;&#xA;&#xD;&#xA;Next Steps:&#xD;&#xA;• Open your Start Menu and look for 'Kamiwaza'&#xD;&#xA;• Click 'Install Kamiwaza' to begin the installation&#xD;&#xA;• The installer will automatically configure WSL memory&#xD;&#xA;• Ubuntu debconf will be set up with your saved preferences&#xD;&#xA;• Kamiwaza will be installed seamlessly with no additional configuration required&#xD;&#xA;&#xD;&#xA;Thank you for choosing Kamiwaza!" />
+            <Property Id="WIXUI_EXITDIALOGTITLE" Value="Kamiwaza Setup Complete!" />
+            <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Setup is complete! The Kamiwaza installation will continue in a separate 'Kamiwaza Installer' window when you click Finish." />
         </UI>
+
+        <!-- Custom Actions -->
+        <CustomAction Id="RunKamiwazaInstaller" 
+                      FileKey="MainExecutable" 
+                      ExeCommand=""
+                      Execute="immediate" 
+                      Impersonate="yes"
+                      Return="asyncNoWait" />
+
+        <!-- Auto-launch is now always enabled -->
+
+        <!-- Install Execute Sequence - automatically run Kamiwaza installation -->
+        <InstallExecuteSequence>
+            <Custom Action="RunKamiwazaInstaller" After="InstallFinalize">NOT Installed AND NOT REMOVE</Custom>
+        </InstallExecuteSequence>
     </Product>
 </Wix> 

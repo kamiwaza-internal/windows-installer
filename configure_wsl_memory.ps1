@@ -78,18 +78,28 @@ foreach ($line in $existingConfig) {
         continue
     }
     
-    # If we're in wsl2 section, check for existing memory setting
+    # If we're in wsl2 section, check for existing settings
     if ($inWslSection) {
         if ($trimmedLine.StartsWith("memory=") -or $trimmedLine.StartsWith("#memory=")) {
             # Replace existing memory setting
-            $newConfig += "# Kamiwaza dedicated memory configuration"
-            $newConfig += "memory=$MemoryAmount"
-            $kamiwazaConfigured = $true
-            Write-LogMessage "Replaced existing memory setting with Kamiwaza configuration"
+            if (-not $kamiwazaConfigured) {
+                $newConfig += "# Kamiwaza dedicated memory configuration"
+                $newConfig += "memory=$MemoryAmount"
+                $kamiwazaConfigured = $true
+                Write-LogMessage "Replaced existing memory setting with Kamiwaza configuration"
+            }
             continue
         }
-        elseif ($trimmedLine.StartsWith("# Kamiwaza dedicated memory configuration")) {
-            # Skip old Kamiwaza comments
+        elseif ($trimmedLine.StartsWith("# Kamiwaza dedicated memory configuration") -or 
+                $trimmedLine.StartsWith("# Additional Kamiwaza WSL optimizations")) {
+            # Skip old Kamiwaza comments to avoid duplicates
+            continue
+        }
+        elseif ($trimmedLine.StartsWith("processors=") -or 
+                $trimmedLine.StartsWith("swap=") -or 
+                $trimmedLine.StartsWith("localhostForwarding=")) {
+            # Skip existing optimization settings that will be re-added if needed
+            Write-LogMessage "Removing duplicate setting: $trimmedLine"
             continue
         }
     }
@@ -113,26 +123,44 @@ elseif ($inWslSection -and -not $kamiwazaConfigured) {
     Write-LogMessage "Added Kamiwaza memory configuration at end of [wsl2] section"
 }
 
-# Add additional WSL optimizations for Kamiwaza
+# Add additional WSL optimizations for Kamiwaza (if not already present)
 if ($kamiwazaConfigured) {
-    # Find the memory line and add optimizations after it
-    $optimizedConfig = @()
-    $memoryLineFound = $false
+    # Check if optimizations already exist
+    $hasProcessors = $newConfig | Where-Object { $_.Trim().StartsWith("processors=") }
+    $hasSwap = $newConfig | Where-Object { $_.Trim().StartsWith("swap=") }
+    $hasLocalhost = $newConfig | Where-Object { $_.Trim().StartsWith("localhostForwarding=") }
     
-    foreach ($line in $newConfig) {
-        $optimizedConfig += $line
+    if (-not $hasProcessors -or -not $hasSwap -or -not $hasLocalhost) {
+        # Find the memory line and add missing optimizations after it
+        $optimizedConfig = @()
+        $memoryLineFound = $false
         
-        if ($line.Trim() -eq "memory=$MemoryAmount" -and -not $memoryLineFound) {
-            $memoryLineFound = $true
-            $optimizedConfig += "# Additional Kamiwaza WSL optimizations"
-            $optimizedConfig += "processors=4"
-            $optimizedConfig += "swap=2GB"
-            $optimizedConfig += "localhostForwarding=true"
-            Write-LogMessage "Added Kamiwaza WSL optimizations"
+        foreach ($line in $newConfig) {
+            $optimizedConfig += $line
+            
+            if ($line.Trim() -eq "memory=$MemoryAmount" -and -not $memoryLineFound) {
+                $memoryLineFound = $true
+                $optimizedConfig += "# Additional Kamiwaza WSL optimizations"
+                
+                if (-not $hasProcessors) {
+                    $optimizedConfig += "processors=4"
+                    Write-LogMessage "Added processors optimization"
+                }
+                if (-not $hasSwap) {
+                    $optimizedConfig += "swap=2GB"
+                    Write-LogMessage "Added swap optimization"
+                }
+                if (-not $hasLocalhost) {
+                    $optimizedConfig += "localhostForwarding=true"
+                    Write-LogMessage "Added localhost forwarding optimization"
+                }
+            }
         }
+        
+        $newConfig = $optimizedConfig
+    } else {
+        Write-LogMessage "WSL optimizations already exist, skipping duplicate additions"
     }
-    
-    $newConfig = $optimizedConfig
 }
 
 # Write the updated configuration
