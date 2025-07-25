@@ -30,8 +30,8 @@
         <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
         
         <!-- Additional user configuration properties -->
-        <Property Id="USER_EMAIL" Value="default@kamiwaza.ai" />
-        <Property Id="LICENSE_KEY" Value="COMMUNITY-EDITION-ONLY" />
+        <Property Id="USER_EMAIL" />
+        <Property Id="LICENSE_KEY" />
         <Property Id="USAGE_REPORTING" Value="1" />
         <Property Id="INSTALL_MODE" Value="lite" />
         
@@ -52,6 +52,7 @@
                         <File Id="WSLConfigScript" Name="configure_wsl_memory.ps1" Source="configure_wsl_memory.ps1"/>
                         <File Id="DebconfSetupScript" Name="setup_debconf.sh" Source="setup_debconf.sh"/>
                         <File Id="PasswordlessSudoScript" Name="setup_passwordless_sudo.sh" Source="setup_passwordless_sudo.sh"/>
+                        <File Id="ConfigFile" Name="config.yaml" Source="config.yaml"/>
                         <RegistryValue Root="HKCU" Key="Software\Kamiwaza\Installer" Name="installed" Type="string" Value="1" KeyPath="yes"/>
                         <RemoveFolder Id="RemoveKamiwazaFolder" Directory="INSTALLFOLDER" On="uninstall"/>
                         <!-- Comprehensive cleanup during uninstall -->
@@ -169,12 +170,21 @@
                       Execute="immediate" 
                       Impersonate="yes"
                       Return="asyncNoWait" />
+        
+        <!-- WSL Cleanup Action for Uninstall -->
+        <CustomAction Id="CleanupWSLKamiwaza"
+                      ExeCommand='powershell.exe -Command "try { Start-Process wsl -ArgumentList @(\"-d\", \"Ubuntu-24.04\", \"sudo\", \"apt\", \"remove\", \"--purge\", \"-y\", \"kamiwaza\") -Wait -WindowStyle Hidden -ErrorAction Stop } catch { try { Start-Process wsl -ArgumentList @(\"sudo\", \"apt\", \"remove\", \"--purge\", \"-y\", \"kamiwaza\") -Wait -WindowStyle Hidden } catch { } }"'
+                      Directory="TARGETDIR"
+                      Execute="immediate"
+                      Impersonate="yes"
+                      Return="ignore" />
 
         <!-- Auto-launch is now always enabled -->
 
         <!-- Install Execute Sequence - automatically run Kamiwaza installation -->
         <InstallExecuteSequence>
             <Custom Action="RunKamiwazaInstaller" After="InstallFinalize">NOT Installed AND NOT REMOVE</Custom>
+            <Custom Action="CleanupWSLKamiwaza" Before="RemoveFiles">Installed AND REMOVE</Custom>
         </InstallExecuteSequence>
     </Product>
 </Wix> 

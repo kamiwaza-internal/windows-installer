@@ -45,3 +45,15 @@ kamiwaza_installer.exe --version 0.5.0-rc1 --codename noble --build 1 --arch amd
 ```
 
 If you have any questions, see the code comments or contact the maintainers. 
+
+<!-- To test on winserver -->
+## Winserver Installation
+To download on winserver:
+`bash
+PS C:\Users\drew> Invoke-WebRequest -Uri "https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_installer_0.5.0-rc1_amd64_build50.msi" -OutFile "kamiwaza_installer_build50.msi" 
+`
+
+Then to install:
+`bash
+ msiexec /i kamiwaza_installer_build50.msi
+`

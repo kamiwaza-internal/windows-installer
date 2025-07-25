@@ -41,7 +41,7 @@ function Upload-Files {
 switch ($Operation) {
     "find-build" {
         $currentBuild = $StartBuild
-        while ($currentBuild -le 50) {
+        while ($true) {
             Write-Host "[INFO] Checking build $currentBuild..."
             if (Test-BuildExists -BuildNumber $currentBuild) {
                 Write-Host "[INFO] Build $currentBuild exists, trying next..."
@@ -51,10 +51,6 @@ switch ($Operation) {
                 Write-Host "FINAL_BUILD_NUMBER=$currentBuild"
                 break
             }
-        }
-        if ($currentBuild -gt 50) {
-            Write-Host "[WARN] Safety limit reached at build $currentBuild"
-            Write-Host "FINAL_BUILD_NUMBER=50"
         }
     }
     

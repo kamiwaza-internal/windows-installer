@@ -9,7 +9,7 @@ Write-Host ""
 Write-Host "Checking prerequisites..." -ForegroundColor Yellow
 $canDownload = $true
 try {
-    $testUrl = "https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_installer_0.5.0-rc1_amd64_build1.exe"
+    $testUrl = "https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_installer_0.5.0-rc1_amd64_build35.exe"
     Write-Host "Testing download URL: $testUrl"
     $response = Invoke-WebRequest -Uri $testUrl -Method Head -UseBasicParsing -ErrorAction Stop
     Write-Host "✓ Download URL is accessible (Status: $($response.StatusCode))" -ForegroundColor Green

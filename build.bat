@@ -45,6 +45,16 @@ if not "%R2_ENDPOINT_URL%"=="" (
     echo [WARN] Skipping build check: R2_ENDPOINT_URL not configured
 )
 
+set /a NEXT_BUILD=!FINAL_BUILD_NUMBER!+1
+REM Update config.yaml with next build number for future (move this up)
+echo [INFO] Updating config.yaml for next build: !NEXT_BUILD!
+powershell -Command "(Get-Content config.yaml) -replace 'build_number: [0-9]+', 'build_number: !NEXT_BUILD!' | Set-Content config.yaml"
+if errorlevel 1 (
+    echo [ERROR] Failed to update config.yaml
+) else (
+    echo [SUCCESS] Config.yaml updated successfully
+)
+
 echo [INFO] Final config: Version=%KAMIWAZA_VERSION%, Build=!FINAL_BUILD_NUMBER!, Arch=%ARCH%
 echo.
 
@@ -158,16 +168,6 @@ echo [INFO] Copy these URLs for reference:
 echo        EXE: %EXE_URL%
 echo        MSI: %MSI_URL%
 echo ===============================================
-
-REM Update config.yaml with next build number for future
-set /a NEXT_BUILD=!FINAL_BUILD_NUMBER!+1
-echo [INFO] Updating config.yaml for next build: !NEXT_BUILD!
-powershell -Command "(Get-Content config.yaml) -replace '^build_number: !FINAL_BUILD_NUMBER!', 'build_number: !NEXT_BUILD!' | Set-Content config.yaml"
-if errorlevel 1 (
-    echo [ERROR] Failed to update config.yaml
-) else (
-    echo [SUCCESS] Config.yaml updated successfully
-)
 
 echo.
 echo [INFO] Build complete! Config updated for next build (!NEXT_BUILD!)
