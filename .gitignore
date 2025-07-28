@@ -26,3 +26,4 @@ embedded_python/*
 *.pywz
 *.pyzw
 *.pyzwz
+nul
