@@ -3,7 +3,7 @@
     <Product Id="*" 
              Name="Kamiwaza Installer $(var.KAMIWAZA_VERSION) ($(var.ARCH))" 
              Language="1033" 
-             Version="1.0.0.0" 
+             Version="$(var.KAMIWAZA_VERSION_MAJOR).$(var.KAMIWAZA_VERSION_MINOR).$(var.KAMIWAZA_VERSION_PATCH).0" 
              Manufacturer="Kamiwaza" 
              UpgradeCode="12345678-1234-1234-1234-123456789012">
         
@@ -16,6 +16,9 @@
 
         <!-- Add icon reference -->
         <Icon Id="KamiwazaIcon" SourceFile="kamiwaza.ico" />
+        
+        <!-- Use Kamiwaza icon for Add/Remove Programs -->
+        <Property Id="ARPPRODUCTICON" Value="KamiwazaIcon" />
 
         <Feature Id="ProductFeature" Title="KamiwazaInstaller" Level="1">
             <ComponentGroupRef Id="ProductComponents" />
@@ -30,25 +33,34 @@
         <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
         
         <!-- Additional user configuration properties -->
-        <Property Id="USER_EMAIL" />
-        <Property Id="LICENSE_KEY" />
+        <Property Id="USER_EMAIL" Secure="yes" />
+        <Property Id="LICENSE_KEY" Secure="yes" />
         <Property Id="USAGE_REPORTING" Value="1" />
         <Property Id="INSTALL_MODE" Value="lite" />
         
         <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
         <WixVariable Id="WixUICostingPopupOptOut" Value="1" />
+        
+        <WixVariable Id="WixUIDialogBmp" Value="logo.bmp"/>
+        <WixVariable Id="WixUIBannerBmp" Value="banner.bmp" />
 
         <!-- Always enable verbose MSI logging to Temp -->
         <Property Id="MsiLogging" Value="voicewarmupx!"/>
-        <Property Id="MsiLogFileLocation" Value="[TempFolder]kamiwaza_msi.log"/>
+        
+        <!-- Force verbose logging for debugging -->
+        <Property Id="MSIEXEC_LOGGING" Value="/L*V &quot;%TEMP%\kamiwaza_install.log&quot;" />
 
         <!-- Define the directory structure -->
         <Directory Id="TARGETDIR" Name="SourceDir">
             <Directory Id="LocalAppDataFolder">
                 <Directory Id="INSTALLFOLDER" Name="Kamiwaza">
+                    <!-- Embedded Python Runtime Directory -->
+                    <Directory Id="PYTHONFOLDER" Name="python" />
                     <Component Id="KamiwazaInstallerFiles" Guid="9C7B2A3D-4E5F-6071-8B9C-0D1E2F3A4B5C">
                         <File Id="DownloadScriptFile" Name="download_exe.ps1" Source="download_exe.ps1"/>
-                        <File Id="MainExecutable" Name="kamiwaza_installer.exe" Source="dist\kamiwaza_installer.exe"/>
+                        <File Id="HeadlessInstaller" Name="kamiwaza_headless_installer.py" Source="kamiwaza_headless_installer.py"/>
+                        <File Id="KamiwazaBatchWrapper" Name="run_kamiwaza.bat" Source="run_kamiwaza.bat"/>
+                        <File Id="DebugTestBatch" Name="debug_test.bat" Source="debug_test.bat"/>
                         <File Id="WSLConfigScript" Name="configure_wsl_memory.ps1" Source="configure_wsl_memory.ps1"/>
                         <File Id="DebconfSetupScript" Name="setup_debconf.sh" Source="setup_debconf.sh"/>
                         <File Id="PasswordlessSudoScript" Name="setup_passwordless_sudo.sh" Source="setup_passwordless_sudo.sh"/>
@@ -74,11 +86,20 @@
             <Directory Id="ProgramMenuFolder">
                 <Directory Id="ApplicationProgramsFolder" Name="Kamiwaza">
                     <Component Id="ApplicationShortcut" Guid="8B6A1B2C-3D4E-5F60-7A8B-9C0D1E2F3A4B">
-                        <Shortcut Id="ApplicationStartMenuShortcut" 
+                        <Shortcut Id="InstallKamiwazaShortcut" 
                                  Name="Install Kamiwaza" 
                                  Description="Download and Install Kamiwaza with [WSLMEMORY] dedicated memory" 
-                                 Target="[INSTALLFOLDER]kamiwaza_installer.exe" 
-                                 Arguments="&quot;[WSLMEMORY]&quot; &quot;[USER_EMAIL]&quot; &quot;[LICENSE_KEY]&quot; &quot;[USAGE_REPORTING]&quot; &quot;[INSTALL_MODE]&quot; &quot;[KAMIWAZA_VERSION]&quot; &quot;[ARCH]&quot; &quot;[BUILD_NUMBER]&quot;"
+                                 Target="[INSTALLFOLDER]run_kamiwaza.bat" 
+                                 Arguments="--memory &quot;[WSLMEMORY]&quot; --email &quot;[USER_EMAIL]&quot; --license-key &quot;[LICENSE_KEY]&quot; --usage-reporting &quot;[USAGE_REPORTING]&quot; --mode &quot;[INSTALL_MODE]&quot;"
+                                 WorkingDirectory="INSTALLFOLDER"
+                                 Icon="KamiwazaIcon"
+                                 IconIndex="0" />
+                                 
+                        <Shortcut Id="StartPlatformShortcut" 
+                                 Name="Start Platform" 
+                                 Description="Launch Kamiwaza Platform in dedicated WSL instance" 
+                                 Target="wsl.exe" 
+                                 Arguments="-d kamiwaza -- kamiwaza start"
                                  WorkingDirectory="INSTALLFOLDER"
                                  Icon="KamiwazaIcon"
                                  IconIndex="0" />
@@ -93,7 +114,7 @@
                                      Value="1" 
                                      KeyPath="yes" />
                         <!-- Clean up registry entries on uninstall -->
-                        <RegistryKey Root="HKCU" Key="Software\Kamiwaza" Action="createAndRemoveOnUninstall" />
+                        <RegistryKey Root="HKCU" Key="Software\Kamiwaza" ForceDeleteOnUninstall="yes" />
                     </Component>
                 </Directory>
             </Directory>
@@ -103,7 +124,7 @@
 
         <!-- Define the components -->
         <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-            <!-- <ComponentRef Id="MainExecutable" /> removed -->
+            <ComponentGroupRef Id="EmbeddedPythonFiles" />
             <ComponentRef Id="KamiwazaInstallerFiles" />
             <ComponentRef Id="ApplicationShortcut" />
         </ComponentGroup>
@@ -164,16 +185,23 @@
         </UI>
 
         <!-- Custom Actions -->
-        <CustomAction Id="RunKamiwazaInstaller" 
-                      FileKey="MainExecutable" 
-                      ExeCommand=""
-                      Execute="immediate" 
+        <CustomAction Id="DebugTest" 
+                      FileKey="DebugTestBatch"
+                      ExeCommand="debug_test_from_msi"
+                      Execute="deferred" 
                       Impersonate="yes"
-                      Return="asyncNoWait" />
+                      Return="ignore" />
+                      
+        <CustomAction Id="RunKamiwazaInstaller" 
+                      FileKey="KamiwazaBatchWrapper"
+                      ExeCommand="--memory &quot;[WSLMEMORY]&quot; --email &quot;[USER_EMAIL]&quot; --license-key &quot;[LICENSE_KEY]&quot; --usage-reporting &quot;[USAGE_REPORTING]&quot; --mode &quot;[INSTALL_MODE]&quot;"
+                      Execute="deferred" 
+                      Impersonate="yes"
+                      Return="ignore" />
         
         <!-- WSL Cleanup Action for Uninstall -->
         <CustomAction Id="CleanupWSLKamiwaza"
-                      ExeCommand='powershell.exe -Command "try { Start-Process wsl -ArgumentList @(\"-d\", \"Ubuntu-24.04\", \"sudo\", \"apt\", \"remove\", \"--purge\", \"-y\", \"kamiwaza\") -Wait -WindowStyle Hidden -ErrorAction Stop } catch { try { Start-Process wsl -ArgumentList @(\"sudo\", \"apt\", \"remove\", \"--purge\", \"-y\", \"kamiwaza\") -Wait -WindowStyle Hidden } catch { } }"'
+                      ExeCommand='powershell.exe -Command "try { $instance = \"kamiwaza-$(var.KAMIWAZA_VERSION)\"; Start-Process wsl -ArgumentList @(\"-d\", $instance, \"sudo\", \"apt\", \"remove\", \"--purge\", \"-y\", \"kamiwaza\") -Wait -WindowStyle Hidden -ErrorAction Stop; Start-Process wsl -ArgumentList @(\"--unregister\", $instance) -Wait -WindowStyle Hidden } catch { try { Start-Process wsl -ArgumentList @(\"-d\", \"Ubuntu-24.04\", \"sudo\", \"apt\", \"remove\", \"--purge\", \"-y\", \"kamiwaza\") -Wait -WindowStyle Hidden } catch { } }"'
                       Directory="TARGETDIR"
                       Execute="immediate"
                       Impersonate="yes"
@@ -183,7 +211,8 @@
 
         <!-- Install Execute Sequence - automatically run Kamiwaza installation -->
         <InstallExecuteSequence>
-            <Custom Action="RunKamiwazaInstaller" After="InstallFinalize">NOT Installed AND NOT REMOVE</Custom>
+            <Custom Action="DebugTest" After="InstallFiles">NOT Installed AND NOT REMOVE</Custom>
+            <Custom Action="RunKamiwazaInstaller" After="DebugTest">NOT Installed AND NOT REMOVE</Custom>
             <Custom Action="CleanupWSLKamiwaza" Before="RemoveFiles">Installed AND REMOVE</Custom>
         </InstallExecuteSequence>
     </Product>

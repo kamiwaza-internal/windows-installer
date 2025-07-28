@@ -5,7 +5,19 @@
       "Bash(build.bat)",
       "Bash(cmd:*)",
       "Bash(git checkout:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(candle:*)",
+      "Bash(where:*)",
+      "Bash(\"C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64\\signtool.exe\" /?)",
+      "Bash(.test_signtool.bat)",
+      "Bash(del test_signtool.bat)",
+      "Bash(echo:*)",
+      "Bash(powershell:*)",
+      "Bash(dir:*)",
+      "Bash(cd:*)",
+      "Bash(ls:*)",
+      "Bash(embedded_pythonpython.exe test_simple.py --test-arg)",
+      "Bash(curl:*)"
     ],
     "deny": []
   }

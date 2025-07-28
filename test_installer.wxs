@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Product Id="*" 
+             Name="Kamiwaza Test Installer" 
+             Language="1033" 
+             Version="1.0.0.0" 
+             Manufacturer="Kamiwaza" 
+             UpgradeCode="12345678-1234-1234-1234-123456789013">
+        
+        <Package InstallerVersion="200" 
+                 Compressed="yes" 
+                 InstallScope="perUser" />
+
+        <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+        <MediaTemplate EmbedCab="yes" />
+
+        <!-- Properties -->
+        <Property Id="WSLMEMORY" Value="8GB" />
+        <Property Id="USER_EMAIL" Value="test@example.com" />
+        <Property Id="LICENSE_KEY" Value="test123" />
+        <Property Id="USAGE_REPORTING" Value="1" />
+        <Property Id="INSTALL_MODE" Value="lite" />
+        
+        <!-- Directory structure -->
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="LocalAppDataFolder">
+                <Directory Id="INSTALLFOLDER" Name="KamiwazaTest">
+                    <Directory Id="PYTHONFOLDER" Name="python" />
+                    <Component Id="TestFiles" Guid="1A2B3C4D-5E6F-7890-ABCD-1234567890AC">
+                        <File Id="TestScript" Name="test_simple.py" Source="test_simple.py" KeyPath="yes"/>
+                        <RemoveFolder Id="RemoveTestFolder" Directory="INSTALLFOLDER" On="uninstall"/>
+                    </Component>
+                </Directory>
+            </Directory>
+        </Directory>
+
+        <!-- Feature -->
+        <Feature Id="ProductFeature" Title="KamiwazaTest" Level="1">
+            <ComponentGroupRef Id="EmbeddedPythonFiles" />
+            <ComponentRef Id="TestFiles" />
+        </Feature>
+
+        <!-- Custom Action -->
+        <CustomAction Id="RunTest" 
+                      FileKey="filDFCCBED4462C5FF73092F78208A8340B"
+                      ExeCommand="&quot;[INSTALLFOLDER]test_simple.py&quot; --from-msi"
+                      Execute="deferred" 
+                      Impersonate="yes"
+                      Return="ignore" />
+        
+        <!-- Execute Sequence -->
+        <InstallExecuteSequence>
+            <Custom Action="RunTest" Before="InstallFinalize">NOT Installed AND NOT REMOVE</Custom>
+        </InstallExecuteSequence>
+    </Product>
+</Wix>

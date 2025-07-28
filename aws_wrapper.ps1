@@ -28,7 +28,7 @@ function Upload-Files {
     $exeSuccess = $LASTEXITCODE -eq 0
     
     Write-Host "[INFO] Uploading MSI: $msiName"
-    & "venv\Scripts\aws.cmd" s3 cp "installer.msi" "s3://k-ubuntu/$msiName" --endpoint-url $EndpointUrl
+    & "venv\Scripts\aws.cmd" s3 cp "kamiwaza_installer.msi" "s3://k-ubuntu/$msiName" --endpoint-url $EndpointUrl
     $msiSuccess = $LASTEXITCODE -eq 0
     
     # Output results for batch script to read
