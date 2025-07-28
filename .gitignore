@@ -18,3 +18,11 @@ kamiwaza_installer.spec
 *.spec
 kamiwaza_cert.pfx
 embedded_python/*
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+*.pywz
+*.pyzw
+*.pyzwz
