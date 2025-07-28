@@ -16,3 +16,5 @@ kamiwaza_installer.spec
 *.log
 *.log.*
 *.spec
+kamiwaza_cert.pfx
+embedded_python/*
