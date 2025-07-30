@@ -58,7 +58,7 @@
                     <Directory Id="PYTHONFOLDER" Name="python" />
                     <Component Id="KamiwazaInstallerFiles" Guid="9C7B2A3D-4E5F-6071-8B9C-0D1E2F3A4B5C">
                         <File Id="DownloadScriptFile" Name="download_exe.ps1" Source="download_exe.ps1"/>
-                        <File Id="HeadlessInstaller" Name="kamiwaza_headless_installer.py" Source="kamiwaza_headless_installer.py"/>
+                        <File Id="HeadlessInstaller" Name="kamiwaza_headless_installer.py" Source="kamiwaza_headless_installer_build.py"/>
                         <File Id="KamiwazaBatchWrapper" Name="run_kamiwaza.bat" Source="run_kamiwaza.bat"/>
                         <File Id="DebugTestBatch" Name="debug_test.bat" Source="debug_test.bat"/>
                         <File Id="WSLConfigScript" Name="configure_wsl_memory.ps1" Source="configure_wsl_memory.ps1"/>

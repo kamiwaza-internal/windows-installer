@@ -21,14 +21,62 @@ echo ===============================================
 echo Kamiwaza Build Script
 echo ===============================================
 
-REM Hardcode values to bypass parsing issues
-echo [INFO] Using hardcoded config values...
-set KAMIWAZA_VERSION=0.5.0-rc1
-set CODENAME=noble
-set BUILD_NUMBER=104
-set ARCH=amd64
-set R2_ENDPOINT_URL=https://a8269aa1c3e707a1ce89dd67bdef4a0f.r2.cloudflarestorage.com
-set DEB_FILE_URL=https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_v0.5.0_noble_amd64_build12.deb
+REM Read values from config.yaml using PowerShell
+echo [INFO] Reading config from config.yaml...
+for /f "tokens=1,2 delims==" %%A in ('powershell -Command "Get-Content config.yaml | Where-Object { $_ -match '^[^#]' -and $_ -match ':' } | ForEach-Object { $line = $_.Trim(); if ($line -match '^([^:]+):\s*(.+?)(?:\s+#|$)') { $matches[1].Trim() + '=' + $matches[2].Trim() } else { $line -replace ':\s*', '=' } }"') do (
+    if "%%A"=="kamiwaza_version" set KAMIWAZA_VERSION=%%B
+    if "%%A"=="codename" set CODENAME=%%B
+    if "%%A"=="build_number" set BUILD_NUMBER=%%B
+    if "%%A"=="arch" set ARCH=%%B
+    if "%%A"=="r2_endpoint_url" set R2_ENDPOINT_URL=%%B
+    if "%%A"=="deb_file_url" set DEB_FILE_URL=%%B
+)
+
+REM Validate required values and set defaults if needed
+if "%KAMIWAZA_VERSION%"=="" (
+    echo [ERROR] kamiwaza_version not found in config.yaml
+    exit /b 1
+)
+if "%CODENAME%"=="" (
+    echo [ERROR] codename not found in config.yaml
+    exit /b 1
+)
+if "%BUILD_NUMBER%"=="" (
+    echo [WARN] build_number is empty in config.yaml, using default value 1
+    set BUILD_NUMBER=1
+)
+if "%BUILD_NUMBER%"=="=" (
+    echo [WARN] build_number is empty in config.yaml, using default value 1
+    set BUILD_NUMBER=1
+)
+if "%ARCH%"=="" (
+    echo [WARN] arch not found in config.yaml, using default value amd64
+    set ARCH=amd64
+)
+if "%ARCH%"=="amd64#Use'auto'todetect,orspecify'amd64'or'arm64'" (
+    echo [WARN] arch contains comment, extracting just amd64
+    set ARCH=amd64
+)
+if "%R2_ENDPOINT_URL%"=="" (
+    echo [WARN] r2_endpoint_url not found in config.yaml
+)
+if "%DEB_FILE_URL%"=="" (
+    echo [WARN] deb_file_url not found in config.yaml
+)
+
+REM Display all parsed variables for verification
+echo.
+echo ===============================================
+echo CONFIGURATION VALUES FROM config.yaml
+echo ===============================================
+echo [INFO] KAMIWAZA_VERSION: %KAMIWAZA_VERSION%
+echo [INFO] CODENAME: %CODENAME%
+echo [INFO] BUILD_NUMBER: %BUILD_NUMBER%
+echo [INFO] ARCH: %ARCH%
+echo [INFO] R2_ENDPOINT_URL: %R2_ENDPOINT_URL%
+echo [INFO] DEB_FILE_URL: %DEB_FILE_URL%
+echo ===============================================
+echo.
 
 REM Clean up variables
 set KAMIWAZA_VERSION=%KAMIWAZA_VERSION: =%
@@ -70,8 +118,8 @@ echo.
 
 REM Create a working copy and inject DEB_FILE_URL into template
 echo [INFO] Creating working copy and injecting DEB_FILE_URL...
-copy windows_installer.py windows_installer_template.py.backup >nul
-powershell -Command "(Get-Content windows_installer.py) -replace '{{DEB_FILE_URL}}', '%DEB_FILE_URL%' | Set-Content windows_installer_build.py"
+copy kamiwaza_headless_installer.py kamiwaza_headless_installer_template.py.backup >nul
+powershell -Command "(Get-Content kamiwaza_headless_installer.py) -replace '{{DEB_FILE_URL}}', '%DEB_FILE_URL%' | Set-Content kamiwaza_headless_installer_build.py"
 if errorlevel 1 (
     echo [ERROR] Failed to inject DEB_FILE_URL into working copy
     pause
@@ -116,7 +164,7 @@ echo [INFO] Version components: Major=%VERSION_MAJOR%, Minor=%VERSION_MINOR%, Pa
 candle -dKAMIWAZA_VERSION=%KAMIWAZA_VERSION% -dKAMIWAZA_VERSION_MAJOR=%VERSION_MAJOR% -dKAMIWAZA_VERSION_MINOR=%VERSION_MINOR% -dKAMIWAZA_VERSION_PATCH=%VERSION_PATCH% -dCODENAME=%CODENAME% -dBUILD_NUMBER=!FINAL_BUILD_NUMBER! -dARCH=%ARCH% -dDEB_FILE_URL="%DEB_FILE_URL%" -dEmbeddedPythonPath=embedded_python installer.wxs python_components.wxs
 if errorlevel 1 (
     echo [ERROR] WiX compile failed! Check the output above for details.
-    del windows_installer_build.py 2>nul
+    del kamiwaza_headless_installer_build.py 2>nul
     pause
     exit /b 1
 ) else (
@@ -126,7 +174,7 @@ if errorlevel 1 (
 light -ext WixUIExtension -sval -out kamiwaza_installer.msi installer.wixobj python_components.wixobj
 if errorlevel 1 (
     echo [ERROR] WiX link failed! Check the output above for details.
-    del windows_installer_build.py 2>nul
+    del kamiwaza_headless_installer_build.py 2>nul
     pause
     exit /b 1
 ) else (
@@ -216,7 +264,7 @@ if "%MSI_SUCCESS%"=="1" (
 echo.
 REM Clean up working copy
 echo [INFO] Cleaning up working copy...
-del windows_installer_build.py 2>nul
+del kamiwaza_headless_installer_build.py 2>nul
 echo [SUCCESS] Working copy cleaned up
 
 echo [INFO] Build complete! Config updated for next build (!NEXT_BUILD!)

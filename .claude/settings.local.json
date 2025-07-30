@@ -17,7 +17,9 @@
       "Bash(cd:*)",
       "Bash(ls:*)",
       "Bash(embedded_pythonpython.exe test_simple.py --test-arg)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(grep:*)",
+      "Bash(wsl:*)"
     ],
     "deny": []
   }
