@@ -1,6 +1,6 @@
 kamiwaza_version: 0.5.0
 codename: noble
-build_number: 133
+build_number: 134
 arch: amd64  # Use 'auto' to detect, or specify 'amd64' or 'arm64' 
 r2_endpoint_url: https://a8269aa1c3e707a1ce89dd67bdef4a0f.r2.cloudflarestorage.com
-deb_file_url: https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_v0.5.0_noble_amd64_build23.deb
+deb_file_url: https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_v0.5.0_noble_amd64_build26.deb

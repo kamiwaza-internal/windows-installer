@@ -44,6 +44,23 @@ class HeadlessKamiwazaInstaller:
         self.log_output(f"Current Working Directory: {os.getcwd()}")
         self.log_output(f"Script Path: {__file__}")
         
+        # Detect Windows Server and provide guidance
+        try:
+            import platform
+            windows_version = platform.platform()
+            self.log_output(f"Windows Version: {windows_version}")
+            
+            if "Server" in windows_version:
+                self.log_output("Windows Server detected - WSL may require manual setup")
+                if "2019" in windows_version:
+                    self.log_output("Server 2019: WSL 1 only, manual feature enable required")
+                elif "2022" in windows_version:
+                    self.log_output("Server 2022: WSL 2 supported (except Server Core)")
+                else:
+                    self.log_output("Server version: Check WSL compatibility")
+        except Exception as e:
+            self.log_output(f"Could not detect Windows version: {e}")
+        
         # Change working directory to installer directory if needed
         if os.getcwd().lower().endswith('system32'):
             installer_dir = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza')
@@ -55,6 +72,47 @@ class HeadlessKamiwazaInstaller:
                 self.log_output(f"WARNING: Installer directory does not exist: {installer_dir}")
         
         self.log_output("=== INITIALIZATION COMPLETE ===\n")
+
+    def check_wsl_prerequisites(self):
+        """Check WSL prerequisites and provide Windows Server specific guidance"""
+        self.log_output("Checking WSL prerequisites...")
+        
+        # Test basic WSL availability
+        ret, out, err = self.run_command(['wsl', '--version'], timeout=10)
+        if ret != 0:
+            self.log_output("WSL not installed or not available")
+            
+            # Provide Windows Server specific guidance
+            try:
+                import platform
+                windows_version = platform.platform()
+                if "Server" in windows_version:
+                    self.log_output("WINDOWS SERVER SETUP REQUIRED:")
+                    self.log_output("1. Open PowerShell as Administrator")
+                    
+                    if "2022" in windows_version:
+                        self.log_output("2. Run: wsl --install")
+                        self.log_output("3. Restart the server")
+                        self.log_output("4. Re-run this installer")
+                    else:  # 2019 or other
+                        self.log_output("2. Enable WSL feature:")
+                        self.log_output("   Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux")
+                        self.log_output("3. Restart the server")
+                        self.log_output("4. Re-run this installer")
+                        self.log_output("NOTE: Server 2019 only supports WSL 1")
+                else:
+                    self.log_output("Please install WSL using: wsl --install")
+            except:
+                self.log_output("Please install WSL using: wsl --install")
+            
+            return False
+        else:
+            self.log_output("✓ WSL is available")
+            if out:
+                # Show WSL version info
+                for line in out.strip().split('\n')[:3]:  # First 3 lines
+                    self.log_output(f"  {line}")
+            return True
 
     def copy_logs_to_windows(self, wsl_cmd, timestamp):
         """Copy WSL logs to Windows AppData folder for easy access"""
@@ -334,6 +392,9 @@ class HeadlessKamiwazaInstaller:
         ret, out, err = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
         if ret != 0:
             self.log_output("ERROR: WSL is not available")
+            self.log_output("On Windows Server, you may need to manually enable WSL:")
+            self.log_output("  - Server 2022: Run 'wsl --install' as Administrator")
+            self.log_output("  - Server 2019: Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux")
             return None
         
         # Parse WSL instances (handle UTF-16 encoding with null bytes and spaces)
@@ -579,6 +640,14 @@ networkingMode=mirrored
         
         try:
             self.log_output("Starting Kamiwaza installation", progress=0)
+            
+            # Check WSL prerequisites first
+            self.log_output("=== PHASE 0: WSL PREREQUISITES CHECK ===", progress=5)
+            if not self.check_wsl_prerequisites():
+                self.log_output("ERROR: WSL prerequisites not met")
+                self.log_output("Please follow the instructions above to enable WSL, then re-run this installer")
+                self._wait_for_user_input("Press Enter to exit...")
+                return 1
             
             # Get WSL distribution
             self.log_output("=== PHASE 1: WSL ENVIRONMENT SETUP ===", progress=10)

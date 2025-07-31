@@ -66,8 +66,9 @@
                         <File Id="PasswordlessSudoScript" Name="setup_passwordless_sudo.sh" Source="setup_passwordless_sudo.sh"/>
                         <File Id="ConfigFile" Name="config.yaml" Source="config.yaml"/>
                         <RegistryValue Root="HKCU" Key="Software\Kamiwaza\Installer" Name="installed" Type="string" Value="1" KeyPath="yes"/>
+                        <!-- Removes the entire Kamiwaza installation folder -->
                         <RemoveFolder Id="RemoveKamiwazaFolder" Directory="INSTALLFOLDER" On="uninstall"/>
-                        <!-- Comprehensive cleanup during uninstall -->
+                        <!-- Removes specific file types -->
                         <RemoveFile Id="RemoveDownloadedExe" Directory="INSTALLFOLDER" Name="kamiwaza_installer*.exe" On="uninstall"/>
                         <RemoveFile Id="RemoveLogFiles" Directory="INSTALLFOLDER" Name="*.log" On="uninstall"/>
                         <RemoveFile Id="RemoveDebFiles" Directory="INSTALLFOLDER" Name="*.deb" On="uninstall"/>
@@ -201,7 +202,15 @@
         
         <!-- WSL Cleanup Action for Uninstall -->
         <CustomAction Id="CleanupWSLKamiwaza"
-                      ExeCommand='powershell.exe -Command "try { $instance = \"kamiwaza-$(var.KAMIWAZA_VERSION)\"; Start-Process wsl -ArgumentList @(\"-d\", $instance, \"sudo\", \"apt\", \"remove\", \"--purge\", \"-y\", \"kamiwaza\") -Wait -WindowStyle Hidden -ErrorAction Stop; Start-Process wsl -ArgumentList @(\"--unregister\", $instance) -Wait -WindowStyle Hidden } catch { try { Start-Process wsl -ArgumentList @(\"-d\", \"Ubuntu-24.04\", \"sudo\", \"apt\", \"remove\", \"--purge\", \"-y\", \"kamiwaza\") -Wait -WindowStyle Hidden } catch { } }"'
+                      ExeCommand='powershell.exe -Command "try { 
+        $instance = \"kamiwaza-$(var.KAMIWAZA_VERSION)\"; 
+        Start-Process wsl -ArgumentList @(\"-d\", $instance, \"sudo\", \"apt\", \"remove\", \"--purge\", \"-y\", \"kamiwaza\") -Wait -WindowStyle Hidden -ErrorAction Stop; 
+        Start-Process wsl -ArgumentList @(\"--unregister\", $instance) -Wait -WindowStyle Hidden 
+    } catch { 
+        try { 
+            Start-Process wsl -ArgumentList @(\"-d\", \"Ubuntu-24.04\", \"sudo\", \"apt\", \"remove\", \"--purge\", \"-y\", \"kamiwaza\") -Wait -WindowStyle Hidden 
+        } catch { } 
+    }"'
                       Directory="TARGETDIR"
                       Execute="immediate"
                       Impersonate="yes"
