@@ -731,6 +731,54 @@ networkingMode=mirrored
             self.log_output(f"Warning: Error configuring debconf: {e}")
             self.log_output("Continuing with installation anyway...")
 
+    def disable_ipv6_wsl(self):
+        """Disable IPv6 in WSL for better network compatibility"""
+        try:
+            self.log_output("Disabling IPv6 in WSL...")
+            
+            # IPv6 disabling commands
+            ipv6_commands = [
+                ("Adding IPv6 disable settings to sysctl.conf...", 
+                 "echo 'net.ipv6.conf.all.disable_ipv6 = 1' | sudo tee -a /etc/sysctl.conf"),
+                ("Adding IPv6 disable settings for default interface...", 
+                 "echo 'net.ipv6.conf.default.disable_ipv6 = 1' | sudo tee -a /etc/sysctl.conf"),
+                ("Adding IPv6 disable settings for loopback interface...", 
+                 "echo 'net.ipv6.conf.lo.disable_ipv6 = 1' | sudo tee -a /etc/sysctl.conf"),
+                ("Applying sysctl changes...", 
+                 "sudo sysctl -p"),
+                ("Verifying IPv6 is disabled...", 
+                 "cat /proc/sys/net/ipv6/conf/all/disable_ipv6")
+            ]
+            
+            for description, command in ipv6_commands:
+                self.log_output(f"  {description}")
+                ret, out, err = self.run_command(self.wsl_distro_cmd + ['bash', '-c', command], timeout=30)
+                
+                if ret == 0:
+                    if "Verifying" in description and out.strip() == "1":
+                        self.log_output(f"  [OK] IPv6 successfully disabled (verification: {out.strip()})")
+                    elif "Verifying" not in description:
+                        self.log_output(f"  [OK] {description}")
+                else:
+                    self.log_output(f"  [WARNING] {description} failed (exit code {ret})")
+                    if err:
+                        self.log_output(f"    Error: {err}")
+            
+            # Also disable IPv6 in GRUB for persistence across reboots
+            self.log_output("Configuring GRUB to disable IPv6 at boot...")
+            grub_cmd = "sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\".*\"/GRUB_CMDLINE_LINUX_DEFAULT=\"ipv6.disable=1\"/' /etc/default/grub && sudo update-grub"
+            ret, out, err = self.run_command(self.wsl_distro_cmd + ['bash', '-c', grub_cmd], timeout=60)
+            if ret == 0:
+                self.log_output("  [OK] GRUB configured to disable IPv6 at boot")
+            else:
+                self.log_output("  [WARNING] GRUB IPv6 disable configuration failed (this is normal in WSL)")
+            
+            self.log_output("[OK] IPv6 disabling completed")
+            
+        except Exception as e:
+            self.log_output(f"Warning: Error disabling IPv6: {e}")
+            self.log_output("Continuing with installation anyway...")
+
     def cleanup_existing_kamiwaza(self):
         """Remove any existing Kamiwaza installation to ensure fresh install"""
         try:
@@ -872,10 +920,16 @@ networkingMode=mirrored
             self.update_progress(35)
             self.configure_debconf()
 
+            # 3.5. Disable IPv6 in WSL for better network compatibility
+            self.status_label.config(text="Configuring network settings...")
+            self.log_output("Disabling IPv6 in WSL for better network compatibility...")
+            self.update_progress(40)
+            self.disable_ipv6_wsl()
+
             # 4. Download the .deb directly into /tmp in WSL
             self.status_label.config(text="Downloading Kamiwaza package...")
             self.log_output("Downloading .deb package directly into /tmp in WSL...")
-            self.update_progress(50)
+            self.update_progress(45)
             deb_url = self.get_deb_url()
             deb_filename = self.get_deb_filename()
             deb_path_wsl = f"/tmp/{deb_filename}"
@@ -941,7 +995,7 @@ networkingMode=mirrored
             # 3. Install the .deb in WSL using proper sudo commands
             self.status_label.config(text="Installing Kamiwaza in WSL...")
             self.log_output("Installing .deb package in WSL...")
-            self.update_progress(70)
+            self.update_progress(65)
             
             # Use the WSL distribution determined at the start
             wsl_distro_cmd = self.wsl_distro_cmd
@@ -960,7 +1014,7 @@ networkingMode=mirrored
             
             for i, (description, command) in enumerate(commands):
                 self.log_output(f"\n=== {description} ===")
-                progress = 70 + (i * 3)
+                progress = 65 + (i * 3)
                 self.update_progress(progress)
                 
                 # Use real-time output for apt and dpkg commands

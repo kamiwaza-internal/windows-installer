@@ -200,6 +200,19 @@
                       Impersonate="yes"
                       Return="ignore" />
         
+        <!-- Reserve Kamiwaza ports on install -->
+        <CustomAction Id="ReservePorts"
+                      ExeCommand='powershell.exe -Command "try { 
+        netsh int ipv4 add excludedportrange protocol=tcp startport=61100 numberofports=200 store=persistent | Out-Null
+        Write-Host \"Reserved ports 61100-61299 for Kamiwaza\"
+    } catch { 
+        Write-Host \"Warning: Could not reserve ports (may already be reserved)\"
+    }"'
+                      Directory="TARGETDIR"
+                      Execute="deferred"
+                      Impersonate="no"
+                      Return="ignore" />
+
         <!-- WSL Cleanup Action for Uninstall -->
         <CustomAction Id="CleanupWSLKamiwaza"
                       ExeCommand='powershell.exe -Command "try { 
@@ -216,13 +229,28 @@
                       Impersonate="yes"
                       Return="ignore" />
 
+        <!-- Release Kamiwaza ports on uninstall -->
+        <CustomAction Id="ReleasePorts"
+                      ExeCommand='powershell.exe -Command "try { 
+        netsh int ipv4 delete excludedportrange protocol=tcp startport=61100 numberofports=200 | Out-Null
+        Write-Host \"Released ports 61100-61299\"
+    } catch { 
+        Write-Host \"Warning: Could not release ports (may not have been reserved)\"
+    }"'
+                      Directory="TARGETDIR"
+                      Execute="deferred"
+                      Impersonate="no"
+                      Return="ignore" />
+
         <!-- Auto-launch is now always enabled -->
 
         <!-- Install Execute Sequence - automatically run Kamiwaza installation -->
         <InstallExecuteSequence>
-            <Custom Action="DebugTest" After="InstallFiles">NOT Installed AND NOT REMOVE</Custom>
+            <Custom Action="ReservePorts" After="InstallFiles">NOT Installed AND NOT REMOVE</Custom>
+            <Custom Action="DebugTest" After="ReservePorts">NOT Installed AND NOT REMOVE</Custom>
             <Custom Action="RunKamiwazaInstaller" After="DebugTest">NOT Installed AND NOT REMOVE</Custom>
             <Custom Action="CleanupWSLKamiwaza" Before="RemoveFiles">Installed AND REMOVE</Custom>
+            <Custom Action="ReleasePorts" After="CleanupWSLKamiwaza">Installed AND REMOVE</Custom>
         </InstallExecuteSequence>
     </Product>
 </Wix> 

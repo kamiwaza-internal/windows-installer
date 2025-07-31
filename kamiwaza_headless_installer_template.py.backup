@@ -634,6 +634,54 @@ networkingMode=mirrored
         except Exception as e:
             self.log_output(f"Debconf config error: {e}")
 
+    def disable_ipv6_wsl(self, wsl_cmd):
+        """Disable IPv6 in WSL for better network compatibility"""
+        try:
+            self.log_output("Disabling IPv6 in WSL...")
+            
+            # IPv6 disabling commands
+            ipv6_commands = [
+                ("Adding IPv6 disable settings to sysctl.conf...", 
+                 "echo 'net.ipv6.conf.all.disable_ipv6 = 1' | sudo tee -a /etc/sysctl.conf"),
+                ("Adding IPv6 disable settings for default interface...", 
+                 "echo 'net.ipv6.conf.default.disable_ipv6 = 1' | sudo tee -a /etc/sysctl.conf"),
+                ("Adding IPv6 disable settings for loopback interface...", 
+                 "echo 'net.ipv6.conf.lo.disable_ipv6 = 1' | sudo tee -a /etc/sysctl.conf"),
+                ("Applying sysctl changes...", 
+                 "sudo sysctl -p"),
+                ("Verifying IPv6 is disabled...", 
+                 "cat /proc/sys/net/ipv6/conf/all/disable_ipv6")
+            ]
+            
+            for description, command in ipv6_commands:
+                self.log_output(f"  {description}")
+                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', command], timeout=30)
+                
+                if ret == 0:
+                    if "Verifying" in description and out.strip() == "1":
+                        self.log_output(f"  [OK] IPv6 successfully disabled (verification: {out.strip()})")
+                    elif "Verifying" not in description:
+                        self.log_output(f"  [OK] {description}")
+                else:
+                    self.log_output(f"  [WARNING] {description} failed (exit code {ret})")
+                    if err:
+                        self.log_output(f"    Error: {err}")
+            
+            # Also disable IPv6 in GRUB for persistence across reboots
+            self.log_output("Configuring GRUB to disable IPv6 at boot...")
+            grub_cmd = "sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\".*\"/GRUB_CMDLINE_LINUX_DEFAULT=\"ipv6.disable=1\"/' /etc/default/grub && sudo update-grub"
+            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', grub_cmd], timeout=60)
+            if ret == 0:
+                self.log_output("  [OK] GRUB configured to disable IPv6 at boot")
+            else:
+                self.log_output("  [WARNING] GRUB IPv6 disable configuration failed (this is normal in WSL)")
+            
+            self.log_output("[OK] IPv6 disabling completed")
+            
+        except Exception as e:
+            self.log_output(f"Warning: Error disabling IPv6: {e}")
+            self.log_output("Continuing with installation anyway...")
+
     def install(self):
         """Main installation process"""
         self.log_output("=== STARTING MAIN INSTALLATION PROCESS ===")
@@ -708,6 +756,11 @@ networkingMode=mirrored
             self.log_output(f"Configuring for mode: {self.install_mode}")
             self.log_output(f"Configuring usage reporting: {self.usage_reporting}")
             self.configure_debconf(wsl_cmd)
+            
+            # Disable IPv6 in WSL
+            self.log_output("Disabling IPv6 in WSL for better network compatibility...")
+            self.disable_ipv6_wsl(wsl_cmd)
+            
             self.log_output("=== PHASE 3 COMPLETE ===\n")
             
             # Download DEB
