@@ -634,6 +634,94 @@ networkingMode=mirrored
         except Exception as e:
             self.log_output(f"Debconf config error: {e}")
 
+    def cleanup_on_failure(self, wsl_cmd=None, instance_name=None):
+        """Clean up WSL instances and data on installation failure"""
+        try:
+            self.log_output("=== CLEANING UP ON INSTALLATION FAILURE ===")
+            self.log_output("Removing any partially created WSL instances and data...")
+            
+            # If we have a specific WSL command, try to clean up that instance
+            if wsl_cmd and instance_name:
+                self.log_output(f"Cleaning up specific WSL instance: {instance_name}")
+                try:
+                    # Try to stop the instance first
+                    self.run_command(['wsl', '--terminate', instance_name], timeout=15)
+                    self.log_output(f"  Stopped WSL instance: {instance_name}")
+                    
+                    # Try to remove kamiwaza package if it was partially installed
+                    self.run_command(wsl_cmd + ['sudo', 'apt', 'remove', '--purge', '-y', 'kamiwaza'], timeout=30)
+                    self.log_output(f"  Attempted to remove kamiwaza package from {instance_name}")
+                    
+                    # Unregister the instance
+                    self.run_command(['wsl', '--unregister', instance_name], timeout=30)
+                    self.log_output(f"  Unregistered WSL instance: {instance_name}")
+                    
+                except Exception as e:
+                    self.log_output(f"  Warning: Could not clean up {instance_name}: {e}")
+                    # Try force unregister as fallback
+                    try:
+                        self.run_command(['wsl', '--unregister', instance_name], timeout=30)
+                        self.log_output(f"  Force unregistered WSL instance: {instance_name}")
+                    except:
+                        self.log_output(f"  Error: Could not force unregister {instance_name}")
+            
+            # Clean up any kamiwaza WSL data directory
+            wsl_data_path = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'WSL', 'kamiwaza')
+            if os.path.exists(wsl_data_path):
+                self.log_output(f"Removing WSL data directory: {wsl_data_path}")
+                try:
+                    import shutil
+                    shutil.rmtree(wsl_data_path, ignore_errors=True)
+                    self.log_output("  Successfully removed WSL data directory")
+                except Exception as e:
+                    self.log_output(f"  Warning: Could not remove WSL data directory: {e}")
+            
+            # Clean up .wslconfig if it was created by kamiwaza
+            wsl_config_path = os.path.expanduser("~\\.wslconfig")
+            if os.path.exists(wsl_config_path):
+                try:
+                    with open(wsl_config_path, 'r') as f:
+                        content = f.read()
+                    if "memory=" in content and "localhostForwarding=true" in content:
+                        self.log_output("Detected kamiwaza-specific .wslconfig - removing")
+                        os.remove(wsl_config_path)
+                        self.log_output("  Removed .wslconfig")
+                    else:
+                        self.log_output("Keeping .wslconfig (appears to have other configurations)")
+                except Exception as e:
+                    self.log_output(f"Warning: Could not check .wslconfig: {e}")
+            
+            # Clean up AppData logs
+            appdata_logs = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'logs')
+            if os.path.exists(appdata_logs):
+                self.log_output(f"Removing Kamiwaza logs directory: {appdata_logs}")
+                try:
+                    import shutil
+                    shutil.rmtree(appdata_logs, ignore_errors=True)
+                    self.log_output("  Successfully removed logs directory")
+                except Exception as e:
+                    self.log_output(f"  Warning: Could not remove logs directory: {e}")
+            
+            # Clean up the entire Kamiwaza AppData directory if it's empty
+            kamiwaza_appdata = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza')
+            if os.path.exists(kamiwaza_appdata):
+                try:
+                    remaining_items = len([f for f in os.listdir(kamiwaza_appdata) if not f.startswith('.')])
+                    if remaining_items == 0:
+                        self.log_output(f"Removing empty Kamiwaza AppData directory: {kamiwaza_appdata}")
+                        os.rmdir(kamiwaza_appdata)
+                        self.log_output("  Successfully removed empty Kamiwaza AppData directory")
+                    else:
+                        self.log_output(f"Kamiwaza AppData directory not empty, keeping: {remaining_items} items remain")
+                except Exception as e:
+                    self.log_output(f"Warning: Could not check Kamiwaza AppData directory: {e}")
+            
+            self.log_output("=== CLEANUP ON FAILURE COMPLETED ===")
+            
+        except Exception as e:
+            self.log_output(f"Error during failure cleanup: {e}")
+            self.log_output("Continuing with failure reporting...")
+
     def disable_ipv6_wsl(self, wsl_cmd):
         """Disable IPv6 in WSL for better network compatibility"""
         try:
@@ -686,6 +774,10 @@ networkingMode=mirrored
         """Main installation process"""
         self.log_output("=== STARTING MAIN INSTALLATION PROCESS ===")
         
+        # Track WSL instance for cleanup on failure
+        wsl_cmd = None
+        instance_name = None
+        
         try:
             self.log_output("Starting Kamiwaza installation", progress=0)
             
@@ -704,8 +796,17 @@ networkingMode=mirrored
             if wsl_cmd is None:
                 self.log_output("ERROR: Failed to set up WSL environment")
                 self.log_output("This is a CRITICAL ERROR - cannot proceed without WSL")
+                # No cleanup needed here as no WSL instance was created yet
                 self._wait_for_user_input("Press Enter to exit...")
                 return 1
+            
+            # Extract instance name for cleanup tracking
+            if len(wsl_cmd) > 2 and wsl_cmd[1] == '-d':
+                instance_name = wsl_cmd[2]
+                self.log_output(f"Tracking WSL instance for cleanup: {instance_name}")
+            else:
+                instance_name = 'default'
+                self.log_output("Tracking default WSL instance for cleanup")
             
             self.log_output(f"SUCCESS: Will use WSL command: {' '.join(wsl_cmd)}")
             
@@ -782,6 +883,9 @@ networkingMode=mirrored
                 self.log_output(f"CRITICAL ERROR: Download failed with exit code {ret}")
                 self.log_output(f"Download error: {err}")
                 self.log_output(f"Download output: {download_out}")
+                # Clean up WSL instance on download failure
+                self.log_output("Cleaning up WSL instance due to download failure...")
+                self.cleanup_on_failure(wsl_cmd, instance_name)
                 self._wait_for_user_input("Press Enter to exit...")
                 return 1
             
@@ -896,6 +1000,10 @@ networkingMode=mirrored
                     for line in apt_out.strip().split('\n')[-20:]:  # Show last 20 lines
                         if line.strip():
                             self.log_output(f"  APT: {line}")
+                
+                # Clean up WSL instance on package installation failure
+                self.log_output("Cleaning up WSL instance due to package installation failure...")
+                self.cleanup_on_failure(wsl_cmd, instance_name)
             else:
                 self.log_output(f"SUCCESS: apt install completed successfully")
                 if out:
@@ -1075,6 +1183,10 @@ networkingMode=mirrored
                 if line.strip():
                     self.log_output(f"TRACE: {line}")
             
+            # Clean up WSL instance on critical failure
+            self.log_output("Cleaning up WSL instance due to critical installation failure...")
+            self.cleanup_on_failure(wsl_cmd, instance_name)
+            
             self.log_output("=== FAILURE SUMMARY ===")  
             self.log_output("The installation has failed with a critical error.")
             self.log_output("Please review the logs above and check the detailed APT logs.")
@@ -1159,6 +1271,22 @@ def main():
         import traceback
         print("Full traceback:")
         traceback.print_exc()
+        
+        # Try to clean up any WSL instances that might have been created
+        try:
+            print("Attempting to clean up any WSL instances...")
+            import subprocess
+            # Run the cleanup script directly
+            cleanup_script = os.path.join(os.path.dirname(__file__), 'cleanup_wsl_kamiwaza.ps1')
+            if os.path.exists(cleanup_script):
+                subprocess.run(['powershell.exe', '-ExecutionPolicy', 'Bypass', '-File', cleanup_script, '-Force'], 
+                             capture_output=True, text=True, timeout=60)
+                print("WSL cleanup attempted")
+            else:
+                print("Cleanup script not found, manual cleanup may be required")
+        except Exception as cleanup_error:
+            print(f"Cleanup attempt failed: {cleanup_error}")
+        
         input("Press Enter to exit...")
         sys.exit(1)
 

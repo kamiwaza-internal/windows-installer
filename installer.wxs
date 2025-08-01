@@ -65,6 +65,8 @@
                         <File Id="DebconfSetupScript" Name="setup_debconf.sh" Source="setup_debconf.sh"/>
                         <File Id="PasswordlessSudoScript" Name="setup_passwordless_sudo.sh" Source="setup_passwordless_sudo.sh"/>
                         <File Id="ConfigFile" Name="config.yaml" Source="config.yaml"/>
+                        <File Id="WSLCleanupScript" Name="cleanup_wsl_kamiwaza.ps1" Source="cleanup_wsl_kamiwaza.ps1"/>
+                        <File Id="WSLCleanupBatch" Name="cleanup_installs.bat" Source="cleanup_installs.bat"/>
                         <RegistryValue Root="HKCU" Key="Software\Kamiwaza\Installer" Name="installed" Type="string" Value="1" KeyPath="yes"/>
                         <!-- Removes the entire Kamiwaza installation folder -->
                         <RemoveFolder Id="RemoveKamiwazaFolder" Directory="INSTALLFOLDER" On="uninstall"/>
@@ -101,6 +103,23 @@
                                  Description="Launch Kamiwaza Platform in dedicated WSL instance" 
                                  Target="wsl.exe" 
                                  Arguments="-d kamiwaza -- kamiwaza start"
+                                 WorkingDirectory="INSTALLFOLDER"
+                                 Icon="KamiwazaIcon"
+                                 IconIndex="0" />
+
+                        <Shortcut Id="CleanupWSLShortcut" 
+                                 Name="Cleanup WSL (Uninstall)" 
+                                 Description="Completely remove Kamiwaza WSL instances and data" 
+                                 Target="powershell.exe" 
+                                 Arguments="-ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]cleanup_wsl_kamiwaza.ps1&quot; -Force"
+                                 WorkingDirectory="INSTALLFOLDER"
+                                 Icon="KamiwazaIcon"
+                                 IconIndex="0" />
+
+                        <Shortcut Id="CleanupWSLBatchShortcut" 
+                                 Name="Cleanup WSL (Batch)" 
+                                 Description="Completely remove Kamiwaza WSL instances and data (Batch version)" 
+                                 Target="[INSTALLFOLDER]cleanup_installs.bat"
                                  WorkingDirectory="INSTALLFOLDER"
                                  Icon="KamiwazaIcon"
                                  IconIndex="0" />
@@ -213,17 +232,9 @@
                       Impersonate="no"
                       Return="ignore" />
 
-        <!-- WSL Cleanup Action for Uninstall -->
+        <!-- WSL Cleanup Action for Uninstall - Complete WSL VM Removal -->
         <CustomAction Id="CleanupWSLKamiwaza"
-                      ExeCommand='powershell.exe -Command "try { 
-        $instance = \"kamiwaza-$(var.KAMIWAZA_VERSION)\"; 
-        Start-Process wsl -ArgumentList @(\"-d\", $instance, \"sudo\", \"apt\", \"remove\", \"--purge\", \"-y\", \"kamiwaza\") -Wait -WindowStyle Hidden -ErrorAction Stop; 
-        Start-Process wsl -ArgumentList @(\"--unregister\", $instance) -Wait -WindowStyle Hidden 
-    } catch { 
-        try { 
-            Start-Process wsl -ArgumentList @(\"-d\", \"Ubuntu-24.04\", \"sudo\", \"apt\", \"remove\", \"--purge\", \"-y\", \"kamiwaza\") -Wait -WindowStyle Hidden 
-        } catch { } 
-    }"'
+                      ExeCommand='powershell.exe -ExecutionPolicy Bypass -File "[INSTALLFOLDER]cleanup_wsl_kamiwaza.ps1" -Force'
                       Directory="TARGETDIR"
                       Execute="immediate"
                       Impersonate="yes"
