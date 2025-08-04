@@ -12,6 +12,7 @@ import argparse
 import yaml
 import shutil
 import tempfile
+from hardware_detection import HardwareDetector
 
 class HeadlessKamiwazaInstaller:
     def __init__(self, memory="14GB", version=None, codename=None, build=None, arch=None, 
@@ -520,6 +521,14 @@ class HeadlessKamiwazaInstaller:
         if ret == 0:
             self.log_output(f"Final default user verification: {final_user.strip()}")
         
+        # Set this instance as the default WSL distribution
+        self.log_output(f"Setting '{instance_name}' as default WSL distribution...")
+        ret, _, err = self.run_command(['wsl', '--set-default', instance_name], timeout=15)
+        if ret == 0:
+            self.log_output(f"✓ Successfully set '{instance_name}' as default WSL distribution")
+        else:
+            self.log_output(f"⚠ Warning: Failed to set '{instance_name}' as default: {err}")
+        
         self.log_output(f"Successfully created and initialized '{instance_name}' WSL instance")
         return instance_name
 
@@ -552,13 +561,22 @@ class HeadlessKamiwazaInstaller:
                             self.log_output(f"WARNING: Failed to set Ubuntu-24.04 default user: {err}")
                         else:
                             self.log_output("Successfully configured Ubuntu-24.04 default user to ubuntu")
+                
+                # Set Ubuntu-24.04 as default WSL distribution
+                self.log_output("Setting Ubuntu-24.04 as default WSL distribution...")
+                ret, _, err = self.run_command(['wsl', '--set-default', 'Ubuntu-24.04'], timeout=15)
+                if ret == 0:
+                    self.log_output("✓ Successfully set Ubuntu-24.04 as default WSL distribution")
+                else:
+                    self.log_output(f"⚠ Warning: Failed to set Ubuntu-24.04 as default: {err}")
+                
                 return ['wsl', '-d', 'Ubuntu-24.04']
         
         self.log_output("ERROR: No suitable WSL distribution found. Only 'kamiwaza' or 'Ubuntu-24.04' are supported.")
         return None
 
     def configure_wsl_memory(self):
-        """Configure WSL memory"""
+        """Configure WSL memory and swap settings"""
         try:
             self.log_output(f"Configuring WSL memory: {self.memory}")
             wslconfig_path = os.path.expanduser("~\\.wslconfig")
@@ -568,10 +586,18 @@ class HeadlessKamiwazaInstaller:
                 shutil.copy2(wslconfig_path, backup_path)
                 self.log_output(f"Backed up to: {backup_path}")
             
+            # Calculate swap as half of the memory
+            memory_value = int(self.memory.replace('GB', ''))
+            swap_value = max(1, memory_value // 2)  # At least 1GB swap
+            swap_setting = f"{swap_value}GB"
+            
+            self.log_output(f"Calculated swap size: {swap_setting} (half of {self.memory})")
+            
             config_content = f"""[wsl2]
 memory={self.memory}
 processors=auto
-swap=0
+swap={swap_setting}
+swapFile=C:\\kamiwazaswap.vhdx
 localhostForwarding=true
 networkingMode=mirrored
 """
@@ -581,12 +607,59 @@ networkingMode=mirrored
             
             if os.path.exists(wslconfig_path):
                 self.log_output(f"WSL memory configured: {self.memory}")
+                self.log_output(f"WSL swap configured: {swap_setting} at C:\\kamiwazaswap.vhdx")
                 return True
             
         except Exception as e:
             self.log_output(f"WSL memory config failed: {e}")
         
         return False
+
+    def restart_kamiwaza_wsl_if_exists(self):
+        """Restart kamiwaza WSL instance if it exists to apply memory changes"""
+        try:
+            self.log_output("Checking for existing kamiwaza WSL instance...")
+            
+            # Check what WSL distributions exist
+            ret, out, err = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+            if ret != 0:
+                self.log_output("Could not list WSL instances, skipping restart")
+                return False
+            
+            # Parse WSL instances (handle UTF-16 encoding with null bytes and spaces)
+            wsl_instances = out.replace('\x00', '').replace(' ', '').replace('\r', '').replace('\n', ' ').split()
+            wsl_instances = [name.strip() for name in wsl_instances if name.strip()]  # Remove empty entries
+            
+            if 'kamiwaza' in wsl_instances:
+                self.log_output("Found existing kamiwaza WSL instance - restarting to apply memory changes...")
+                
+                # Terminate the kamiwaza instance
+                ret, out, err = self.run_command(['wsl', '--terminate', 'kamiwaza'], timeout=30)
+                if ret == 0:
+                    self.log_output("✓ Successfully terminated kamiwaza WSL instance")
+                else:
+                    self.log_output(f"Warning: Failed to terminate kamiwaza instance: {err}")
+                
+                # Wait a moment for clean shutdown
+                import time
+                time.sleep(2)
+                
+                # Start it back up with a simple test command
+                ret, out, err = self.run_command(['wsl', '-d', 'kamiwaza', 'echo', 'WSL_RESTART_TEST'], timeout=15)
+                if ret == 0:
+                    self.log_output("✓ Successfully restarted kamiwaza WSL instance")
+                    self.log_output("WSL memory and swap changes are now active")
+                    return True
+                else:
+                    self.log_output(f"Warning: Failed to restart kamiwaza instance: {err}")
+                    return False
+            else:
+                self.log_output("No existing kamiwaza WSL instance found - memory changes will apply to new instance")
+                return True
+                
+        except Exception as e:
+            self.log_output(f"Error restarting kamiwaza WSL: {e}")
+            return False
 
     def get_deb_url(self):
         """Get DEB URL - will be replaced during build"""
@@ -770,6 +843,121 @@ networkingMode=mirrored
             self.log_output(f"Warning: Error disabling IPv6: {e}")
             self.log_output("Continuing with installation anyway...")
 
+    def setup_wsl_default_and_docker(self, instance_name):
+        """Configure WSL default and Docker Desktop integration"""
+        try:
+            self.log_output(f"Configuring WSL and Docker integration for: {instance_name}")
+            
+            # Method 1: Set as default WSL distribution
+            self.log_output("Setting Kamiwaza as default WSL distribution...")
+            try:
+                # Get current default to check if change is needed
+                current_default_ret, current_default_out, current_default_err = self.run_command(['wsl', '--list', '--verbose'], timeout=15)
+                if current_default_ret == 0:
+                    # Look for the line with * indicating default
+                    default_line = None
+                    for line in current_default_out.split('\n'):
+                        if '*' in line:
+                            default_line = line
+                            break
+                    
+                    if default_line and instance_name in default_line:
+                        self.log_output(f"✓ '{instance_name}' is already the default WSL distribution")
+                    else:
+                        # Set as default
+                        set_default_ret, set_default_out, set_default_err = self.run_command(['wsl', '--set-default', instance_name], timeout=15)
+                        if set_default_ret == 0:
+                            self.log_output(f"✓ Successfully set '{instance_name}' as default WSL distribution")
+                        else:
+                            self.log_output(f"⚠ Warning: Could not set default WSL distribution: {set_default_err}")
+                else:
+                    self.log_output(f"⚠ Warning: Could not check current default WSL distribution: {current_default_err}")
+            except Exception as e:
+                self.log_output(f"⚠ Warning: Error setting default WSL distribution: {e}")
+            
+            # Method 2: Configure Docker Desktop integration
+            self.log_output("Configuring Docker Desktop integration...")
+            try:
+                # Check if Docker Desktop is installed
+                docker_paths = [
+                    "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe",
+                    "C:\\Program Files (x86)\\Docker\\Docker\\Docker Desktop.exe"
+                ]
+                
+                docker_path = None
+                for path in docker_paths:
+                    if os.path.exists(path):
+                        docker_path = path
+                        break
+                
+                if docker_path:
+                    self.log_output(f"✓ Found Docker Desktop at: {docker_path}")
+                    
+                    # Run the Docker integration PowerShell script
+                    script_path = os.path.join(os.getcwd(), "setup_docker_integration.ps1")
+                    if os.path.exists(script_path):
+                        self.log_output("Running Docker Desktop integration script...")
+                        docker_ret, docker_out, docker_err = self.run_command([
+                            'powershell', '-ExecutionPolicy', 'Bypass', '-File', script_path,
+                            '-DistroName', instance_name, '-Force'
+                        ], timeout=60)
+                        
+                        if docker_ret == 0:
+                            self.log_output("✓ Docker Desktop integration configured successfully")
+                            if docker_out:
+                                # Show relevant output from the script
+                                for line in docker_out.split('\n'):
+                                    if any(keyword in line for keyword in ['✓', '⚠', 'SUCCESS', 'ERROR', 'WARNING']):
+                                        self.log_output(f"  DOCKER: {line.strip()}")
+                        else:
+                            self.log_output(f"⚠ Warning: Docker Desktop integration script completed with warnings")
+                            if docker_err:
+                                self.log_output(f"  Docker script output: {docker_err}")
+                    else:
+                        self.log_output(f"⚠ Warning: Docker integration script not found at: {script_path}")
+                        self.log_output("Docker Desktop integration will need to be configured manually")
+                else:
+                    self.log_output("ℹ Docker Desktop not found - skipping Docker integration")
+                    self.log_output("If you install Docker Desktop later, run the integration script manually")
+                    
+            except Exception as e:
+                self.log_output(f"⚠ Warning: Error configuring Docker Desktop integration: {e}")
+            
+            self.log_output("WSL and Docker integration setup completed")
+            
+        except Exception as e:
+            self.log_output(f"Warning: Error in WSL/Docker setup: {e}")
+            self.log_output("Continuing with installation...")
+
+    def setup_hardware_optimizations(self, wsl_cmd):
+        """Detect hardware and install optimizations"""
+        try:
+            self.log_output("Detecting hardware configuration...")
+            
+            # Initialize hardware detector with our logger
+            detector = HardwareDetector(logger=self.log_output)
+            
+            # Run hardware detection and configuration
+            detected_hardware = detector.detect_and_configure_hardware(wsl_cmd, self.run_command)
+            
+            # Log summary of detected hardware
+            self.log_output("Hardware detection summary:")
+            if 'cpu_vendor' in detected_hardware:
+                self.log_output(f"  CPU Vendor: {detected_hardware['cpu_vendor']}")
+            if 'cpu_features' in detected_hardware:
+                features = [f for f, enabled in detected_hardware['cpu_features'].items() if enabled]
+                if features:
+                    self.log_output(f"  CPU Features: {', '.join(features)}")
+            if 'intel_gpu_recommended' in detected_hardware:
+                gpu_status = "Installed" if detected_hardware['intel_gpu_recommended'] else "Skipped"
+                self.log_output(f"  Intel GPU OpenCL: {gpu_status}")
+            
+            self.log_output("Hardware optimization setup completed")
+            
+        except Exception as e:
+            self.log_output(f"Warning: Error in hardware optimization setup: {e}")
+            self.log_output("Continuing with installation...")
+
     def install(self):
         """Main installation process"""
         self.log_output("=== STARTING MAIN INSTALLATION PROCESS ===")
@@ -846,6 +1034,14 @@ networkingMode=mirrored
             memory_result = self.configure_wsl_memory()
             if memory_result:
                 self.log_output("SUCCESS: WSL memory configuration completed")
+                
+                # Restart kamiwaza WSL if it exists to apply changes
+                self.log_output("Checking if existing kamiwaza WSL needs restart...")
+                restart_result = self.restart_kamiwaza_wsl_if_exists()
+                if restart_result:
+                    self.log_output("SUCCESS: WSL restart completed (if needed)")
+                else:
+                    self.log_output("WARNING: WSL restart encountered issues (non-critical)")
             else:
                 self.log_output("WARNING: WSL memory configuration failed (non-critical)")
             self.log_output("=== PHASE 2 COMPLETE ===\n")
@@ -1049,6 +1245,26 @@ networkingMode=mirrored
             else:
                 self.log_output(f"INFO: Could not get kamiwaza version (may need setup): {version_err}")
             
+            # Hardware detection and configuration
+            self.log_output("")
+            self.log_output("=== HARDWARE DETECTION AND OPTIMIZATION ===")
+            wsl_instance = wsl_cmd[2] if len(wsl_cmd) > 2 and wsl_cmd[1] == '-d' else 'kamiwaza'
+            self.setup_hardware_optimizations(wsl_cmd)
+            
+            # Configure WSL default and Docker integration
+            self.log_output("")
+            self.log_output("=== WSL AND DOCKER INTEGRATION SETUP ===")
+            self.setup_wsl_default_and_docker(wsl_instance)
+:
+                self.log_output(f"WARNING: kamiwaza command not found in PATH: {kamiwaza_err}")
+            
+            # Test kamiwaza version
+            version_ret, version_out, version_err = self.run_command(wsl_cmd + ['kamiwaza', '--version'], timeout=15)
+            if version_ret == 0:
+                self.log_output(f"SUCCESS: Kamiwaza version: {version_out.strip()}")
+            else:
+                self.log_output(f"INFO: Could not get kamiwaza version (may need setup): {version_err}")
+            
             # Start kamiwaza automatically after successful installation
             self.log_output("")
             self.log_output("=== STARTING KAMIWAZA PLATFORM ===", progress=95)
@@ -1166,7 +1382,7 @@ networkingMode=mirrored
             self.log_output("")
             self.log_output("To access the kamiwaza WSL instance:")
             self.log_output(f"  wsl -d {wsl_instance}")
-            self.log_output("  (This will log you in as the 'ubuntu' user)")
+            self.log_output("  (This will log you in as the 'kamiwaza' user)")
             self.log_output("")
             
             self._wait_for_user_input("Press Enter to close this window...")
