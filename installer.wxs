@@ -67,6 +67,7 @@
                         <File Id="ConfigFile" Name="config.yaml" Source="config.yaml"/>
                         <File Id="WSLCleanupScript" Name="cleanup_wsl_kamiwaza.ps1" Source="cleanup_wsl_kamiwaza.ps1"/>
                         <File Id="WSLCleanupBatch" Name="cleanup_installs.bat" Source="cleanup_installs.bat"/>
+                        <File Id="ComprehensiveCleanupScript" Name="cleanup_installs.ps1" Source="cleanup_installs.ps1"/>
                         <RegistryValue Root="HKCU" Key="Software\Kamiwaza\Installer" Name="installed" Type="string" Value="1" KeyPath="yes"/>
                         <!-- Removes the entire Kamiwaza installation folder -->
                         <RemoveFolder Id="RemoveKamiwazaFolder" Directory="INSTALLFOLDER" On="uninstall"/>
@@ -232,9 +233,9 @@
                       Impersonate="no"
                       Return="ignore" />
 
-        <!-- WSL Cleanup Action for Uninstall - Complete WSL VM Removal -->
-        <CustomAction Id="CleanupWSLKamiwaza"
-                      ExeCommand='powershell.exe -ExecutionPolicy Bypass -File "[INSTALLFOLDER]cleanup_wsl_kamiwaza.ps1" -Force'
+        <!-- Comprehensive Cleanup Action for Uninstall - Complete removal of all Kamiwaza traces -->
+        <CustomAction Id="ComprehensiveCleanup"
+                      ExeCommand='powershell.exe -ExecutionPolicy Bypass -File "[INSTALLFOLDER]cleanup_installs.ps1" -Force'
                       Directory="TARGETDIR"
                       Execute="immediate"
                       Impersonate="yes"
@@ -260,8 +261,8 @@
             <Custom Action="ReservePorts" After="InstallFiles">NOT Installed AND NOT REMOVE</Custom>
             <Custom Action="DebugTest" After="ReservePorts">NOT Installed AND NOT REMOVE</Custom>
             <Custom Action="RunKamiwazaInstaller" After="DebugTest">NOT Installed AND NOT REMOVE</Custom>
-            <Custom Action="CleanupWSLKamiwaza" Before="RemoveFiles">Installed AND REMOVE</Custom>
-            <Custom Action="ReleasePorts" After="CleanupWSLKamiwaza">Installed AND REMOVE</Custom>
+            <Custom Action="ComprehensiveCleanup" Before="RemoveFiles">Installed AND REMOVE</Custom>
+            <Custom Action="ReleasePorts" After="ComprehensiveCleanup">Installed AND REMOVE</Custom>
         </InstallExecuteSequence>
     </Product>
 </Wix> 

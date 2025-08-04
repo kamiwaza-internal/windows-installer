@@ -520,6 +520,14 @@ class HeadlessKamiwazaInstaller:
         if ret == 0:
             self.log_output(f"Final default user verification: {final_user.strip()}")
         
+        # Set kamiwaza as the default WSL distribution
+        self.log_output(f"Setting '{instance_name}' as default WSL distribution...")
+        ret, _, err = self.run_command(['wsl', '--set-default', instance_name], timeout=15)
+        if ret == 0:
+            self.log_output(f"Successfully set '{instance_name}' as default WSL distribution")
+        else:
+            self.log_output(f"WARNING: Failed to set '{instance_name}' as default: {err}")
+        
         self.log_output(f"Successfully created and initialized '{instance_name}' WSL instance")
         return instance_name
 
