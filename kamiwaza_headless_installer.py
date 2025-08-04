@@ -521,13 +521,13 @@ class HeadlessKamiwazaInstaller:
         if ret == 0:
             self.log_output(f"Final default user verification: {final_user.strip()}")
         
-        # Set this instance as the default WSL distribution
+        # Set kamiwaza as the default WSL distribution
         self.log_output(f"Setting '{instance_name}' as default WSL distribution...")
         ret, _, err = self.run_command(['wsl', '--set-default', instance_name], timeout=15)
         if ret == 0:
-            self.log_output(f"✓ Successfully set '{instance_name}' as default WSL distribution")
+            self.log_output(f"Successfully set '{instance_name}' as default WSL distribution")
         else:
-            self.log_output(f"⚠ Warning: Failed to set '{instance_name}' as default: {err}")
+            self.log_output(f"WARNING: Failed to set '{instance_name}' as default: {err}")
         
         self.log_output(f"Successfully created and initialized '{instance_name}' WSL instance")
         return instance_name
@@ -1255,15 +1255,6 @@ networkingMode=mirrored
             self.log_output("")
             self.log_output("=== WSL AND DOCKER INTEGRATION SETUP ===")
             self.setup_wsl_default_and_docker(wsl_instance)
-:
-                self.log_output(f"WARNING: kamiwaza command not found in PATH: {kamiwaza_err}")
-            
-            # Test kamiwaza version
-            version_ret, version_out, version_err = self.run_command(wsl_cmd + ['kamiwaza', '--version'], timeout=15)
-            if version_ret == 0:
-                self.log_output(f"SUCCESS: Kamiwaza version: {version_out.strip()}")
-            else:
-                self.log_output(f"INFO: Could not get kamiwaza version (may need setup): {version_err}")
             
             # Start kamiwaza automatically after successful installation
             self.log_output("")

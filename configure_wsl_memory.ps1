@@ -28,6 +28,12 @@ if ($MemoryAmount -notmatch '^\d+GB$') {
     exit 1
 }
 
+# Calculate swap size as half of the memory amount
+$memoryValue = [int]($MemoryAmount -replace 'GB', '')
+$swapSize = [math]::Floor($memoryValue / 2)
+$swapAmount = "${swapSize}GB"
+Write-LogMessage "Calculated swap size: $swapAmount (half of $MemoryAmount)"
+
 # Define .wslconfig path
 $wslConfigPath = Join-Path $env:USERPROFILE ".wslconfig"
 Write-LogMessage "WSL config file path: $wslConfigPath"
@@ -96,10 +102,14 @@ foreach ($line in $existingConfig) {
             continue
         }
         elseif ($trimmedLine.StartsWith("processors=") -or 
-                $trimmedLine.StartsWith("swap=") -or 
                 $trimmedLine.StartsWith("localhostForwarding=")) {
             # Skip existing optimization settings that will be re-added if needed
             Write-LogMessage "Removing duplicate setting: $trimmedLine"
+            continue
+        }
+        elseif ($trimmedLine.StartsWith("swap=")) {
+            # Replace existing swap setting with calculated amount
+            Write-LogMessage "Replacing existing swap setting: $trimmedLine"
             continue
         }
     }
@@ -125,12 +135,11 @@ elseif ($inWslSection -and -not $kamiwazaConfigured) {
 
 # Add additional WSL optimizations for Kamiwaza (if not already present)
 if ($kamiwazaConfigured) {
-    # Check if optimizations already exist
+    # Check if optimizations already exist (swap will always be added/replaced)
     $hasProcessors = $newConfig | Where-Object { $_.Trim().StartsWith("processors=") }
-    $hasSwap = $newConfig | Where-Object { $_.Trim().StartsWith("swap=") }
     $hasLocalhost = $newConfig | Where-Object { $_.Trim().StartsWith("localhostForwarding=") }
     
-    if (-not $hasProcessors -or -not $hasSwap -or -not $hasLocalhost) {
+    if (-not $hasProcessors -or -not $hasLocalhost) {
         # Find the memory line and add missing optimizations after it
         $optimizedConfig = @()
         $memoryLineFound = $false
@@ -146,10 +155,9 @@ if ($kamiwazaConfigured) {
                     $optimizedConfig += "processors=4"
                     Write-LogMessage "Added processors optimization"
                 }
-                if (-not $hasSwap) {
-                    $optimizedConfig += "swap=2GB"
-                    Write-LogMessage "Added swap optimization"
-                }
+                # Always add swap setting (calculated as half of memory)
+                $optimizedConfig += "swap=$swapAmount"
+                Write-LogMessage "Added swap optimization: $swapAmount"
                 if (-not $hasLocalhost) {
                     $optimizedConfig += "localhostForwarding=true"
                     Write-LogMessage "Added localhost forwarding optimization"
@@ -159,7 +167,37 @@ if ($kamiwazaConfigured) {
         
         $newConfig = $optimizedConfig
     } else {
-        Write-LogMessage "WSL optimizations already exist, skipping duplicate additions"
+        Write-LogMessage "WSL optimizations already exist, but will still update swap setting"
+        # Still need to add swap setting even if other optimizations exist
+        $optimizedConfig = @()
+        $memoryLineFound = $false
+        
+        foreach ($line in $newConfig) {
+            $optimizedConfig += $line
+            
+            if ($line.Trim() -eq "memory=$MemoryAmount" -and -not $memoryLineFound) {
+                $memoryLineFound = $true
+                # Check if swap setting already exists after memory line
+                $swapExistsAfterMemory = $false
+                for ($i = $newConfig.IndexOf($line) + 1; $i -lt $newConfig.Count; $i++) {
+                    if ($newConfig[$i].Trim().StartsWith("swap=")) {
+                        $swapExistsAfterMemory = $true
+                        break
+                    }
+                    if ($newConfig[$i].Trim().StartsWith("[") -and $newConfig[$i].Trim().EndsWith("]")) {
+                        break
+                    }
+                }
+                
+                if (-not $swapExistsAfterMemory) {
+                    $optimizedConfig += "# Additional Kamiwaza WSL optimizations"
+                    $optimizedConfig += "swap=$swapAmount"
+                    Write-LogMessage "Added swap optimization: $swapAmount"
+                }
+            }
+        }
+        
+        $newConfig = $optimizedConfig
     }
 }
 

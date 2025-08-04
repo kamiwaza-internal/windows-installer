@@ -6,8 +6,15 @@ param(
     [switch]$Quiet
 )
 
-function Write-Status {
+# Setup logging
+$logFile = "$env:TEMP\kamiwaza_uninstall_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+function Write-Log {
     param([string]$Message, [string]$Type = "INFO")
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logEntry = "[$timestamp] [$Type] $Message"
+    Add-Content -Path $logFile -Value $logEntry
+    
+    # Also write to console if not quiet
     if (-not $Quiet) {
         $color = switch ($Type) {
             "SUCCESS" { "Green" }
@@ -17,6 +24,11 @@ function Write-Status {
         }
         Write-Host "[$Type] $Message" -ForegroundColor $color
     }
+}
+
+function Write-Status {
+    param([string]$Message, [string]$Type = "INFO")
+    Write-Log -Message $Message -Type $Type
 }
 
 function Test-Administrator {
@@ -34,7 +46,9 @@ if (-not (Test-Administrator)) {
 }
 
 Write-Status "Kamiwaza Installation Cleanup Script" "INFO"
+Write-Status "Log file: $logFile" "INFO"
 Write-Status "Running with Administrator privileges..." "SUCCESS"
+Write-Status "Starting comprehensive cleanup process..." "INFO"
 Write-Host ""
 
 # 1. Find and uninstall MSI packages
@@ -175,7 +189,8 @@ $installDirs = @(
     "$env:ProgramFiles\Kamiwaza",
     "${env:ProgramFiles(x86)}\Kamiwaza",
     "$env:LocalAppData\Kamiwaza",
-    "$env:AppData\Kamiwaza"
+    "$env:AppData\Kamiwaza",
+    "C:\Users\appii\AppData\Local\Kamiwaza"
 )
 
 foreach ($dir in $installDirs) {
@@ -236,8 +251,31 @@ foreach ($folder in $startMenuFolders) {
 
 Write-Host ""
 
-# 6. Restart Windows Installer Service
-Write-Status "=== Step 6: Restarting Windows Installer Service ===" "INFO"
+# 6. Clean WSL Distribution
+Write-Status "=== Step 6: Cleaning WSL Distribution ===" "INFO"
+
+try {
+    # Check if kamiwaza WSL distribution exists
+    $wslList = wsl --list --quiet 2>$null
+    if ($wslList -contains "kamiwaza") {
+        Write-Status "Found WSL distribution 'kamiwaza', unregistering..." "INFO"
+        $process = Start-Process -FilePath "wsl" -ArgumentList "--unregister", "kamiwaza" -Wait -PassThru -NoNewWindow
+        if ($process.ExitCode -eq 0) {
+            Write-Status "Successfully unregistered WSL distribution 'kamiwaza'" "SUCCESS"
+        } else {
+            Write-Status "Failed to unregister WSL distribution (exit code: $($process.ExitCode))" "WARNING"
+        }
+    } else {
+        Write-Status "WSL distribution 'kamiwaza' not found" "INFO"
+    }
+} catch {
+    Write-Status "Error during WSL cleanup: $($_.Exception.Message)" "WARNING"
+}
+
+Write-Host ""
+
+# 7. Restart Windows Installer Service
+Write-Status "=== Step 7: Restarting Windows Installer Service ===" "INFO"
 
 try {
     Stop-Service -Name "msiserver" -Force -ErrorAction SilentlyContinue
@@ -250,8 +288,8 @@ try {
 
 Write-Host ""
 
-# 7. Final Verification
-Write-Status "=== Step 7: Final Verification ===" "INFO"
+# 8. Final Verification
+Write-Status "=== Step 8: Final Verification ===" "INFO"
 
 try {
     $remainingProducts = Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -like "*Kamiwaza*" }
@@ -271,6 +309,7 @@ Write-Host ""
 Write-Status "=== CLEANUP COMPLETE ===" "SUCCESS"
 Write-Status "All Kamiwaza installation traces have been removed." "SUCCESS"
 Write-Status "You may need to restart your computer for all changes to take effect." "INFO"
+Write-Status "Cleanup log saved to: $logFile" "INFO"
 
 if (-not $Quiet) {
     Write-Host ""
