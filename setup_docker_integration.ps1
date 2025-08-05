@@ -74,7 +74,7 @@ try {
         exit 1
     }
     
-    Write-Host "✓ WSL distribution '$DistroName' found" -ForegroundColor Green
+    Write-Host "[OK] WSL distribution '$DistroName' found" -ForegroundColor Green
 } catch {
     Write-Host "ERROR: Could not list WSL distributions: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
@@ -91,14 +91,14 @@ if (-not $SkipDefault) {
         }
         
         if ($currentDefault -eq $DistroName) {
-            Write-Host "✓ '$DistroName' is already the default WSL distribution" -ForegroundColor Green
+            Write-Host "[OK] '$DistroName' is already the default WSL distribution" -ForegroundColor Green
         } else {
             Write-Host "Current default WSL distribution: $currentDefault" -ForegroundColor Yellow
             Write-Host "Setting '$DistroName' as default WSL distribution..." -ForegroundColor Yellow
             
             $result = wsl --set-default $DistroName 2>&1
             if ($LASTEXITCODE -eq 0) {
-                Write-Host "✓ Successfully set '$DistroName' as default WSL distribution" -ForegroundColor Green
+                Write-Host "[OK] Successfully set '$DistroName' as default WSL distribution" -ForegroundColor Green
             } else {
                 Write-Host "ERROR: Failed to set default WSL distribution: $result" -ForegroundColor Red
             }
@@ -131,7 +131,7 @@ if (-not $dockerPath) {
     Write-Host "WARNING: Docker Desktop not found in standard locations" -ForegroundColor Yellow
     Write-Host "Skipping Docker Desktop configuration" -ForegroundColor Yellow
 } else {
-    Write-Host "✓ Found Docker Desktop at: $dockerPath" -ForegroundColor Green
+    Write-Host "[OK] Found Docker Desktop at: $dockerPath" -ForegroundColor Green
     
     try {
         # Stop Docker Desktop if running
@@ -140,19 +140,19 @@ if (-not $dockerPath) {
         if ($dockerProcesses) {
             try {
                 taskkill /IM "Docker Desktop.exe" /F 2>$null
-                Write-Host "✓ Docker Desktop stopped" -ForegroundColor Green
+                Write-Host "[OK] Docker Desktop stopped" -ForegroundColor Green
             } catch {
                 Write-Host "Warning: Could not stop Docker Desktop gracefully" -ForegroundColor Yellow
             }
         } else {
-            Write-Host "✓ Docker Desktop not running" -ForegroundColor Green
+            Write-Host "[OK] Docker Desktop not running" -ForegroundColor Green
         }
         
         # Shutdown WSL to ensure clean state
         Write-Host "Shutting down WSL..." -ForegroundColor Yellow
         wsl --shutdown 2>$null
         Start-Sleep -Seconds 3
-        Write-Host "✓ WSL shutdown complete" -ForegroundColor Green
+        Write-Host "[OK] WSL shutdown complete" -ForegroundColor Green
         
         # Locate settings file (try both possible locations)
         $settingsPath = Join-Path $env:APPDATA "Docker\settings-store.json"
@@ -166,12 +166,12 @@ if (-not $dockerPath) {
             Write-Host "  - $env:APPDATA\Docker\settings-store.json" -ForegroundColor Gray
             Write-Host "  - $env:APPDATA\Docker\settings.json" -ForegroundColor Gray
         } else {
-            Write-Host "✓ Found Docker settings file: $settingsPath" -ForegroundColor Green
+            Write-Host "[OK] Found Docker settings file: $settingsPath" -ForegroundColor Green
             
             # Backup original settings
             $backupPath = "$settingsPath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
             Copy-Item $settingsPath $backupPath -Force
-            Write-Host "✓ Created backup: $backupPath" -ForegroundColor Green
+            Write-Host "[OK] Created backup: $backupPath" -ForegroundColor Green
             
             # Load and modify settings
             Write-Host "Modifying Docker Desktop settings..." -ForegroundColor Yellow
@@ -187,24 +187,24 @@ if (-not $dockerPath) {
             # Add our distro if not already present
             if ($settings.integratedWslDistros -notcontains $DistroName) {
                 $settings.integratedWslDistros += $DistroName
-                Write-Host "✓ Added '$DistroName' to integrated WSL distros" -ForegroundColor Green
+                Write-Host "[OK] Added '$DistroName' to integrated WSL distros" -ForegroundColor Green
             } else {
-                Write-Host "✓ '$DistroName' already in integrated WSL distros" -ForegroundColor Green
+                Write-Host "[OK] '$DistroName' already in integrated WSL distros" -ForegroundColor Green
             }
             
             # Ensure default WSL integration is enabled
             if (-not $settings.PSObject.Properties['enableIntegrationWithDefaultWslDistro']) {
                 $settings | Add-Member -MemberType NoteProperty -Name 'enableIntegrationWithDefaultWslDistro' -Value $true
-                Write-Host "✓ Enabled integration with default WSL distro" -ForegroundColor Green
+                Write-Host "[OK] Enabled integration with default WSL distro" -ForegroundColor Green
             } else {
                 $settings.enableIntegrationWithDefaultWslDistro = $true
-                Write-Host "✓ Ensured integration with default WSL distro is enabled" -ForegroundColor Green
+                Write-Host "[OK] Ensured integration with default WSL distro is enabled" -ForegroundColor Green
             }
             
             # Save modified settings
             $modifiedJson = $settings | ConvertTo-Json -Depth 10 -Compress:$false
             Set-Content $settingsPath -Value $modifiedJson -Encoding UTF8 -Force
-            Write-Host "✓ Docker Desktop settings updated successfully" -ForegroundColor Green
+            Write-Host "[OK] Docker Desktop settings updated successfully" -ForegroundColor Green
             
             Write-Verbose "Current integrated distros: $($settings.integratedWslDistros -join ', ')"
         }
@@ -212,7 +212,7 @@ if (-not $dockerPath) {
         # Restart Docker Desktop
         Write-Host "Starting Docker Desktop..." -ForegroundColor Yellow
         Start-Process $dockerPath -WindowStyle Hidden
-        Write-Host "✓ Docker Desktop started" -ForegroundColor Green
+        Write-Host "[OK] Docker Desktop started" -ForegroundColor Green
         
         # Wait a moment for Docker to initialize
         Write-Host "Waiting for Docker Desktop to initialize..." -ForegroundColor Yellow

@@ -55,38 +55,42 @@ try {
     $signTool = Find-SignTool
     Write-Output "[INFO] Using signtool: $signTool"
     
-    # Sign MSI
-    Write-Output "[INFO] Signing MSI: $MSIPath"
-    $signArgs = @(
-        "sign",
-        "/f", $CertPath,
-        "/p", $CertPassword,
-        "/fd", "SHA256",
-        "/t", "http://timestamp.digicert.com",
-        $MSIPath
-    )
+    # Sign MSI - COMMENTED OUT FOR NOW
+    # Write-Output "[INFO] Signing MSI: $MSIPath"
+    # $signArgs = @(
+    #     "sign",
+    #     "/f", $CertPath,
+    #     "/p", $CertPassword,
+    #     "/fd", "SHA256",
+    #     "/t", "http://timestamp.digicert.com",
+    #     $MSIPath
+    # )
     
-    $process = Start-Process -FilePath $signTool -ArgumentList $signArgs -Wait -PassThru -NoNewWindow
+    # $process = Start-Process -FilePath $signTool -ArgumentList $signArgs -Wait -PassThru -NoNewWindow
     
-    if ($process.ExitCode -eq 0) {
-        Write-Output "[SUCCESS] MSI signed successfully"
+    # if ($process.ExitCode -eq 0) {
+    #     Write-Output "[SUCCESS] MSI signed successfully"
         
-        # Verify signature
-        Write-Output "[INFO] Verifying MSI signature..."
-        $verifyArgs = @("verify", "/pa", $MSIPath)
-        $verifyProcess = Start-Process -FilePath $signTool -ArgumentList $verifyArgs -Wait -PassThru -NoNewWindow
+    #     # Verify signature
+    #     Write-Output "[INFO] Verifying MSI signature..."
+    #     $verifyArgs = @("verify", "/pa", $MSIPath)
+    #     $verifyProcess = Start-Process -FilePath $signTool -ArgumentList $verifyArgs -Wait -PassThru -NoNewWindow
         
-        if ($verifyProcess.ExitCode -eq 0) {
-            Write-Output "[SUCCESS] MSI signature verified"
-            exit 0
-        } else {
-            Write-Warning "[WARN] MSI signature verification failed"
-            exit 0  # Still consider success since signing worked
-        }
-    } else {
-        Write-Error "[ERROR] MSI signing failed with exit code: $($process.ExitCode)"
-        exit 1
-    }
+    #     if ($verifyProcess.ExitCode -eq 0) {
+    #         Write-Output "[SUCCESS] MSI signature verified"
+    #         exit 0
+    #     } else {
+    #         Write-Warning "[WARN] MSI signature verification failed"
+    #         exit 0  # Still consider success since signing worked
+    #     }
+    # } else {
+    #     Write-Error "[ERROR] MSI signing failed with exit code: $($process.ExitCode)"
+    #     exit 1
+    # }
+    
+    # Skip signing for now
+    Write-Output "[INFO] MSI signing skipped - proceeding without signature"
+    exit 0
     
 } catch {
     Write-Error "[ERROR] Signing process failed: $($_.Exception.Message)"

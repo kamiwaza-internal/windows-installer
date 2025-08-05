@@ -107,7 +107,7 @@ class HeadlessKamiwazaInstaller:
             
             return False
         else:
-            self.log_output("✓ WSL is available")
+            self.log_output("[OK] WSL is available")
             if out:
                 # Show WSL version info
                 for line in out.strip().split('\n')[:3]:  # First 3 lines
@@ -133,9 +133,9 @@ class HeadlessKamiwazaInstaller:
                     f.write(f"WSL Instance: {wsl_cmd[2] if len(wsl_cmd) > 2 else 'default'}\n")
                     f.write("=" * 60 + "\n\n")
                     f.write(out)
-                self.log_output(f"✓ Copied detailed APT logs to: {apt_term_log}")
+                self.log_output(f"[OK] Copied detailed APT logs to: {apt_term_log}")
             else:
-                self.log_output(f"⚠ Could not copy APT terminal log: {err}")
+                self.log_output(f"[WARN] Could not copy APT terminal log: {err}")
             
             # Copy APT history log
             apt_history_log = os.path.join(appdata_logs, 'apt_history_log.txt')
@@ -147,7 +147,7 @@ class HeadlessKamiwazaInstaller:
                     f.write(f"Installation Date: {timestamp}\n")
                     f.write("=" * 60 + "\n\n")
                     f.write(out)
-                self.log_output(f"✓ Copied APT history to: {apt_history_log}")
+                self.log_output(f"[OK] Copied APT history to: {apt_history_log}")
             
             # Copy DPKG log (kamiwaza entries only)
             dpkg_log = os.path.join(appdata_logs, 'dpkg_log.txt')
@@ -159,7 +159,7 @@ class HeadlessKamiwazaInstaller:
                     f.write(f"Installation Date: {timestamp}\n")
                     f.write("=" * 60 + "\n\n")
                     f.write(out)
-                self.log_output(f"✓ Copied DPKG operations to: {dpkg_log}")
+                self.log_output(f"[OK] Copied DPKG operations to: {dpkg_log}")
             
             # Create a master install log with key information
             install_log = os.path.join(appdata_logs, 'kamiwaza_install_logs.txt')
@@ -191,7 +191,7 @@ class HeadlessKamiwazaInstaller:
                 f.write(f"wsl -d {wsl_cmd[2] if len(wsl_cmd) > 2 else 'default'} -- kamiwaza status\n")
                 f.write(f"wsl -d {wsl_cmd[2] if len(wsl_cmd) > 2 else 'default'} -- kamiwaza logs\n")
             
-            self.log_output(f"✓ Created master log index: {install_log}")
+            self.log_output(f"[OK] Created master log index: {install_log}")
             self.log_output(f"All logs copied to Windows directory: {appdata_logs}")
             
         except Exception as e:
@@ -204,7 +204,7 @@ class HeadlessKamiwazaInstaller:
             cmd = f"ls -la /var/log/apt/term.log"
             ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=15)
             if ret == 0:
-                self.log_output(f"✓ APT terminal log exists: {out.strip()}")
+                self.log_output(f"[OK] APT terminal log exists: {out.strip()}")
                 
                 # Show last few lines
                 cmd = f"tail -10 /var/log/apt/term.log"
@@ -215,24 +215,24 @@ class HeadlessKamiwazaInstaller:
                         if line.strip():
                             self.log_output(f"  {line}")
             else:
-                self.log_output(f"⚠ APT terminal log not found: {err}")
+                self.log_output(f"[WARN] APT terminal log not found: {err}")
             
             # Check APT history log
             cmd = f"ls -la /var/log/apt/history.log"
             ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=15)
             if ret == 0:
-                self.log_output(f"✓ APT history log exists: {out.strip()}")
+                self.log_output(f"[OK] APT history log exists: {out.strip()}")
             else:
-                self.log_output(f"⚠ APT history log not found: {err}")
+                self.log_output(f"[WARN] APT history log not found: {err}")
             
             # Check for kamiwaza in dpkg log
             cmd = f"grep -c kamiwaza /var/log/dpkg.log"
             ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=15)
             if ret == 0 and out.strip().isdigit():
                 count = int(out.strip())
-                self.log_output(f"✓ Found {count} kamiwaza entries in DPKG log")
+                self.log_output(f"[OK] Found {count} kamiwaza entries in DPKG log")
             else:
-                self.log_output(f"⚠ No kamiwaza entries found in DPKG log")
+                self.log_output(f"[WARN] No kamiwaza entries found in DPKG log")
             
         except Exception as e:
             self.log_output(f"ERROR verifying logs: {e}")
@@ -325,7 +325,7 @@ class HeadlessKamiwazaInstaller:
             
             # Show completion message
             elapsed = int((datetime.datetime.now() - start_time).total_seconds())
-            self.log_output(f"  ✓ Command completed in {elapsed} seconds")
+            self.log_output(f"  [OK] Command completed in {elapsed} seconds")
             
             return return_code, full_output, ""
             
@@ -461,38 +461,44 @@ class HeadlessKamiwazaInstaller:
         if ret != 0:
             self.log_output(f"ERROR: {instance_name} instance verification failed")
             return None
-        
-        # Configure default user to ubuntu instead of root
-        self.log_output(f"Configuring default user for '{instance_name}' instance...")
-        ret, _, err = self.run_command(['wsl', '--set-default-user', instance_name, 'ubuntu'], timeout=15)
+
+
+        # First, build the kamiwaza user
+        self.log_output(f"Building the kamiwaza user...")
+        ret, _, err = self.run_command(['wsl', '-d', instance_name, 'bash', '-c', 'useradd -m -s /bin/bash kamiwaza'], timeout=15)
         if ret != 0:
-            self.log_output(f"WARNING: Failed to set default user to ubuntu: {err}")
-            # Try alternative method using /etc/wsl.conf
-            wsl_conf_cmd = """
-            echo '[user]' > /etc/wsl.conf
-            echo 'default=ubuntu' >> /etc/wsl.conf
-            """
-            ret2, _, err2 = self.run_command(['wsl', '-d', instance_name, 'bash', '-c', wsl_conf_cmd], timeout=15)
-            if ret2 != 0:
-                self.log_output(f"WARNING: Failed to configure /etc/wsl.conf: {err2}")
-            else:
-                self.log_output("Configured /etc/wsl.conf to use ubuntu as default user")
+            self.log_output(f"ERROR: Failed to build the kamiwaza user: {err}")
+            return None
+    
+
+        # Configure default user to kamiwaza instead of root
+        self.log_output(f"Configuring default user for '{instance_name}' instance...")
+        self.log_output(f"WARNING: Failed to set default user to kamiwaza: {err}")
+        # Try alternative method using /etc/wsl.conf
+        wsl_conf_cmd = """
+        sudo rm /etc/wsl.conf
+        echo '[user]' > /etc/wsl.conf
+        echo 'default=kamiwaza' >> /etc/wsl.conf
+        """
+        ret2, _, err2 = self.run_command(['wsl', '-d', instance_name, 'bash', '-c', wsl_conf_cmd], timeout=15)
+        if ret2 != 0:
+            self.log_output(f"WARNING: Failed to configure /etc/wsl.conf: {err2}")
         else:
-            self.log_output("Successfully set default user to ubuntu")
+            self.log_output("Configured /etc/wsl.conf to use kamiwaza as default user")
         
         # Verify the user configuration
         ret, whoami_out, _ = self.run_command(['wsl', '-d', instance_name, 'whoami'], timeout=15)
         if ret == 0:
             current_user = whoami_out.strip()
             self.log_output(f"Current default user: {current_user}")
-            if current_user != 'ubuntu':
-                self.log_output(f"WARNING: Default user is '{current_user}', expected 'ubuntu'")
-                # Try to create ubuntu user if it doesn't exist
-                self.log_output("Attempting to ensure ubuntu user exists...")
+            if current_user != 'kamiwaza':
+                self.log_output(f"WARNING: Default user is '{current_user}', expected 'kamiwaza'")
+                # Try to create kamiwaza user if it doesn't exist
+                self.log_output("Attempting to ensure kamiwaza user exists...")
                 create_user_cmds = [
-                    'id ubuntu || useradd -m -s /bin/bash ubuntu',
-                    'usermod -aG sudo ubuntu',
-                    'echo "ubuntu ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/ubuntu'
+                    'id kamiwaza || useradd -m -s /bin/bash kamiwaza',
+                    'usermod -aG sudo kamiwaza',
+                    'echo "kamiwaza ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/kamiwaza'
                 ]
                 for cmd in create_user_cmds:
                     ret, _, err = self.run_command(['wsl', '-d', instance_name, 'bash', '-c', cmd], timeout=30)
@@ -500,9 +506,9 @@ class HeadlessKamiwazaInstaller:
                         self.log_output(f"WARNING: User setup command failed: {cmd} - {err}")
                 
                 # Try setting default user again
-                ret, _, _ = self.run_command(['wsl', '--set-default-user', instance_name, 'ubuntu'], timeout=15)
+                ret, _, _ = self.run_command(['wsl', '--set-default-user', instance_name, 'kamiwaza'], timeout=15)
                 if ret == 0:
-                    self.log_output("Successfully configured ubuntu as default user after creation")
+                    self.log_output("Successfully configured kamiwaza as default user after creation")
         
         # Initialize basic packages needed for installation (as root since we need sudo)
         init_commands = [
@@ -547,28 +553,48 @@ class HeadlessKamiwazaInstaller:
             wsl_instances = [name.strip() for name in wsl_instances if name.strip()]  # Remove empty entries
             if 'Ubuntu-24.04' in wsl_instances:
                 self.log_output("Using existing Ubuntu-24.04")
-                # Ensure Ubuntu-24.04 also uses ubuntu as default user
+                # Ensure Ubuntu-24.04 also uses kamiwaza as default user
                 self.log_output("Verifying default user for Ubuntu-24.04...")
                 ret, whoami_out, _ = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'whoami'], timeout=15)
                 if ret == 0:
                     current_user = whoami_out.strip()
                     self.log_output(f"Current Ubuntu-24.04 default user: {current_user}")
-                    if current_user != 'ubuntu':
-                        self.log_output("Configuring Ubuntu-24.04 to use ubuntu as default user...")
-                        ret, _, err = self.run_command(['wsl', '--set-default-user', 'Ubuntu-24.04', 'ubuntu'], timeout=15)
+                    if current_user != 'kamiwaza':
+                        self.log_output("Configuring Ubuntu-24.04 to use kamiwaza as default user...")
+                        ret, _, err = self.run_command(['wsl', '--set-default-user', 'Ubuntu-24.04', 'kamiwaza'], timeout=15)
                         if ret != 0:
                             self.log_output(f"WARNING: Failed to set Ubuntu-24.04 default user: {err}")
                         else:
-                            self.log_output("Successfully configured Ubuntu-24.04 default user to ubuntu")
+                            self.log_output("Successfully configured Ubuntu-24.04 default user to kamiwaza")
                 return ['wsl', '-d', 'Ubuntu-24.04']
         
         self.log_output("ERROR: No suitable WSL distribution found. Only 'kamiwaza' or 'Ubuntu-24.04' are supported.")
         return None
 
     def configure_wsl_memory(self):
-        """Configure WSL memory"""
+        """Configure WSL memory using PowerShell script for proper swap calculation"""
         try:
             self.log_output(f"Configuring WSL memory: {self.memory}")
+            
+            # Try to use the PowerShell script if available
+            script_path = os.path.join(os.path.dirname(__file__), "configure_wsl_memory.ps1")
+            if os.path.exists(script_path):
+                self.log_output(f"Using PowerShell script: {script_path}")
+                cmd = ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-File', script_path, '-MemoryAmount', self.memory]
+                ret, out, err = self.run_command(cmd, timeout=30)
+                
+                if ret == 0:
+                    self.log_output("WSL memory configured successfully using PowerShell script")
+                    self.log_output(f"Script output: {out}")
+                    return True
+                else:
+                    self.log_output(f"PowerShell script failed: {err}")
+                    self.log_output("Falling back to Python configuration...")
+            else:
+                self.log_output(f"PowerShell script not found at: {script_path}")
+                self.log_output("Falling back to Python configuration...")
+            
+            # Fallback to Python configuration (without swap calculation)
             wslconfig_path = os.path.expanduser("~\\.wslconfig")
             
             if os.path.exists(wslconfig_path):
@@ -831,20 +857,20 @@ networkingMode=mirrored
             if user_ret == 0:
                 current_user = user_out.strip()
                 self.log_output(f"WSL default user: {current_user}")
-                if current_user == 'ubuntu':
-                    self.log_output("✓ Confirmed: WSL instance uses ubuntu user")
+                if current_user == 'kamiwaza':
+                    self.log_output("[OK] Confirmed: WSL instance uses kamiwaza user")
                 else:
-                    self.log_output(f"⚠ WARNING: WSL instance uses '{current_user}' instead of ubuntu")
+                    self.log_output(f"[WARN] WARNING: WSL instance uses '{current_user}' instead of kamiwaza")
             else:
                 self.log_output(f"WARNING: Could not verify WSL user: {user_err}")
             
-            # Test sudo access for ubuntu user
-            if user_ret == 0 and user_out.strip() == 'ubuntu':
+            # Test sudo access for kamiwaza user
+            if user_ret == 0 and user_out.strip() == 'kamiwaza':
                 sudo_ret, sudo_out, sudo_err = self.run_command(wsl_cmd + ['sudo', '-n', 'whoami'], timeout=15)
                 if sudo_ret == 0 and sudo_out.strip() == 'root':
-                    self.log_output("✓ Confirmed: ubuntu user has passwordless sudo access")
+                    self.log_output("[OK] Confirmed: kamiwaza user has passwordless sudo access")
                 else:
-                    self.log_output(f"⚠ WARNING: ubuntu user sudo test failed: {sudo_err}")
+                    self.log_output(f"[WARN] WARNING: kamiwaza user sudo test failed: {sudo_err}")
             
             self.log_output("=== PHASE 1 COMPLETE ===\n")
             
@@ -1082,9 +1108,9 @@ networkingMode=mirrored
             )
             
             if start_ret == 0:
-                self.log_output("✓ SUCCESS: Kamiwaza platform started successfully!")
+                self.log_output("[OK] SUCCESS: Kamiwaza platform started successfully!")
             else:
-                self.log_output(f"⚠ WARNING: Kamiwaza platform failed to start automatically")
+                self.log_output(f"[WARN] WARNING: Kamiwaza platform failed to start automatically")
                 self.log_output(f"Start command exit code: {start_ret}")
                 if start_err:
                     self.log_output(f"Start command error: {start_err}")
@@ -1098,7 +1124,7 @@ networkingMode=mirrored
                     timeout=60  # Keep a reasonable timeout for status check
                 )
                 if status_ret == 0 and status_out:
-                    self.log_output("✓ Kamiwaza platform status confirmed:")
+                    self.log_output("[OK] Kamiwaza platform status confirmed:")
                     # Show the actual status output since it contains useful info like URLs
                     for line in status_out.strip().split('\n'):
                         if line.strip():
@@ -1153,7 +1179,7 @@ networkingMode=mirrored
             
             # Show different messages based on whether kamiwaza started successfully
             if start_ret == 0:
-                self.log_output("✓ Kamiwaza platform is now running!")
+                self.log_output("[OK] Kamiwaza platform is now running!")
                 self.log_output("To check platform status:")
                 self.log_output(f"  wsl -d {wsl_instance} -- kamiwaza status")
                 self.log_output("")
@@ -1174,7 +1200,7 @@ networkingMode=mirrored
             self.log_output("")
             self.log_output("To access the kamiwaza WSL instance:")
             self.log_output(f"  wsl -d {wsl_instance}")
-            self.log_output("  (This will log you in as the 'ubuntu' user)")
+            self.log_output("  (This will log you in as the 'kamiwaza' user)")
             self.log_output("")
             
             self._wait_for_user_input("Press Enter to close this window...")
