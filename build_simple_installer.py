@@ -18,7 +18,7 @@ def check_requirements():
     try:
         print("Installing Python requirements...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
-        print("✓ Python requirements installed")
+        print("[OK] Python requirements installed")
     except subprocess.CalledProcessError as e:
         print(f"Error installing requirements: {e}")
         return False
@@ -55,7 +55,7 @@ def build_executable():
         subprocess.check_call(cmd)
         
         if os.path.exists("dist/kamiwaza_installer.exe"):
-            print("✓ Executable built successfully")
+            print("[OK] Executable built successfully")
             return True
         else:
             print("✗ Executable not found in dist folder")
@@ -99,7 +99,7 @@ pause
     with open("dist/install.bat", "w") as f:
         f.write(installer_script)
     
-    print("✓ Installer script created")
+    print("[OK] Installer script created")
 
 def create_uninstaller_script():
     """Create an uninstaller script."""
@@ -127,7 +127,7 @@ pause
     with open("dist/uninstall.bat", "w") as f:
         f.write(uninstaller_script)
     
-    print("✓ Uninstaller script created")
+    print("[OK] Uninstaller script created")
 
 def create_zip_installer():
     """Create a zip file installer package."""
@@ -172,7 +172,7 @@ For more information, see the main README.md file.
         # Clean up
         shutil.rmtree(installer_dir)
         
-        print("✓ Installer package created: Kamiwaza_Installer.zip")
+        print("[OK] Installer package created: Kamiwaza_Installer.zip")
         return True
         
     except Exception as e:

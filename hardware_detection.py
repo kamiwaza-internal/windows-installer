@@ -89,10 +89,10 @@ class HardwareDetector:
         if success:
             cpu_vendor = output.strip()
             self.detected_hardware['cpu_vendor'] = cpu_vendor
-            self.log(f"✓ CPU vendor detected: {cpu_vendor}")
+            self.log(f"[OK] CPU vendor detected: {cpu_vendor}")
             return cpu_vendor
         else:
-            self.log(f"⚠ Could not detect CPU vendor: {error}")
+            self.log(f"[WARN] Could not detect CPU vendor: {error}")
             return "Unknown"
     
     def detect_cpu_features(self, wsl_cmd):
@@ -114,7 +114,7 @@ class HardwareDetector:
             success, _, _ = self.run_wsl_command(wsl_cmd, check_cmd)
             features[feature] = success
             if success:
-                self.log(f"✓ CPU feature detected: {feature}")
+                self.log(f"[OK] CPU feature detected: {feature}")
         
         self.detected_hardware['cpu_features'] = features
         return features
@@ -135,10 +135,10 @@ class HardwareDetector:
         }
         
         if gpu_info['has_gpu_devices']:
-            self.log("✓ GPU devices detected in WSL")
+            self.log("[OK] GPU devices detected in WSL")
             self.log(f"  GPU devices: {output}")
         else:
-            self.log("ℹ No GPU devices detected in WSL")
+            self.log("[INFO] No GPU devices detected in WSL")
         
         self.detected_hardware['gpu_info'] = gpu_info
         return gpu_info
@@ -192,11 +192,11 @@ class HardwareDetector:
         self.detected_hardware['intel_gpu_reasons'] = reasons
         
         if should_install:
-            self.log("✓ Intel GPU OpenCL support recommended")
+            self.log("[OK] Intel GPU OpenCL support recommended")
             for reason in reasons:
                 self.log(f"  • {reason}")
         else:
-            self.log("ℹ Intel GPU OpenCL support not recommended")
+            self.log("[INFO] Intel GPU OpenCL support not recommended")
             for reason in reasons:
                 self.log(f"  • {reason}")
         
@@ -341,11 +341,11 @@ class HardwareDetector:
             ret, out, err = run_command_func(wsl_cmd + ['bash', '-c', cmd], timeout=timeout)
             
             if ret != 0:
-                self.log(f"⚠ Warning: Command failed (continuing): {cmd}")
+                self.log(f"[WARN] Warning: Command failed (continuing): {cmd}")
                 if err:
                     self.log(f"  Error: {err}")
             else:
-                self.log(f"✓ Command completed successfully")
+                self.log(f"[OK] Command completed successfully")
         
         # Verify installation
         self.log("Verifying Intel OpenCL installation...")
@@ -354,9 +354,9 @@ class HardwareDetector:
         for cmd in verify_commands:
             ret, out, err = run_command_func(wsl_cmd + ['bash', '-c', cmd], timeout=30)
             if ret == 0 and out:
-                self.log(f"✓ Verification: {out}")
+                self.log(f"[OK] Verification: {out}")
             else:
-                self.log(f"ℹ Verification output: {err if err else 'No output'}")
+                self.log(f"[INFO] Verification output: {err if err else 'No output'}")
     
     def detect_and_configure_hardware(self, wsl_cmd, run_command_func):
         """Main method to detect hardware and configure optimizations"""
@@ -376,14 +376,14 @@ class HardwareDetector:
             if should_install_gpu:
                 try:
                     self.install_intel_gpu_support(wsl_cmd, run_command_func)
-                    self.log("✓ Intel GPU OpenCL support installation completed")
+                    self.log("[OK] Intel GPU OpenCL support installation completed")
                 except Exception as e:
-                    self.log(f"⚠ Warning: Intel GPU support installation failed: {e}")
+                    self.log(f"[WARN] Warning: Intel GPU support installation failed: {e}")
             else:
-                self.log("ℹ Skipping Intel GPU OpenCL support installation")
+                self.log("[INFO] Skipping Intel GPU OpenCL support installation")
         
         elif cpu_vendor == "AMD":
-            self.log("✓ AMD CPU detected - configuring AMD-specific optimizations")
+            self.log("[OK] AMD CPU detected - configuring AMD-specific optimizations")
             try:
                 # Apply AMD optimizations
                 optimizations = self.get_vendor_specific_optimizations(wsl_cmd)
@@ -392,18 +392,18 @@ class HardwareDetector:
                 for cmd in optimizations['commands']:
                     ret, out, err = run_command_func(wsl_cmd + ['bash', '-c', cmd], timeout=30)
                     if ret == 0:
-                        self.log(f"✓ Applied: {cmd}")
+                        self.log(f"[OK] Applied: {cmd}")
                     else:
-                        self.log(f"⚠ Warning: Failed to apply: {cmd}")
+                        self.log(f"[WARN] Warning: Failed to apply: {cmd}")
                 
                 # Optionally install AMD GPU support
-                self.log("ℹ AMD GPU support can be installed manually if needed")
+                self.log("[INFO] AMD GPU support can be installed manually if needed")
                 
             except Exception as e:
-                self.log(f"⚠ Warning: AMD optimization configuration failed: {e}")
+                self.log(f"[WARN] Warning: AMD optimization configuration failed: {e}")
         
         elif cpu_vendor == "ARM":
-            self.log("✓ ARM CPU detected - configuring ARM-specific optimizations")
+            self.log("[OK] ARM CPU detected - configuring ARM-specific optimizations")
             try:
                 # Apply ARM optimizations
                 optimizations = self.get_vendor_specific_optimizations(wsl_cmd)
@@ -412,18 +412,18 @@ class HardwareDetector:
                 for cmd in optimizations['commands']:
                     ret, out, err = run_command_func(wsl_cmd + ['bash', '-c', cmd], timeout=30)
                     if ret == 0:
-                        self.log(f"✓ Applied: {cmd}")
+                        self.log(f"[OK] Applied: {cmd}")
                     else:
-                        self.log(f"ℹ Note: {cmd} (may not be available on this ARM system)")
+                        self.log(f"[INFO] Note: {cmd} (may not be available on this ARM system)")
                 
                 # Optionally install ARM GPU support
-                self.log("ℹ ARM GPU support varies by implementation")
+                self.log("[INFO] ARM GPU support varies by implementation")
                 
             except Exception as e:
-                self.log(f"⚠ Warning: ARM optimization configuration failed: {e}")
+                self.log(f"[WARN] Warning: ARM optimization configuration failed: {e}")
         
         else:
-            self.log(f"✓ {cpu_vendor} CPU detected - applying generic optimizations")
+            self.log(f"[OK] {cpu_vendor} CPU detected - applying generic optimizations")
             try:
                 # Apply generic optimizations
                 optimizations = self.get_vendor_specific_optimizations(wsl_cmd)
@@ -432,12 +432,12 @@ class HardwareDetector:
                 for cmd in optimizations['commands']:
                     ret, out, err = run_command_func(wsl_cmd + ['bash', '-c', cmd], timeout=30)
                     if ret == 0:
-                        self.log(f"✓ Applied: {cmd}")
+                        self.log(f"[OK] Applied: {cmd}")
                     else:
-                        self.log(f"ℹ Note: {cmd} (may not be available)")
+                        self.log(f"[INFO] Note: {cmd} (may not be available)")
                 
             except Exception as e:
-                self.log(f"⚠ Warning: Generic optimization configuration failed: {e}")
+                self.log(f"[WARN] Warning: Generic optimization configuration failed: {e}")
         
         self.log("=== HARDWARE CONFIGURATION COMPLETE ===")
         return self.detected_hardware

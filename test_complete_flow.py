@@ -75,7 +75,7 @@ def main():
 if __name__ == "__main__":
     success = main()
     if success:
-        print("\n✓ Complete WSL creation flow test passed!")
+        print("\n[OK] Complete WSL creation flow test passed!")
         print("The installer will now properly create 'kamiwaza' WSL instances.")
     else:
         print("\n✗ Test failed")

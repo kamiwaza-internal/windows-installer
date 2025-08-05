@@ -124,7 +124,7 @@ def test_wsl_import():
         ret, out, err = run_command(['wsl', '--import', instance_name, wsl_dir, dummy_file], timeout=30)
         
         if ret == 0:
-            print("✓ WSL import command syntax is correct")
+            print("[OK] WSL import command syntax is correct")
             
             # Clean up test instance
             print("Cleaning up test instance:")
@@ -152,6 +152,6 @@ def test_wsl_import():
 if __name__ == "__main__":
     success = test_wsl_import()
     if success:
-        print("\n✓ WSL import debugging completed")
+        print("\n[OK] WSL import debugging completed")
     else:
         print("\n✗ WSL import debugging failed")

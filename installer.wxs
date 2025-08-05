@@ -67,7 +67,6 @@
                         <File Id="ConfigFile" Name="config.yaml" Source="config.yaml"/>
                         <File Id="WSLCleanupScript" Name="cleanup_wsl_kamiwaza.ps1" Source="cleanup_wsl_kamiwaza.ps1"/>
                         <File Id="WSLCleanupBatch" Name="cleanup_installs.bat" Source="cleanup_installs.bat"/>
-                        <File Id="ComprehensiveCleanupScript" Name="cleanup_installs.ps1" Source="cleanup_installs.ps1"/>
                         <RegistryValue Root="HKCU" Key="Software\Kamiwaza\Installer" Name="installed" Type="string" Value="1" KeyPath="yes"/>
                         <!-- Removes the entire Kamiwaza installation folder -->
                         <RemoveFolder Id="RemoveKamiwazaFolder" Directory="INSTALLFOLDER" On="uninstall"/>
