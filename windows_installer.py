@@ -505,9 +505,29 @@ class KamiwazaInstaller(tk.Tk):
             return 1, "", str(e)
 
     def configure_wsl_memory(self):
-        """Configure WSL memory allocation in .wslconfig file"""
+        """Configure WSL memory allocation using PowerShell script for proper swap calculation"""
         try:
             self.log_output(f"Configuring WSL memory allocation to {self.memory}...")
+            
+            # Try to use the PowerShell script if available
+            script_path = os.path.join(os.path.dirname(__file__), "configure_wsl_memory.ps1")
+            if os.path.exists(script_path):
+                self.log_output(f"Using PowerShell script: {script_path}")
+                cmd = ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-File', script_path, '-MemoryAmount', self.memory]
+                ret, out, err = self.run_command(cmd, timeout=30)
+                
+                if ret == 0:
+                    self.log_output("WSL memory configured successfully using PowerShell script")
+                    self.log_output(f"Script output: {out}")
+                    return True
+                else:
+                    self.log_output(f"PowerShell script failed: {err}")
+                    self.log_output("Falling back to Python configuration...")
+            else:
+                self.log_output(f"PowerShell script not found at: {script_path}")
+                self.log_output("Falling back to Python configuration...")
+            
+            # Fallback to Python configuration (without swap calculation)
             wslconfig_path = os.path.expanduser("~\\.wslconfig")
             self.log_output(f"DEBUG: Writing .wslconfig to: {wslconfig_path}")
             
