@@ -83,6 +83,7 @@ class HeadlessKamiwazaInstaller:
         results = {
             'nvidia_rtx_detected': False,
             'intel_arc_detected': False,
+            'intel_integrated_detected': False,
             'gpu_acceleration': 'CPU_ONLY',
             'nvidia_gpu_name': '',
             'intel_gpu_name': '',
@@ -98,6 +99,8 @@ class HeadlessKamiwazaInstaller:
                             results['nvidia_rtx_detected'] = True
                         elif line.startswith('INTEL_ARC_DETECTED=1'):
                             results['intel_arc_detected'] = True
+                        elif line.startswith('INTEL_INTEGRATED_DETECTED=1'):
+                            results['intel_integrated_detected'] = True
                         elif line.startswith('GPU_ACCELERATION='):
                             results['gpu_acceleration'] = line.split('=', 1)[1]
                         elif line.startswith('NVIDIA_GPU_NAME='):
@@ -1176,6 +1179,29 @@ networkingMode=mirrored
                             self.log_output("Intel Arc GPU setup completed successfully")
                         else:
                             self.log_output(f"Intel Arc GPU setup failed: {err}")
+                            
+            elif self.gpu_detection_results['intel_integrated_detected']:
+                self.log_output(f"Configuring Intel integrated graphics acceleration...")
+                self.log_output(f"GPU: {self.gpu_detection_results['intel_gpu_name']}")
+                
+                # Copy and execute Intel integrated setup script
+                script_path = os.path.join(os.path.dirname(__file__), "setup_intel_integrated_gpu.sh")
+                if os.path.exists(script_path):
+                    # Copy script to WSL
+                    copy_cmd = f"cat > /usr/local/bin/setup_intel_integrated_gpu.sh"
+                    with open(script_path, 'r') as f:
+                        script_content = f.read()
+                    
+                    ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
+                    if ret == 0:
+                        # Make executable and run
+                        self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/setup_intel_integrated_gpu.sh'], timeout=15)
+                        self.log_output("Running Intel integrated graphics setup script...")
+                        ret, out, err = self.run_command(wsl_cmd + ['sudo', '/usr/local/bin/setup_intel_integrated_gpu.sh'], timeout=300)
+                        if ret == 0:
+                            self.log_output("Intel integrated graphics setup completed successfully")
+                        else:
+                            self.log_output(f"Intel integrated graphics setup failed: {err}")
             
             # Create GPU status script
             status_script = f"""#!/bin/bash
@@ -1185,12 +1211,15 @@ echo ""
 echo "GPU Detection Results:"
 echo "  NVIDIA RTX: {'Yes' if self.gpu_detection_results['nvidia_rtx_detected'] else 'No'}"
 echo "  Intel Arc: {'Yes' if self.gpu_detection_results['intel_arc_detected'] else 'No'}"
+echo "  Intel Integrated: {'Yes' if self.gpu_detection_results['intel_integrated_detected'] else 'No'}"
 echo "  Acceleration: {self.gpu_detection_results['gpu_acceleration']}"
 echo ""
 if [ -f /usr/local/bin/setup_nvidia_gpu.sh ]; then
     echo "NVIDIA setup script available: /usr/local/bin/setup_nvidia_gpu.sh"
 elif [ -f /usr/local/bin/setup_intel_arc_gpu.sh ]; then
     echo "Intel Arc setup script available: /usr/local/bin/setup_intel_arc_gpu.sh"
+elif [ -f /usr/local/bin/setup_intel_integrated_gpu.sh ]; then
+    echo "Intel integrated graphics setup script available: /usr/local/bin/setup_intel_integrated_gpu.sh"
 else
     echo "Running in CPU-only mode"
 fi
@@ -1202,35 +1231,27 @@ echo "=== End GPU Status ==="
                 self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/kamiwaza_gpu_status.sh'], timeout=15)
                 self.log_output("Created GPU status script: /usr/local/bin/kamiwaza_gpu_status.sh")
             
-            # Ask user if they want to restart computer after GPU setup
+            # Signal that restart may be needed (will be handled by UI)
             if self.gpu_detection_results['gpu_acceleration'] == 'HARDWARE':
                 self.log_output("")
-                self.log_output("=== SYSTEM RESTART RECOMMENDED ===")
-                self.log_output("GPU acceleration has been configured.")
-                self.log_output("A system restart is recommended to ensure GPU drivers are properly loaded.")
-                self.log_output("")
+                self.log_output("=== GPU ACCELERATION CONFIGURED ===")
+                self.log_output("GPU acceleration has been configured successfully.")
+                self.log_output("A system restart will be recommended to ensure GPU drivers are properly loaded.")
                 
-                restart_prompt = input("Would you like to restart your computer now? (y/N): ").strip().lower()
-                if restart_prompt in ['y', 'yes']:
-                    self.log_output("Restarting computer in 10 seconds...")
-                    self.log_output("Save any unsaved work now!")
-                    
-                    # Countdown for user safety
-                    import time
-                    for i in range(10, 0, -1):
-                        print(f"Restarting in {i} seconds... (Press Ctrl+C to cancel)", end='\r')
-                        time.sleep(1)
-                    
-                    try:
-                        self.log_output("\nExecuting system restart...")
-                        # Use PowerShell to restart computer
-                        import subprocess
-                        subprocess.run(['powershell.exe', '-Command', 'Restart-Computer', '-Force'], check=True)
-                    except Exception as restart_error:
-                        self.log_output(f"Failed to restart computer: {restart_error}")
-                        self.log_output("Please restart manually to ensure GPU drivers are properly loaded.")
-                else:
-                    self.log_output("System restart skipped. You can restart manually later to ensure optimal GPU performance.")
+                # Create restart flag file for UI to detect
+                restart_flag_file = os.path.join(os.path.dirname(__file__), "restart_required.flag")
+                try:
+                    with open(restart_flag_file, 'w') as f:
+                        f.write(f"GPU_ACCELERATION_CONFIGURED\n")
+                        f.write(f"NVIDIA_RTX={self.gpu_detection_results['nvidia_rtx_detected']}\n")
+                        f.write(f"INTEL_ARC={self.gpu_detection_results['intel_arc_detected']}\n")
+                        f.write(f"INTEL_INTEGRATED={self.gpu_detection_results['intel_integrated_detected']}\n")
+                        import time
+                        f.write(f"TIMESTAMP={time.time()}\n")
+                    self.log_output(f"Restart flag created: {restart_flag_file}")
+                except Exception as e:
+                    self.log_output(f"Warning: Could not create restart flag: {e}")
+                self.log_output("")
             
             self.log_output("=== GPU ACCELERATION CONFIGURATION COMPLETE ===")
             
@@ -1525,29 +1546,43 @@ echo "=== End GPU Status ==="
             else:
                 self.log_output(f"INFO: Could not get kamiwaza version (may need setup): {version_err}")
             
-            # Start kamiwaza automatically after successful installation
-            self.log_output("")
-            self.log_output("=== STARTING KAMIWAZA PLATFORM ===", progress=95)
-            self.log_output("Automatically starting Kamiwaza platform with real-time output...")
-            self.log_output("This may take several minutes as services initialize...")
+            # Check if restart is required (UI will handle the actual restart and auto-start)
+            restart_flag_file = os.path.join(os.path.dirname(__file__), "restart_required.flag")
+            restart_required = os.path.exists(restart_flag_file)
             
-            # Create progress callback for startup milestones
-            def startup_progress_callback(line):
-                # Look for key startup milestones and update progress
-                if "Starting" in line or "Initializing" in line:
-                    self.log_output("", progress=96)
-                elif "Loading" in line or "Configuring" in line:
-                    self.log_output("", progress=97)
-                elif "Ready" in line or "Started" in line or "Running" in line:
-                    self.log_output("", progress=98)
-                elif "complete" in line.lower() or "finished" in line.lower():
-                    self.log_output("", progress=99)
-            
-            start_ret, start_out, start_err = self.run_command_with_streaming(
-                wsl_cmd + ['kamiwaza', 'start'], 
-                timeout=None,  # NO TIMEOUT - let it take as long as needed
-                progress_callback=startup_progress_callback
-            )
+            if restart_required:
+                self.log_output("")
+                self.log_output("=== INSTALLATION COMPLETE - RESTART REQUIRED ===", progress=95)
+                self.log_output("GPU acceleration has been configured.")
+                self.log_output("Kamiwaza will be automatically started after system restart.")
+                self.log_output("The installer UI will prompt for restart confirmation.")
+                start_ret = 0  # Set success for flow control
+                start_out = "Installation complete - restart required"
+                start_err = ""
+            else:
+                # Start kamiwaza automatically after successful installation (no restart needed)
+                self.log_output("")
+                self.log_output("=== STARTING KAMIWAZA PLATFORM ===", progress=95)
+                self.log_output("Automatically starting Kamiwaza platform with real-time output...")
+                self.log_output("This may take several minutes as services initialize...")
+                
+                # Create progress callback for startup milestones
+                def startup_progress_callback(line):
+                    # Look for key startup milestones and update progress
+                    if "Starting" in line or "Initializing" in line:
+                        self.log_output("", progress=96)
+                    elif "Loading" in line or "Configuring" in line:
+                        self.log_output("", progress=97)
+                    elif "Ready" in line or "Started" in line or "Running" in line:
+                        self.log_output("", progress=98)
+                    elif "complete" in line.lower() or "finished" in line.lower():
+                        self.log_output("", progress=99)
+                
+                start_ret, start_out, start_err = self.run_command_with_streaming(
+                    wsl_cmd + ['kamiwaza', 'start'], 
+                    timeout=None,  # NO TIMEOUT - let it take as long as needed
+                    progress_callback=startup_progress_callback
+                )
             
             if start_ret == 0:
                 self.log_output("[OK] SUCCESS: Kamiwaza platform started successfully!")

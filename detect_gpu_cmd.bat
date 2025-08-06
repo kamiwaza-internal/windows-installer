@@ -36,14 +36,27 @@ for /f "tokens=*" %%i in ('type "%TEMP%\nvidia_check.tmp" 2^>nul ^| find "RTX"')
     echo NVIDIA_GPU_NAME=%%i >> "%GPU_DETECTION_FILE%"
 )
 
-REM Check for Intel Arc
-echo [INFO] Checking for Intel Arc GPUs...
-powershell -Command "Get-CimInstance Win32_VideoController | Where-Object { $_.Name -like '*Intel(R) Arc(TM)*' } | Select-Object Name" > "%TEMP%\intel_check.tmp"
-for /f "tokens=*" %%i in ('type "%TEMP%\intel_check.tmp" 2^>nul ^| find "Arc"') do (
+REM Check for Intel GPUs (Arc and integrated graphics)
+echo [INFO] Checking for Intel GPUs (Arc and integrated graphics)...
+powershell -Command "Get-CimInstance Win32_VideoController | Where-Object { $_.Name -like '*Intel*' } | Select-Object Name" > "%TEMP%\intel_check.tmp"
+
+REM Check for Intel Arc specifically
+for /f "tokens=*" %%i in ('type "%TEMP%\intel_check.tmp" 2^>nul ^| find /i "Arc"') do (
     set INTEL_ARC_DETECTED=1
     echo [FOUND] Intel Arc GPU detected: %%i
     echo INTEL_ARC_DETECTED=1 >> "%GPU_DETECTION_FILE%"
     echo INTEL_GPU_NAME=%%i >> "%GPU_DETECTION_FILE%"
+)
+
+REM Check for Intel integrated graphics (Iris, UHD, HD Graphics)
+for /f "tokens=*" %%i in ('type "%TEMP%\intel_check.tmp" 2^>nul ^| find /i "Intel"') do (
+    echo %%i | find /i "Arc" >nul
+    if errorlevel 1 (
+        set INTEL_INTEGRATED_DETECTED=1
+        echo [FOUND] Intel integrated GPU detected: %%i
+        echo INTEL_INTEGRATED_DETECTED=1 >> "%GPU_DETECTION_FILE%"
+        echo INTEL_GPU_NAME=%%i >> "%GPU_DETECTION_FILE%"
+    )
 )
 
 REM Clean up temp files
@@ -62,11 +75,22 @@ if !NVIDIA_RTX_DETECTED!==1 (
 if !INTEL_ARC_DETECTED!==1 (
     echo [GPU] Intel Arc acceleration will be configured
     echo SETUP_SCRIPT=setup_intel_arc_gpu.sh >> "%GPU_DETECTION_FILE%"
+    echo INTEL_ARC_DETECTED=1 >> "%GPU_DETECTION_FILE%"
 ) else (
     echo INTEL_ARC_DETECTED=0 >> "%GPU_DETECTION_FILE%"
 )
 
-if !NVIDIA_RTX_DETECTED!==0 if !INTEL_ARC_DETECTED!==0 (
+if !INTEL_INTEGRATED_DETECTED!==1 (
+    echo [GPU] Intel integrated graphics acceleration will be configured
+    if !INTEL_ARC_DETECTED!==0 (
+        echo SETUP_SCRIPT=setup_intel_integrated_gpu.sh >> "%GPU_DETECTION_FILE%"
+    )
+    echo INTEL_INTEGRATED_DETECTED=1 >> "%GPU_DETECTION_FILE%"
+) else (
+    echo INTEL_INTEGRATED_DETECTED=0 >> "%GPU_DETECTION_FILE%"
+)
+
+if !NVIDIA_RTX_DETECTED!==0 if !INTEL_ARC_DETECTED!==0 if !INTEL_INTEGRATED_DETECTED!==0 (
     echo [INFO] No supported GPU acceleration hardware detected
     echo [INFO] Kamiwaza will run with CPU-only acceleration
     echo GPU_ACCELERATION=CPU_ONLY >> "%GPU_DETECTION_FILE%"
@@ -84,8 +108,9 @@ echo.
 REM Display summary
 echo === GPU Detection Summary ===
 if !NVIDIA_RTX_DETECTED!==1 echo ✓ NVIDIA GeForce RTX GPU detected
-if !INTEL_ARC_DETECTED!==1 echo ✓ Intel Arc GPU detected  
-if !NVIDIA_RTX_DETECTED!==0 if !INTEL_ARC_DETECTED!==0 echo ⚠ No supported GPU hardware detected
+if !INTEL_ARC_DETECTED!==1 echo ✓ Intel Arc GPU detected
+if !INTEL_INTEGRATED_DETECTED!==1 echo ✓ Intel integrated graphics detected
+if !NVIDIA_RTX_DETECTED!==0 if !INTEL_ARC_DETECTED!==0 if !INTEL_INTEGRATED_DETECTED!==0 echo ⚠ No supported GPU hardware detected
 echo.
 
 REM Set environment variables for the installer
@@ -96,6 +121,10 @@ if !NVIDIA_RTX_DETECTED!==1 (
 if !INTEL_ARC_DETECTED!==1 (
     set KAMIWAZA_INTEL_ARC=1
     echo Setting KAMIWAZA_INTEL_ARC=1
+)
+if !INTEL_INTEGRATED_DETECTED!==1 (
+    set KAMIWAZA_INTEL_INTEGRATED=1
+    echo Setting KAMIWAZA_INTEL_INTEGRATED=1
 )
 
 echo [INFO] GPU detection completed successfully

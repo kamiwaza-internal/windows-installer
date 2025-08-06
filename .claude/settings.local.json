@@ -21,7 +21,9 @@
       "Bash(grep:*)",
       "Bash(wsl:*)",
       "Bash(build.bat --no-upload)",
-      "Bash(.build.bat --no-upload)"
+      "Bash(.build.bat --no-upload)",
+      "Bash(\"C:\\Program Files (x86)\\WiX Toolset v3.11\\bin\\candle.exe\" installer.wxs -dKAMIWAZA_VERSION=0.5.0 -dCODENAME=noble -dBUILD_NUMBER=185 -dARCH=amd64 -dKAMIWAZA_VERSION_MAJOR=0 -dKAMIWAZA_VERSION_MINOR=5 -dKAMIWAZA_VERSION_PATCH=0 -ext WixUIExtension)",
+      "Bash(\"C:\\Program Files (x86)\\WiX Toolset v3.11\\bin\\candle.exe\" installer.wxs -dKAMIWAZA_VERSION=0.5.0 -dCODENAME=noble -dBUILD_NUMBER=185 -dARCH=amd64 -dKAMIWAZA_VERSION_MAJOR=0 -dKAMIWAZA_VERSION_MINOR=5 -dKAMIWAZA_VERSION_PATCH=0 -ext WixUIExtension)"
     ],
     "deny": []
   }
