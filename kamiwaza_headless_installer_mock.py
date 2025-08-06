@@ -713,9 +713,36 @@ networkingMode=mirrored
         
         return False
 
+
+    def create_mock_deb_file(self, wsl_cmd, deb_path):
+        """Create a mock DEB file for testing purposes"""
+        self.log_output("=== MOCK TEST MODE: Creating fake DEB file ===")
+        
+        # Create a simple text file that looks like a DEB
+        mock_deb_content = f"""Package: kamiwaza-test
+Version: 0.5.0-test
+Architecture: amd64
+Maintainer: Kamiwaza Test <test@kamiwaza.ai>
+Description: Mock Kamiwaza package for testing
+ This is a fake DEB file created for testing the installer.
+ It will not actually install Kamiwaza.
+"""
+        
+        # Write the mock DEB content to WSL
+        create_cmd = f"echo '{mock_deb_content}' > {deb_path}.txt && mv {deb_path}.txt {deb_path}"
+        ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', create_cmd], timeout=30)
+        
+        if ret == 0:
+            self.log_output(f"SUCCESS: Mock DEB file created at {deb_path}")
+            self.log_output("NOTE: This is a FAKE DEB file for testing only!")
+            return True
+        else:
+            self.log_output(f"ERROR: Failed to create mock DEB: {err}")
+            return False
+
     def get_deb_url(self):
         """Get DEB URL - will be replaced during build"""
-        return "{{DEB_FILE_URL}}"
+        return "MOCK_DEB_PLACEHOLDER"
 
     def get_deb_filename(self):
         """Get DEB filename from URL"""
@@ -1186,14 +1213,22 @@ networkingMode=mirrored
             self.log_output(f"  Filename: {deb_filename}")
             self.log_output(f"  WSL path: {deb_path}")
             
-            download_cmd = f"wget --timeout=60 --tries=3 --progress=bar --show-progress '{deb_url}' -O {deb_path}"
-            self.log_output(f"Download command: {download_cmd}")
+            # MOCK TEST MODE: Create fake DEB instead of downloading
+            if deb_url == "MOCK_DEB_PLACEHOLDER":
+                self.log_output("MOCK TEST MODE: Creating fake DEB file instead of downloading")
+                ret = 0 if self.create_mock_deb_file(wsl_cmd, deb_path) else 1
+                download_out = "Mock DEB created successfully"
+                err = ""
+            else:
+                download_cmd = f"wget --timeout=60 --tries=3 --progress=bar --show-progress '{deb_url}' -O {deb_path}"
+                self.log_output(f"Download command: {download_cmd}")
+                
+                ret, download_out, err = self.run_command(wsl_cmd + ['bash', '-c', download_cmd], timeout=300)
             
-            ret, download_out, err = self.run_command(wsl_cmd + ['bash', '-c', download_cmd], timeout=300)
             if ret != 0:
-                self.log_output(f"CRITICAL ERROR: Download failed with exit code {ret}")
-                self.log_output(f"Download error: {err}")
-                self.log_output(f"Download output: {download_out}")
+                self.log_output(f"CRITICAL ERROR: Download/Mock creation failed with exit code {ret}")
+                self.log_output(f"Error: {err}")
+                self.log_output(f"Output: {download_out}")
                 # Clean up WSL instance on download failure
                 self.log_output("Cleaning up WSL instance due to download failure...")
                 self.cleanup_on_failure(wsl_cmd, instance_name)
@@ -1273,7 +1308,40 @@ networkingMode=mirrored
                     self.log_output("", progress=90)
             
             # Use streaming installation command
-            install_cmd = f"""
+            # Check if this is a mock DEB
+            if deb_url == "MOCK_DEB_PLACEHOLDER":
+                self.log_output("MOCK TEST MODE: Simulating package installation")
+                install_cmd = f"""
+            echo '[{timestamp}] MOCK: Starting simulated install of {deb_path}' > /tmp/kamiwaza_install.log
+            echo 'MOCK TEST MODE: This is a simulated installation' | tee -a /tmp/kamiwaza_install.log
+            echo 'Reading package lists...' | tee -a /tmp/kamiwaza_install.log
+            sleep 2
+            echo 'Building dependency tree...' | tee -a /tmp/kamiwaza_install.log
+            sleep 1
+            echo 'Reading state information...' | tee -a /tmp/kamiwaza_install.log
+            sleep 1
+            echo 'The following NEW packages will be installed:' | tee -a /tmp/kamiwaza_install.log
+            echo '  kamiwaza-test' | tee -a /tmp/kamiwaza_install.log
+            sleep 1
+            echo 'Setting up kamiwaza-test (0.5.0-test) ...' | tee -a /tmp/kamiwaza_install.log
+            echo 'MOCK: kamiwaza command installed at /usr/local/bin/kamiwaza' | tee -a /tmp/kamiwaza_install.log
+            
+            # Create a mock kamiwaza command
+            sudo mkdir -p /usr/local/bin
+            echo '#!/bin/bash' | sudo tee /usr/local/bin/kamiwaza
+            echo 'echo "MOCK KAMIWAZA COMMAND"' | sudo tee -a /usr/local/bin/kamiwaza
+            echo 'echo "This is a test installation - not real Kamiwaza"' | sudo tee -a /usr/local/bin/kamiwaza
+            echo 'echo "Arguments: $@"' | sudo tee -a /usr/local/bin/kamiwaza
+            sudo chmod +x /usr/local/bin/kamiwaza
+            
+            echo 'Processing triggers for man-db...' | tee -a /tmp/kamiwaza_install.log
+            echo 'MOCK INSTALLATION COMPLETED SUCCESSFULLY' | tee -a /tmp/kamiwaza_install.log
+            INSTALL_EXIT_CODE=0
+            echo "[{timestamp}] Mock install completed with exit code $INSTALL_EXIT_CODE" >> /tmp/kamiwaza_install.log
+            
+            exit $INSTALL_EXIT_CODE"""
+            else:
+                install_cmd = f"""
             echo '[{timestamp}] Starting apt install of {deb_path}' > /tmp/kamiwaza_install.log
             export DEBIAN_FRONTEND=noninteractive
             sudo -E apt install -f -y {deb_path} 2>&1 | tee -a /tmp/kamiwaza_install.log

@@ -107,7 +107,7 @@ class HeadlessKamiwazaInstaller:
             
             return False
         else:
-            self.log_output("[OK] WSL is available")
+            self.log_output("✓ WSL is available")
             if out:
                 # Show WSL version info
                 for line in out.strip().split('\n')[:3]:  # First 3 lines
@@ -133,9 +133,9 @@ class HeadlessKamiwazaInstaller:
                     f.write(f"WSL Instance: {wsl_cmd[2] if len(wsl_cmd) > 2 else 'default'}\n")
                     f.write("=" * 60 + "\n\n")
                     f.write(out)
-                self.log_output(f"[OK] Copied detailed APT logs to: {apt_term_log}")
+                self.log_output(f"✓ Copied detailed APT logs to: {apt_term_log}")
             else:
-                self.log_output(f"[WARN] Could not copy APT terminal log: {err}")
+                self.log_output(f"⚠ Could not copy APT terminal log: {err}")
             
             # Copy APT history log
             apt_history_log = os.path.join(appdata_logs, 'apt_history_log.txt')
@@ -147,7 +147,7 @@ class HeadlessKamiwazaInstaller:
                     f.write(f"Installation Date: {timestamp}\n")
                     f.write("=" * 60 + "\n\n")
                     f.write(out)
-                self.log_output(f"[OK] Copied APT history to: {apt_history_log}")
+                self.log_output(f"✓ Copied APT history to: {apt_history_log}")
             
             # Copy DPKG log (kamiwaza entries only)
             dpkg_log = os.path.join(appdata_logs, 'dpkg_log.txt')
@@ -159,7 +159,7 @@ class HeadlessKamiwazaInstaller:
                     f.write(f"Installation Date: {timestamp}\n")
                     f.write("=" * 60 + "\n\n")
                     f.write(out)
-                self.log_output(f"[OK] Copied DPKG operations to: {dpkg_log}")
+                self.log_output(f"✓ Copied DPKG operations to: {dpkg_log}")
             
             # Create a master install log with key information
             install_log = os.path.join(appdata_logs, 'kamiwaza_install_logs.txt')
@@ -191,7 +191,7 @@ class HeadlessKamiwazaInstaller:
                 f.write(f"wsl -d {wsl_cmd[2] if len(wsl_cmd) > 2 else 'default'} -- kamiwaza status\n")
                 f.write(f"wsl -d {wsl_cmd[2] if len(wsl_cmd) > 2 else 'default'} -- kamiwaza logs\n")
             
-            self.log_output(f"[OK] Created master log index: {install_log}")
+            self.log_output(f"✓ Created master log index: {install_log}")
             self.log_output(f"All logs copied to Windows directory: {appdata_logs}")
             
         except Exception as e:
@@ -204,7 +204,7 @@ class HeadlessKamiwazaInstaller:
             cmd = f"ls -la /var/log/apt/term.log"
             ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=15)
             if ret == 0:
-                self.log_output(f"[OK] APT terminal log exists: {out.strip()}")
+                self.log_output(f"✓ APT terminal log exists: {out.strip()}")
                 
                 # Show last few lines
                 cmd = f"tail -10 /var/log/apt/term.log"
@@ -215,24 +215,24 @@ class HeadlessKamiwazaInstaller:
                         if line.strip():
                             self.log_output(f"  {line}")
             else:
-                self.log_output(f"[WARN] APT terminal log not found: {err}")
+                self.log_output(f"⚠ APT terminal log not found: {err}")
             
             # Check APT history log
             cmd = f"ls -la /var/log/apt/history.log"
             ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=15)
             if ret == 0:
-                self.log_output(f"[OK] APT history log exists: {out.strip()}")
+                self.log_output(f"✓ APT history log exists: {out.strip()}")
             else:
-                self.log_output(f"[WARN] APT history log not found: {err}")
+                self.log_output(f"⚠ APT history log not found: {err}")
             
             # Check for kamiwaza in dpkg log
             cmd = f"grep -c kamiwaza /var/log/dpkg.log"
             ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=15)
             if ret == 0 and out.strip().isdigit():
                 count = int(out.strip())
-                self.log_output(f"[OK] Found {count} kamiwaza entries in DPKG log")
+                self.log_output(f"✓ Found {count} kamiwaza entries in DPKG log")
             else:
-                self.log_output(f"[WARN] No kamiwaza entries found in DPKG log")
+                self.log_output(f"⚠ No kamiwaza entries found in DPKG log")
             
         except Exception as e:
             self.log_output(f"ERROR verifying logs: {e}")
@@ -325,7 +325,7 @@ class HeadlessKamiwazaInstaller:
             
             # Show completion message
             elapsed = int((datetime.datetime.now() - start_time).total_seconds())
-            self.log_output(f"  [OK] Command completed in {elapsed} seconds")
+            self.log_output(f"  ✓ Command completed in {elapsed} seconds")
             
             return return_code, full_output, ""
             
@@ -401,56 +401,7 @@ class HeadlessKamiwazaInstaller:
         wsl_instances = out.replace('\x00', '').replace(' ', '').replace('\r', '').replace('\n', ' ').split()
         wsl_instances = [name.strip() for name in wsl_instances if name.strip()]  # Remove empty entries
         if instance_name in wsl_instances:
-            self.log_output(f"Existing {instance_name} WSL instance found")
-            self.log_output("Restarting WSL to ensure clean state for installation...")
-            
-            # Stop the existing WSL instance
-            self.log_output(f"Stopping {instance_name} WSL instance...")
-            stop_ret, stop_out, stop_err = self.run_command(['wsl', '--terminate', instance_name], timeout=30)
-            if stop_ret == 0:
-                self.log_output(f"Successfully stopped {instance_name} instance")
-            else:
-                self.log_output(f"Warning: Could not stop {instance_name} instance: {stop_err}")
-            
-            # Shutdown all WSL instances to ensure clean restart
-            self.log_output("Shutting down all WSL instances for clean restart...")
-            shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'], timeout=60)
-            if shutdown_ret == 0:
-                self.log_output("Successfully shutdown all WSL instances")
-            else:
-                self.log_output(f"Warning: WSL shutdown command failed: {shutdown_err}")
-            
-            # Wait a moment for WSL to fully shutdown
-            import time
-            self.log_output("Waiting for WSL to fully shutdown...")
-            time.sleep(3)
-            
-            # Verify the instance is accessible after restart
-            self.log_output(f"Verifying {instance_name} instance accessibility after restart...")
-            test_ret, test_out, test_err = self.run_command(['wsl', '-d', instance_name, 'echo', 'restart_test'], timeout=30)
-            if test_ret == 0:
-                self.log_output(f"Successfully restarted and verified {instance_name} instance")
-                self.log_output(f"Test output: {test_out.strip()}")
-            else:
-                self.log_output(f"ERROR: Could not access {instance_name} instance after restart: {test_err}")
-                
-                # Check if it's a disk corruption issue
-                if "Failed to attach disk" in test_err or "ERROR_PATH_NOT_FOUND" in test_err:
-                    self.log_output("DETECTED: WSL instance disk corruption - missing or corrupted .vhdx file")
-                    self.log_output(f"Attempting to remove corrupted {instance_name} instance and create fresh one...")
-                    
-                    # Remove the corrupted instance
-                    unregister_ret, unregister_out, unregister_err = self.run_command(['wsl', '--unregister', instance_name], timeout=30)
-                    if unregister_ret == 0:
-                        self.log_output(f"Successfully removed corrupted {instance_name} instance")
-                        # Continue to create a fresh instance below
-                    else:
-                        self.log_output(f"ERROR: Could not remove corrupted {instance_name} instance: {unregister_err}")
-                        return None
-                else:
-                    self.log_output("This may indicate a different WSL issue. Please check WSL configuration.")
-                    return None
-            
+            self.log_output(f"Using existing {instance_name} WSL instance")
             return instance_name
         
         # Create kamiwaza instance from Ubuntu 24.04 cloud image
@@ -510,44 +461,38 @@ class HeadlessKamiwazaInstaller:
         if ret != 0:
             self.log_output(f"ERROR: {instance_name} instance verification failed")
             return None
-
-
-        # First, build the kamiwaza user
-        self.log_output(f"Building the kamiwaza user...")
-        ret, _, err = self.run_command(['wsl', '-d', instance_name, 'bash', '-c', 'useradd -m -s /bin/bash kamiwaza'], timeout=15)
-        if ret != 0:
-            self.log_output(f"ERROR: Failed to build the kamiwaza user: {err}")
-            return None
-    
-
-        # Configure default user to kamiwaza instead of root
+        
+        # Configure default user to ubuntu instead of root
         self.log_output(f"Configuring default user for '{instance_name}' instance...")
-        self.log_output(f"WARNING: Failed to set default user to kamiwaza: {err}")
-        # Try alternative method using /etc/wsl.conf
-        wsl_conf_cmd = """
-        sudo rm /etc/wsl.conf
-        echo '[user]' > /etc/wsl.conf
-        echo 'default=kamiwaza' >> /etc/wsl.conf
-        """
-        ret2, _, err2 = self.run_command(['wsl', '-d', instance_name, 'bash', '-c', wsl_conf_cmd], timeout=15)
-        if ret2 != 0:
-            self.log_output(f"WARNING: Failed to configure /etc/wsl.conf: {err2}")
+        ret, _, err = self.run_command(['wsl', '--set-default-user', instance_name, 'ubuntu'], timeout=15)
+        if ret != 0:
+            self.log_output(f"WARNING: Failed to set default user to ubuntu: {err}")
+            # Try alternative method using /etc/wsl.conf
+            wsl_conf_cmd = """
+            echo '[user]' > /etc/wsl.conf
+            echo 'default=ubuntu' >> /etc/wsl.conf
+            """
+            ret2, _, err2 = self.run_command(['wsl', '-d', instance_name, 'bash', '-c', wsl_conf_cmd], timeout=15)
+            if ret2 != 0:
+                self.log_output(f"WARNING: Failed to configure /etc/wsl.conf: {err2}")
+            else:
+                self.log_output("Configured /etc/wsl.conf to use ubuntu as default user")
         else:
-            self.log_output("Configured /etc/wsl.conf to use kamiwaza as default user")
+            self.log_output("Successfully set default user to ubuntu")
         
         # Verify the user configuration
         ret, whoami_out, _ = self.run_command(['wsl', '-d', instance_name, 'whoami'], timeout=15)
         if ret == 0:
             current_user = whoami_out.strip()
             self.log_output(f"Current default user: {current_user}")
-            if current_user != 'kamiwaza':
-                self.log_output(f"WARNING: Default user is '{current_user}', expected 'kamiwaza'")
-                # Try to create kamiwaza user if it doesn't exist
-                self.log_output("Attempting to ensure kamiwaza user exists...")
+            if current_user != 'ubuntu':
+                self.log_output(f"WARNING: Default user is '{current_user}', expected 'ubuntu'")
+                # Try to create ubuntu user if it doesn't exist
+                self.log_output("Attempting to ensure ubuntu user exists...")
                 create_user_cmds = [
-                    'id kamiwaza || useradd -m -s /bin/bash kamiwaza',
-                    'usermod -aG sudo kamiwaza',
-                    'echo "kamiwaza ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/kamiwaza'
+                    'id ubuntu || useradd -m -s /bin/bash ubuntu',
+                    'usermod -aG sudo ubuntu',
+                    'echo "ubuntu ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/ubuntu'
                 ]
                 for cmd in create_user_cmds:
                     ret, _, err = self.run_command(['wsl', '-d', instance_name, 'bash', '-c', cmd], timeout=30)
@@ -555,9 +500,9 @@ class HeadlessKamiwazaInstaller:
                         self.log_output(f"WARNING: User setup command failed: {cmd} - {err}")
                 
                 # Try setting default user again
-                ret, _, _ = self.run_command(['wsl', '--set-default-user', instance_name, 'kamiwaza'], timeout=15)
+                ret, _, _ = self.run_command(['wsl', '--set-default-user', instance_name, 'ubuntu'], timeout=15)
                 if ret == 0:
-                    self.log_output("Successfully configured kamiwaza as default user after creation")
+                    self.log_output("Successfully configured ubuntu as default user after creation")
         
         # Initialize basic packages needed for installation (as root since we need sudo)
         init_commands = [
@@ -574,14 +519,6 @@ class HeadlessKamiwazaInstaller:
         ret, final_user, _ = self.run_command(['wsl', '-d', instance_name, 'whoami'], timeout=15)
         if ret == 0:
             self.log_output(f"Final default user verification: {final_user.strip()}")
-        
-        # Set kamiwaza as the default WSL distribution
-        self.log_output(f"Setting '{instance_name}' as default WSL distribution...")
-        ret, _, err = self.run_command(['wsl', '--set-default', instance_name], timeout=15)
-        if ret == 0:
-            self.log_output(f"Successfully set '{instance_name}' as default WSL distribution")
-        else:
-            self.log_output(f"WARNING: Failed to set '{instance_name}' as default: {err}")
         
         self.log_output(f"Successfully created and initialized '{instance_name}' WSL instance")
         return instance_name
@@ -601,91 +538,29 @@ class HeadlessKamiwazaInstaller:
             wsl_instances = out.replace('\x00', '').replace(' ', '').replace('\r', '').replace('\n', ' ').split()
             wsl_instances = [name.strip() for name in wsl_instances if name.strip()]  # Remove empty entries
             if 'Ubuntu-24.04' in wsl_instances:
-                self.log_output("Existing Ubuntu-24.04 WSL instance found")
-                self.log_output("Restarting WSL to ensure clean state for installation...")
-                
-                # Stop the existing Ubuntu-24.04 instance
-                self.log_output("Stopping Ubuntu-24.04 WSL instance...")
-                stop_ret, stop_out, stop_err = self.run_command(['wsl', '--terminate', 'Ubuntu-24.04'], timeout=30)
-                if stop_ret == 0:
-                    self.log_output("Successfully stopped Ubuntu-24.04 instance")
-                else:
-                    self.log_output(f"Warning: Could not stop Ubuntu-24.04 instance: {stop_err}")
-                
-                # Shutdown all WSL instances to ensure clean restart
-                self.log_output("Shutting down all WSL instances for clean restart...")
-                shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'], timeout=60)
-                if shutdown_ret == 0:
-                    self.log_output("Successfully shutdown all WSL instances")
-                else:
-                    self.log_output(f"Warning: WSL shutdown command failed: {shutdown_err}")
-                
-                # Wait a moment for WSL to fully shutdown
-                import time
-                self.log_output("Waiting for WSL to fully shutdown...")
-                time.sleep(3)
-                
-                # Verify the instance is accessible after restart
-                self.log_output("Verifying Ubuntu-24.04 instance accessibility after restart...")
-                test_ret, test_out, test_err = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'echo', 'restart_test'], timeout=30)
-                if test_ret == 0:
-                    self.log_output("Successfully restarted and verified Ubuntu-24.04 instance")
-                    self.log_output(f"Test output: {test_out.strip()}")
-                else:
-                    self.log_output(f"ERROR: Could not access Ubuntu-24.04 instance after restart: {test_err}")
-                    
-                    # Check if it's a disk corruption issue
-                    if "Failed to attach disk" in test_err or "ERROR_PATH_NOT_FOUND" in test_err:
-                        self.log_output("DETECTED: Ubuntu-24.04 WSL instance disk corruption - missing or corrupted .vhdx file")
-                        self.log_output("Ubuntu-24.04 instance appears to be corrupted. Cannot proceed with this instance.")
-                        self.log_output("Consider removing the corrupted instance: wsl --unregister Ubuntu-24.04")
-                        return None
-                    else:
-                        self.log_output("This may indicate a different WSL issue. Please check WSL configuration.")
-                        return None
-                
-                # Ensure Ubuntu-24.04 also uses kamiwaza as default user
+                self.log_output("Using existing Ubuntu-24.04")
+                # Ensure Ubuntu-24.04 also uses ubuntu as default user
                 self.log_output("Verifying default user for Ubuntu-24.04...")
                 ret, whoami_out, _ = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'whoami'], timeout=15)
                 if ret == 0:
                     current_user = whoami_out.strip()
                     self.log_output(f"Current Ubuntu-24.04 default user: {current_user}")
-                    if current_user != 'kamiwaza':
-                        self.log_output("Configuring Ubuntu-24.04 to use kamiwaza as default user...")
-                        ret, _, err = self.run_command(['wsl', '--set-default-user', 'Ubuntu-24.04', 'kamiwaza'], timeout=15)
+                    if current_user != 'ubuntu':
+                        self.log_output("Configuring Ubuntu-24.04 to use ubuntu as default user...")
+                        ret, _, err = self.run_command(['wsl', '--set-default-user', 'Ubuntu-24.04', 'ubuntu'], timeout=15)
                         if ret != 0:
                             self.log_output(f"WARNING: Failed to set Ubuntu-24.04 default user: {err}")
                         else:
-                            self.log_output("Successfully configured Ubuntu-24.04 default user to kamiwaza")
+                            self.log_output("Successfully configured Ubuntu-24.04 default user to ubuntu")
                 return ['wsl', '-d', 'Ubuntu-24.04']
         
         self.log_output("ERROR: No suitable WSL distribution found. Only 'kamiwaza' or 'Ubuntu-24.04' are supported.")
         return None
 
     def configure_wsl_memory(self):
-        """Configure WSL memory using PowerShell script for proper swap calculation"""
+        """Configure WSL memory"""
         try:
             self.log_output(f"Configuring WSL memory: {self.memory}")
-            
-            # Try to use the PowerShell script if available
-            script_path = os.path.join(os.path.dirname(__file__), "configure_wsl_memory.ps1")
-            if os.path.exists(script_path):
-                self.log_output(f"Using PowerShell script: {script_path}")
-                cmd = ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-File', script_path, '-MemoryAmount', self.memory]
-                ret, out, err = self.run_command(cmd, timeout=30)
-                
-                if ret == 0:
-                    self.log_output("WSL memory configured successfully using PowerShell script")
-                    self.log_output(f"Script output: {out}")
-                    return True
-                else:
-                    self.log_output(f"PowerShell script failed: {err}")
-                    self.log_output("Falling back to Python configuration...")
-            else:
-                self.log_output(f"PowerShell script not found at: {script_path}")
-                self.log_output("Falling back to Python configuration...")
-            
-            # Fallback to Python configuration (without swap calculation)
             wslconfig_path = os.path.expanduser("~\\.wslconfig")
             
             if os.path.exists(wslconfig_path):
@@ -715,7 +590,7 @@ networkingMode=mirrored
 
     def get_deb_url(self):
         """Get DEB URL - will be replaced during build"""
-        return "{{DEB_FILE_URL}}"
+        return "https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_v0.5.0_noble_amd64_build28.deb"
 
     def get_deb_filename(self):
         """Get DEB filename from URL"""
@@ -847,187 +722,6 @@ networkingMode=mirrored
             self.log_output(f"Error during failure cleanup: {e}")
             self.log_output("Continuing with failure reporting...")
 
-    def configure_swap_space(self, wsl_cmd):
-        """Configure swap space within WSL instance based on memory allocation"""
-        try:
-            self.log_output("Configuring swap space in WSL...")
-            
-            # Calculate swap size as half of the memory allocation
-            memory_value = int(self.memory.replace('GB', ''))
-            swap_size_gb = memory_value // 2
-            swap_size_mb = swap_size_gb * 1024
-            
-            # Ensure minimum swap size of 1GB
-            if swap_size_gb < 1:
-                swap_size_gb = 1
-                swap_size_mb = 1024
-                self.log_output("  [INFO] Swap size adjusted to minimum 1GB")
-            
-            self.log_output(f"Memory allocation: {self.memory}")
-            self.log_output(f"Calculated swap size: {swap_size_gb}GB ({swap_size_mb}MB)")
-            
-            # Check for existing swap space
-            self.log_output("Checking for existing swap space...")
-            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', 'sudo swapon --show'], timeout=15)
-            if ret == 0 and out.strip():
-                self.log_output(f"  [INFO] Found existing swap: {out.strip()}")
-                self.log_output("  [INFO] Will configure additional swap space for Kamiwaza")
-            else:
-                self.log_output("  [INFO] No existing swap space found")
-            
-            # Check if swap file already exists
-            self.log_output("Checking if swap file already exists...")
-            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', 'ls -la /swapfile'], timeout=15)
-            if ret == 0:
-                self.log_output("  [INFO] Swap file already exists, checking if it's the right size...")
-                # Check if existing swap file is the right size
-                size_check_cmd = f"ls -lh /swapfile | awk '{{print $5}}'"
-                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', size_check_cmd], timeout=15)
-                if ret == 0 and out.strip():
-                    current_size = out.strip()
-                    expected_size = f"{swap_size_gb}G"
-                    if current_size == expected_size:
-                        self.log_output(f"  [OK] Existing swap file is correct size: {current_size}")
-                        # Just enable it if not already active
-                        ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', 'sudo swapon /swapfile'], timeout=15)
-                        if ret == 0:
-                            self.log_output("  [OK] Existing swap file activated")
-                        else:
-                            self.log_output("  [INFO] Swap file already active")
-                        return
-                    else:
-                        self.log_output(f"  [INFO] Existing swap file size mismatch: {current_size} vs expected {expected_size}")
-                        self.log_output("  [INFO] Will recreate swap file with correct size")
-                        # Remove existing swap file
-                        self.run_command(wsl_cmd + ['bash', '-c', 'sudo swapoff /swapfile 2>/dev/null; sudo rm -f /swapfile'], timeout=15)
-            
-            # Create swap file for Kamiwaza
-            self.log_output(f"Creating {swap_size_gb}GB swap file for Kamiwaza...")
-            swap_commands = [
-                (f"Creating {swap_size_gb}GB swap file...", 
-                 f"sudo fallocate -l {swap_size_gb}G /swapfile"),
-                ("Setting swap file permissions...", 
-                 "sudo chmod 600 /swapfile"),
-                ("Formatting swap file...", 
-                 "sudo mkswap /swapfile"),
-                ("Enabling swap file...", 
-                 "sudo swapon /swapfile"),
-                ("Verifying swap is active...", 
-                 "sudo swapon --show")
-            ]
-            
-            for description, command in swap_commands:
-                self.log_output(f"  {description}")
-                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', command], timeout=60)
-                
-                if ret == 0:
-                    if "Verifying" in description:
-                        if "/swapfile" in out:
-                            self.log_output(f"  [OK] Swap file successfully activated: {out.strip()}")
-                        else:
-                            self.log_output(f"  [WARNING] Swap file not found in active swaps: {out.strip()}")
-                    else:
-                        self.log_output(f"  [OK] {description}")
-                else:
-                    self.log_output(f"  [WARNING] {description} failed (exit code {ret})")
-                    if err:
-                        self.log_output(f"    Error: {err}")
-            
-            # Make swap permanent by adding to /etc/fstab
-            self.log_output("Making swap permanent...")
-            
-            # First, check if fstab is the default unconfigured template
-            fstab_content_cmd = "cat /etc/fstab"
-            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', fstab_content_cmd], timeout=15)
-            
-            if ret == 0 and "UNCONFIGURED FSTAB FOR BASE SYSTEM" in out:
-                self.log_output("  [INFO] Found unconfigured fstab template, replacing with proper configuration...")
-                # Create a proper fstab with swap entry
-                proper_fstab = """# /etc/fstab: static file system information.
-#
-# Use 'blkid' to print the universally unique identifier for a
-# device; this may be used with UUID= as a more robust way to name devices
-# that works even if disks are added and removed. See fstab(5).
-#
-# <file system> <mount point>   <type>  <options>       <dump>  <pass>
-# / was on /dev/sda1 during curtin installation
-/dev/disk/by-uuid/$(blkid -s UUID -o value /dev/sda1) / ext4 defaults 0 1
-/swapfile none swap sw 0 0
-"""
-                # Write the proper fstab
-                fstab_write_cmd = f"echo '{proper_fstab}' | sudo tee /etc/fstab"
-                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', fstab_write_cmd], timeout=15)
-                if ret == 0:
-                    self.log_output("  [OK] Replaced unconfigured fstab with proper configuration including swap")
-                else:
-                    self.log_output(f"  [WARNING] Failed to write proper fstab: {err}")
-            else:
-                # Check if swap entry already exists
-                fstab_check_cmd = "grep -q '/swapfile' /etc/fstab"
-                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', fstab_check_cmd], timeout=15)
-                
-                if ret != 0:  # Not found in fstab
-                    fstab_add_cmd = "echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab"
-                    ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', fstab_add_cmd], timeout=15)
-                    if ret == 0:
-                        self.log_output("  [OK] Added swap file to /etc/fstab for persistence")
-                    else:
-                        self.log_output(f"  [WARNING] Failed to add swap to /etc/fstab: {err}")
-                else:
-                    self.log_output("  [INFO] Swap file already configured in /etc/fstab")
-            
-            # Verify final swap configuration
-            self.log_output("Verifying final swap configuration...")
-            verify_commands = [
-                ("Current memory and swap usage:", "free -h"),
-                ("Active swap devices:", "sudo swapon --show"),
-                ("Swap file size:", "ls -lh /swapfile")
-            ]
-            
-            for description, command in verify_commands:
-                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', command], timeout=15)
-                if ret == 0:
-                    self.log_output(f"  {description}")
-                    for line in out.strip().split('\n'):
-                        if line.strip():
-                            self.log_output(f"    {line}")
-                else:
-                    self.log_output(f"  [WARNING] Could not verify {description}: {err}")
-            
-            # Enable Docker swap limit support
-            self.log_output("Enabling Docker swap limit support...")
-            docker_swap_commands = [
-                ("Adding swap accounting to sysctl.conf...", 
-                 "echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf"),
-                ("Adding memory cgroup support...", 
-                 "mkdir -p /etc/default/grub.d && echo 'cgroup_enable=memory swapaccount=1' | sudo tee -a /etc/default/grub.d/cgroup.cfg"),
-                ("Applying sysctl changes...", 
-                 "sudo sysctl -p"),
-            ]
-            
-            for description, command in docker_swap_commands:
-                self.log_output(f"  {description}")
-                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', command], timeout=30)
-                if ret == 0:
-                    self.log_output(f"  [OK] {description}")
-                else:
-                    self.log_output(f"  [WARNING] {description} failed (exit code {ret})")
-                    if err:
-                        self.log_output(f"    Error: {err}")
-            
-            # Show summary of memory configuration
-            self.log_output("=== MEMORY CONFIGURATION SUMMARY ===")
-            self.log_output(f"  WSL Memory Allocation: {self.memory}")
-            self.log_output(f"  Swap Space: {swap_size_gb}GB")
-            self.log_output(f"  Total Virtual Memory: {memory_value + swap_size_gb}GB")
-            self.log_output("  Note: Swap is configured in both .wslconfig and within WSL instance")
-            self.log_output("  Docker swap limit support: Enabled")
-            self.log_output("[OK] Swap space configuration completed")
-            
-        except Exception as e:
-            self.log_output(f"Warning: Error configuring swap space: {e}")
-            self.log_output("Continuing with installation anyway...")
-
     def disable_ipv6_wsl(self, wsl_cmd):
         """Disable IPv6 in WSL for better network compatibility"""
         try:
@@ -1129,20 +823,20 @@ networkingMode=mirrored
             if user_ret == 0:
                 current_user = user_out.strip()
                 self.log_output(f"WSL default user: {current_user}")
-                if current_user == 'kamiwaza':
-                    self.log_output("[OK] Confirmed: WSL instance uses kamiwaza user")
+                if current_user == 'ubuntu':
+                    self.log_output("✓ Confirmed: WSL instance uses ubuntu user")
                 else:
-                    self.log_output(f"[WARN] WARNING: WSL instance uses '{current_user}' instead of kamiwaza")
+                    self.log_output(f"⚠ WARNING: WSL instance uses '{current_user}' instead of ubuntu")
             else:
                 self.log_output(f"WARNING: Could not verify WSL user: {user_err}")
             
-            # Test sudo access for kamiwaza user
-            if user_ret == 0 and user_out.strip() == 'kamiwaza':
+            # Test sudo access for ubuntu user
+            if user_ret == 0 and user_out.strip() == 'ubuntu':
                 sudo_ret, sudo_out, sudo_err = self.run_command(wsl_cmd + ['sudo', '-n', 'whoami'], timeout=15)
                 if sudo_ret == 0 and sudo_out.strip() == 'root':
-                    self.log_output("[OK] Confirmed: kamiwaza user has passwordless sudo access")
+                    self.log_output("✓ Confirmed: ubuntu user has passwordless sudo access")
                 else:
-                    self.log_output(f"[WARN] WARNING: kamiwaza user sudo test failed: {sudo_err}")
+                    self.log_output(f"⚠ WARNING: ubuntu user sudo test failed: {sudo_err}")
             
             self.log_output("=== PHASE 1 COMPLETE ===\n")
             
@@ -1163,11 +857,6 @@ networkingMode=mirrored
             self.log_output(f"Configuring for mode: {self.install_mode}")
             self.log_output(f"Configuring usage reporting: {self.usage_reporting}")
             self.configure_debconf(wsl_cmd)
-            
-            # Configure swap space in WSL (both .wslconfig and within WSL instance)
-            self.log_output("Configuring swap space in WSL...")
-            self.log_output("Note: Swap is configured in both .wslconfig (Windows) and within WSL instance")
-            self.configure_swap_space(wsl_cmd)
             
             # Disable IPv6 in WSL
             self.log_output("Disabling IPv6 in WSL for better network compatibility...")
@@ -1385,9 +1074,9 @@ networkingMode=mirrored
             )
             
             if start_ret == 0:
-                self.log_output("[OK] SUCCESS: Kamiwaza platform started successfully!")
+                self.log_output("✓ SUCCESS: Kamiwaza platform started successfully!")
             else:
-                self.log_output(f"[WARN] WARNING: Kamiwaza platform failed to start automatically")
+                self.log_output(f"⚠ WARNING: Kamiwaza platform failed to start automatically")
                 self.log_output(f"Start command exit code: {start_ret}")
                 if start_err:
                     self.log_output(f"Start command error: {start_err}")
@@ -1401,7 +1090,7 @@ networkingMode=mirrored
                     timeout=60  # Keep a reasonable timeout for status check
                 )
                 if status_ret == 0 and status_out:
-                    self.log_output("[OK] Kamiwaza platform status confirmed:")
+                    self.log_output("✓ Kamiwaza platform status confirmed:")
                     # Show the actual status output since it contains useful info like URLs
                     for line in status_out.strip().split('\n'):
                         if line.strip():
@@ -1456,7 +1145,7 @@ networkingMode=mirrored
             
             # Show different messages based on whether kamiwaza started successfully
             if start_ret == 0:
-                self.log_output("[OK] Kamiwaza platform is now running!")
+                self.log_output("✓ Kamiwaza platform is now running!")
                 self.log_output("To check platform status:")
                 self.log_output(f"  wsl -d {wsl_instance} -- kamiwaza status")
                 self.log_output("")
@@ -1477,7 +1166,7 @@ networkingMode=mirrored
             self.log_output("")
             self.log_output("To access the kamiwaza WSL instance:")
             self.log_output(f"  wsl -d {wsl_instance}")
-            self.log_output("  (This will log you in as the 'kamiwaza' user)")
+            self.log_output("  (This will log you in as the 'ubuntu' user)")
             self.log_output("")
             
             self._wait_for_user_input("Press Enter to close this window...")
