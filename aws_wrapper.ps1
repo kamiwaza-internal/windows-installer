@@ -6,12 +6,20 @@ param(
     [string]$EndpointUrl
 )
 
+# Set environment variables to help with SSL/TLS issues
+$env:PYTHONHTTPSVERIFY = "0"
+$env:AWS_CLI_SSL_NO_VERIFY = "true"
+
+# Additional SSL configuration
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+
 # Function to check if a build exists
 function Test-BuildExists {
     param([int]$BuildNumber)
     
     $fileName = "kamiwaza_installer_${Version}_${Arch}_build${BuildNumber}.exe"
-    $result = & "venv\Scripts\aws.cmd" s3 ls "s3://k-ubuntu/$fileName" --endpoint-url $EndpointUrl 2>$null
+    $result = & "venv\Scripts\aws.cmd" s3 ls "s3://k-ubuntu/$fileName" --endpoint-url $EndpointUrl --no-verify-ssl 2>$null
     
     return $LASTEXITCODE -eq 0
 }
@@ -24,11 +32,11 @@ function Upload-Files {
     $msiName = "kamiwaza_installer_${Version}_${Arch}_build${BuildNumber}.msi"
     
     Write-Host "[INFO] Uploading EXE: $exeName"
-    & "venv\Scripts\aws.cmd" s3 cp "dist\kamiwaza_installer.exe" "s3://k-ubuntu/$exeName" --endpoint-url $EndpointUrl
+    & "venv\Scripts\aws.cmd" s3 cp "dist\kamiwaza_installer.exe" "s3://k-ubuntu/$exeName" --endpoint-url $EndpointUrl --no-verify-ssl
     $exeSuccess = $LASTEXITCODE -eq 0
     
     Write-Host "[INFO] Uploading MSI: $msiName"
-    & "venv\Scripts\aws.cmd" s3 cp "kamiwaza_installer.msi" "s3://k-ubuntu/$msiName" --endpoint-url $EndpointUrl
+    & "venv\Scripts\aws.cmd" s3 cp "kamiwaza_installer.msi" "s3://k-ubuntu/$msiName" --endpoint-url $EndpointUrl --no-verify-ssl
     $msiSuccess = $LASTEXITCODE -eq 0
     
     # Output results for batch script to read

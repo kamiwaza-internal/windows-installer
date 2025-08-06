@@ -19,7 +19,8 @@
       "Bash(embedded_pythonpython.exe test_simple.py --test-arg)",
       "Bash(curl:*)",
       "Bash(grep:*)",
-      "Bash(wsl:*)"
+      "Bash(wsl:*)",
+      "Bash(build.bat --no-upload)"
     ],
     "deny": []
   }

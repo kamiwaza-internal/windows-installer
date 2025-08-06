@@ -33,6 +33,7 @@ $memoryValue = [int]($MemoryAmount -replace 'GB', '')
 $swapSize = [math]::Floor($memoryValue / 2)
 $swapAmount = "${swapSize}GB"
 Write-LogMessage "Calculated swap size: $swapAmount (half of $MemoryAmount)"
+Write-LogMessage "This swap configuration will be applied to both .wslconfig and within the WSL instance"
 
 # Define .wslconfig path
 $wslConfigPath = Join-Path $env:USERPROFILE ".wslconfig"
