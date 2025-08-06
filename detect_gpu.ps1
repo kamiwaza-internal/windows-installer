@@ -72,6 +72,10 @@ read -p "Press Enter to continue..."
         try {
             $nvidiaScript | wsl -d $WSLDistribution -- sudo tee /usr/local/bin/setup_nvidia_gpu.sh > $null
             wsl -d $WSLDistribution -- sudo chmod +x /usr/local/bin/setup_nvidia_gpu.sh
+            
+            # Fix line endings (remove CRLF) - use dos2unix
+            wsl -d $WSLDistribution -- sudo dos2unix /usr/local/bin/setup_nvidia_gpu.sh
+            
             Write-LogMessage "Created NVIDIA GPU setup script in WSL: /usr/local/bin/setup_nvidia_gpu.sh"
             
             # Execute the script
@@ -111,13 +115,17 @@ read -p "Press Enter to continue..."
 "@
         
         try {
-            $intelScript | wsl -d $WSLDistribution -- sudo tee /usr/local/bin/setup_intel_gpu.sh > $null
-            wsl -d $WSLDistribution -- sudo chmod +x /usr/local/bin/setup_intel_gpu.sh
-            Write-LogMessage "Created Intel Arc GPU setup script in WSL: /usr/local/bin/setup_intel_gpu.sh"
+            $intelScript | wsl -d $WSLDistribution -- sudo tee /usr/local/bin/setup_intel_arc_gpu.sh > $null
+            wsl -d $WSLDistribution -- sudo chmod +x /usr/local/bin/setup_intel_arc_gpu.sh
+            
+            # Fix line endings (remove CRLF) - use dos2unix
+            wsl -d $WSLDistribution -- sudo dos2unix /usr/local/bin/setup_intel_arc_gpu.sh
+            
+            Write-LogMessage "Created Intel Arc GPU setup script in WSL: /usr/local/bin/setup_intel_arc_gpu.sh"
             
             # Execute the script
             Write-LogMessage "Executing Intel Arc GPU setup..."
-            wsl -d $WSLDistribution -- sudo /usr/local/bin/setup_intel_gpu.sh
+            wsl -d $WSLDistribution -- sudo /usr/local/bin/setup_intel_arc_gpu.sh
         } catch {
             Write-LogMessage "Failed to create Intel Arc GPU script: $($_.Exception.Message)" "ERROR"
         }
@@ -160,9 +168,9 @@ echo ""
 if [ -f /usr/local/bin/setup_nvidia_gpu.sh ]; then
     echo "NVIDIA GeForce RTX acceleration: CONFIGURED"
     echo "Run: sudo /usr/local/bin/setup_nvidia_gpu.sh"
-elif [ -f /usr/local/bin/setup_intel_gpu.sh ]; then
+elif [ -f /usr/local/bin/setup_intel_arc_gpu.sh ]; then
     echo "Intel Arc GPU acceleration: CONFIGURED" 
-    echo "Run: sudo /usr/local/bin/setup_intel_gpu.sh"
+    echo "Run: sudo /usr/local/bin/setup_intel_arc_gpu.sh"
 else
     echo "GPU acceleration: CPU-ONLY MODE"
     echo "Run: /usr/local/bin/gpu_info.sh (if available)"
@@ -175,6 +183,10 @@ echo "=== End GPU Status ==="
     try {
         $statusScript | wsl -d $WSLDistribution -- sudo tee /usr/local/bin/kamiwaza_gpu_status.sh > $null
         wsl -d $WSLDistribution -- sudo chmod +x /usr/local/bin/kamiwaza_gpu_status.sh
+        
+        # Fix line endings (remove CRLF) - use dos2unix
+        wsl -d $WSLDistribution -- sudo dos2unix /usr/local/bin/kamiwaza_gpu_status.sh
+        
         Write-LogMessage "Created master GPU status script: /usr/local/bin/kamiwaza_gpu_status.sh"
     } catch {
         Write-LogMessage "Failed to create GPU status script: $($_.Exception.Message)" "ERROR"
