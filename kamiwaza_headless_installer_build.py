@@ -760,7 +760,7 @@ networkingMode=mirrored
 
     def get_deb_url(self):
         """Get DEB URL - will be replaced during build"""
-        return "https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_v0.5.0_noble_amd64_build41.deb"
+        return "https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_v0.5.0_noble_amd64_build43.deb"
 
     def get_deb_filename(self):
         """Get DEB filename from URL"""
@@ -1202,35 +1202,57 @@ echo "=== End GPU Status ==="
                 self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/kamiwaza_gpu_status.sh'], timeout=15)
                 self.log_output("Created GPU status script: /usr/local/bin/kamiwaza_gpu_status.sh")
             
-            # Ask user if they want to restart computer after GPU setup
+            # Create restart flag for auto-start after restart (for headless installer)
             if self.gpu_detection_results['gpu_acceleration'] == 'HARDWARE':
                 self.log_output("")
-                self.log_output("=== SYSTEM RESTART RECOMMENDED ===")
-                self.log_output("GPU acceleration has been configured.")
-                self.log_output("A system restart is recommended to ensure GPU drivers are properly loaded.")
-                self.log_output("")
+                self.log_output("=== GPU ACCELERATION CONFIGURED ===")
+                self.log_output("GPU acceleration has been configured successfully.")
+                self.log_output("A system restart will be recommended to ensure GPU drivers are properly loaded.")
                 
-                restart_prompt = input("Would you like to restart your computer now? (y/N): ").strip().lower()
-                if restart_prompt in ['y', 'yes']:
-                    self.log_output("Restarting computer in 10 seconds...")
-                    self.log_output("Save any unsaved work now!")
-                    
-                    # Countdown for user safety
-                    import time
-                    for i in range(10, 0, -1):
-                        print(f"Restarting in {i} seconds... (Press Ctrl+C to cancel)", end='\r')
-                        time.sleep(1)
-                    
-                    try:
-                        self.log_output("\nExecuting system restart...")
-                        # Use PowerShell to restart computer
-                        import subprocess
-                        subprocess.run(['powershell.exe', '-Command', 'Restart-Computer', '-Force'], check=True)
-                    except Exception as restart_error:
-                        self.log_output(f"Failed to restart computer: {restart_error}")
-                        self.log_output("Please restart manually to ensure GPU drivers are properly loaded.")
-                else:
-                    self.log_output("System restart skipped. You can restart manually later to ensure optimal GPU performance.")
+                # Create restart flag file for auto-start script (in AppData for autostart script)
+                restart_flag_file = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'restart_required.flag')
+                try:
+                    # Ensure the directory exists
+                    os.makedirs(os.path.dirname(restart_flag_file), exist_ok=True)
+                    with open(restart_flag_file, 'w') as f:
+                        f.write(f"GPU_ACCELERATION_CONFIGURED\n")
+                        f.write(f"NVIDIA_RTX={self.gpu_detection_results['nvidia_rtx_detected']}\n")
+                        f.write(f"INTEL_ARC={self.gpu_detection_results['intel_arc_detected']}\n")
+                        f.write(f"INTEL_INTEGRATED={self.gpu_detection_results['intel_integrated_detected']}\n")
+                        import time
+                        f.write(f"TIMESTAMP={time.time()}\n")
+                    self.log_output(f"Restart flag created: {restart_flag_file}")
+                    self.log_output("Kamiwaza will automatically start after system restart.")
+                except Exception as e:
+                    self.log_output(f"Warning: Could not create restart flag: {e}")
+                    self.log_output("You may need to start Kamiwaza manually after restart.")
+                
+                # For interactive installer, still ask about immediate restart
+                try:
+                    restart_prompt = input("Would you like to restart your computer now? (y/N): ").strip().lower()
+                    if restart_prompt in ['y', 'yes']:
+                        self.log_output("Restarting computer in 10 seconds...")
+                        self.log_output("Save any unsaved work now!")
+                        
+                        # Countdown for user safety
+                        import time
+                        for i in range(10, 0, -1):
+                            print(f"Restarting in {i} seconds... (Press Ctrl+C to cancel)", end='\r')
+                            time.sleep(1)
+                        
+                        try:
+                            self.log_output("\nExecuting system restart...")
+                            # Use PowerShell to restart computer
+                            import subprocess
+                            subprocess.run(['powershell.exe', '-Command', 'Restart-Computer', '-Force'], check=True)
+                        except Exception as restart_error:
+                            self.log_output(f"Failed to restart computer: {restart_error}")
+                            self.log_output("Please restart manually to ensure GPU drivers are properly loaded.")
+                    else:
+                        self.log_output("System restart skipped. You can restart manually later to ensure optimal GPU performance.")
+                except:
+                    # In headless mode, input() will fail, so we just continue
+                    self.log_output("Headless mode detected - restart will be handled by auto-start script")
             
             self.log_output("=== GPU ACCELERATION CONFIGURATION COMPLETE ===")
             
@@ -1574,6 +1596,23 @@ echo "=== End GPU Status ==="
                 else:
                     self.log_output(f"Could not get status (exit code {status_ret}): {status_err}")
                     self.log_output("Platform may still be starting up. Check status manually with: kamiwaza status")
+            
+            # Check if restart is required (for GPU acceleration)
+            restart_flag_file = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'restart_required.flag')
+            restart_required = os.path.exists(restart_flag_file)
+            
+            if restart_required:
+                self.log_output("")
+                self.log_output("=== INSTALLATION COMPLETE - RESTART REQUIRED ===", progress=95)
+                self.log_output("GPU acceleration has been configured.")
+                self.log_output("Kamiwaza will be automatically started after system restart.")
+                self.log_output("The installer UI will prompt for restart confirmation.")
+                start_ret = 0  # Set success for flow control
+                start_out = "Installation complete - restart required"
+                start_err = ""
+            else:
+                self.log_output("")
+                self.log_output("=== INSTALLATION COMPLETE - NO RESTART REQUIRED ===", progress=95)
             
             self.log_output("")
             self.log_output("=== LOG ACCESS INFORMATION ===")

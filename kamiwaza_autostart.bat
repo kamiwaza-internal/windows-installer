@@ -12,13 +12,28 @@ echo.
 
 REM Check if restart flag exists
 set FLAG_FILE=%LOCALAPPDATA%\Kamiwaza\restart_required.flag
+echo [DEBUG] Checking for restart flag: %FLAG_FILE%
+
+REM Check if the Kamiwaza directory exists
+if not exist "%LOCALAPPDATA%\Kamiwaza" (
+    echo [DEBUG] Kamiwaza directory not found: %LOCALAPPDATA%\Kamiwaza
+    echo No Kamiwaza installation detected - auto-start not required
+    timeout /t 5 /nobreak >nul
+    exit /b 0
+)
+
 if not exist "%FLAG_FILE%" (
+    echo [DEBUG] Restart flag not found: %FLAG_FILE%
     echo No restart flag found - auto-start not required
+    echo [INFO] This is normal if GPU acceleration was not configured
     timeout /t 5 /nobreak >nul
     exit /b 0
 )
 
 echo [INFO] Restart flag detected - starting Kamiwaza platform...
+echo [DEBUG] Flag file contents:
+type "%FLAG_FILE%"
+echo.
 echo [INFO] This window will remain open to show Kamiwaza status
 echo.
 
