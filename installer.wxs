@@ -71,6 +71,8 @@
                         <File Id="GPUDetectionCMDScript" Name="detect_gpu_cmd.bat" Source="detect_gpu_cmd.bat"/>
                         <File Id="NvidiaSetupScript" Name="setup_nvidia_gpu.sh" Source="setup_nvidia_gpu.sh"/>
                         <File Id="IntelArcSetupScript" Name="setup_intel_arc_gpu.sh" Source="setup_intel_arc_gpu.sh"/>
+                        <File Id="IntelIntegratedSetupScript" Name="setup_intel_integrated_gpu.sh" Source="setup_intel_integrated_gpu.sh"/>
+                        <File Id="KamiwazaAutoStartScript" Name="kamiwaza_autostart.bat" Source="kamiwaza_autostart.bat"/>
                         <RegistryValue Root="HKCU" Key="Software\Kamiwaza\Installer" Name="installed" Type="string" Value="1" KeyPath="yes"/>
                         <!-- Removes the entire Kamiwaza installation folder -->
                         <RemoveFolder Id="RemoveKamiwazaFolder" Directory="INSTALLFOLDER" On="uninstall"/>
@@ -142,6 +144,27 @@
                     </Component>
                 </Directory>
             </Directory>
+            <!-- Windows Startup Folder for Auto-Start -->
+            <Directory Id="StartupFolder">
+                <Component Id="AutoStartComponent" Guid="7A8B9C0D-1E2F-3A4B-5C6D-7E8F9A0B1C2D">
+                    <Shortcut Id="KamiwazaAutoStartShortcut" 
+                             Name="Kamiwaza Auto-Start" 
+                             Description="Automatically start Kamiwaza platform after system restart" 
+                             Target="[INSTALLFOLDER]kamiwaza_autostart.bat"
+                             WorkingDirectory="INSTALLFOLDER"
+                             Icon="KamiwazaIcon"
+                             IconIndex="0" />
+                    <RemoveFolder Id="CleanUpAutoStartShortcut" 
+                                Directory="StartupFolder" 
+                                On="uninstall" />
+                    <RegistryValue Root="HKCU" 
+                                 Key="Software\Kamiwaza\AutoStart" 
+                                 Name="enabled" 
+                                 Type="integer" 
+                                 Value="1" 
+                                 KeyPath="yes" />
+                </Component>
+            </Directory>
         </Directory>
 
         <!-- DEB download is now handled directly within the Python installer -->
@@ -151,6 +174,7 @@
             <ComponentGroupRef Id="EmbeddedPythonFiles" />
             <ComponentRef Id="KamiwazaInstallerFiles" />
             <ComponentRef Id="ApplicationShortcut" />
+            <ComponentRef Id="AutoStartComponent" />
         </ComponentGroup>
 
         <!-- Custom UI with memory configuration dialog -->
@@ -227,7 +251,8 @@ After installation completes:
 • Access your deployment at https://localhost (or the URL shown in the installer output)
 • For troubleshooting, run: wsl -d kamiwaza
 • Use Start Menu shortcuts to manage your Kamiwaza platform
-• To access Kamiwaza WSL instance directly: wsl -d kamiwaza" />
+• To access Kamiwaza WSL instance directly: wsl -d kamiwaza
+• Auto-start is configured - Kamiwaza will automatically start after system restart if needed" />
         </UI>
 
         <!-- Custom Actions -->
