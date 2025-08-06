@@ -28,11 +28,22 @@ if ($MemoryAmount -notmatch '^\d+GB$') {
     exit 1
 }
 
-# Calculate swap size as half of the memory amount
+# Calculate swap size as 75% of the memory amount
 $memoryValue = [int]($MemoryAmount -replace 'GB', '')
-$swapSize = [math]::Floor($memoryValue / 2)
+$swapSize = [math]::Floor($memoryValue * 0.75)
 $swapAmount = "${swapSize}GB"
-Write-LogMessage "Calculated swap size: $swapAmount (half of $MemoryAmount)"
+Write-LogMessage "Calculated swap size: $swapAmount (75% of $MemoryAmount)"
+
+# Calculate processor count as 75% of available logical processors
+try {
+    $processorInfo = Get-WmiObject -Class Win32_Processor | Select-Object NumberOfCores, NumberOfLogicalProcessors
+    $totalLogicalProcessors = ($processorInfo | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
+    $processorCount = [math]::Max(1, [math]::Floor($totalLogicalProcessors * 0.75))
+    Write-LogMessage "System has $totalLogicalProcessors logical processors, using $processorCount (75%) for WSL"
+} catch {
+    Write-LogMessage "Could not detect processor count, using default of 4" "WARN"
+    $processorCount = 4
+}
 Write-LogMessage "This swap configuration will be applied to both .wslconfig and within the WSL instance"
 
 # Define .wslconfig path
@@ -153,10 +164,10 @@ if ($kamiwazaConfigured) {
                 $optimizedConfig += "# Additional Kamiwaza WSL optimizations"
                 
                 if (-not $hasProcessors) {
-                    $optimizedConfig += "processors=4"
-                    Write-LogMessage "Added processors optimization"
+                    $optimizedConfig += "processors=$processorCount"
+                    Write-LogMessage "Added processors optimization: $processorCount cores"
                 }
-                # Always add swap setting (calculated as half of memory)
+                # Always add swap setting (calculated as 75% of memory)
                 $optimizedConfig += "swap=$swapAmount"
                 Write-LogMessage "Added swap optimization: $swapAmount"
                 if (-not $hasLocalhost) {

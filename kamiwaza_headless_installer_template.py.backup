@@ -26,6 +26,9 @@ class HeadlessKamiwazaInstaller:
         self.usage_reporting = usage_reporting
         self.install_mode = install_mode
         
+        # GPU detection results (from pre-installation detection)
+        self.gpu_detection_results = self.load_gpu_detection_results()
+        
         # Enable maximum debugging
         self.log_output("=== KAMIWAZA INSTALLER DEBUG MODE ENABLED ===")
         self.log_output(f"Installer initialized with parameters:")
@@ -72,6 +75,48 @@ class HeadlessKamiwazaInstaller:
                 self.log_output(f"WARNING: Installer directory does not exist: {installer_dir}")
         
         self.log_output("=== INITIALIZATION COMPLETE ===\n")
+
+    def load_gpu_detection_results(self):
+        """Load GPU detection results from pre-installation detection"""
+        import tempfile
+        gpu_file = os.path.join(tempfile.gettempdir(), 'kamiwaza_gpu_detection.txt')
+        results = {
+            'nvidia_rtx_detected': False,
+            'intel_arc_detected': False,
+            'gpu_acceleration': 'CPU_ONLY',
+            'nvidia_gpu_name': '',
+            'intel_gpu_name': '',
+            'setup_script': ''
+        }
+        
+        try:
+            if os.path.exists(gpu_file):
+                with open(gpu_file, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith('NVIDIA_RTX_DETECTED=1'):
+                            results['nvidia_rtx_detected'] = True
+                        elif line.startswith('INTEL_ARC_DETECTED=1'):
+                            results['intel_arc_detected'] = True
+                        elif line.startswith('GPU_ACCELERATION='):
+                            results['gpu_acceleration'] = line.split('=', 1)[1]
+                        elif line.startswith('NVIDIA_GPU_NAME='):
+                            results['nvidia_gpu_name'] = line.split('=', 1)[1]
+                        elif line.startswith('INTEL_GPU_NAME='):
+                            results['intel_gpu_name'] = line.split('=', 1)[1]
+                        elif line.startswith('SETUP_SCRIPT='):
+                            results['setup_script'] = line.split('=', 1)[1]
+                
+                self.log_output("GPU detection results loaded:")
+                self.log_output(f"  NVIDIA RTX: {results['nvidia_rtx_detected']}")
+                self.log_output(f"  Intel Arc: {results['intel_arc_detected']}")
+                self.log_output(f"  GPU Acceleration: {results['gpu_acceleration']}")
+            else:
+                self.log_output("No GPU detection results found - using CPU-only mode")
+        except Exception as e:
+            self.log_output(f"Error loading GPU detection results: {e}")
+        
+        return results
 
     def check_wsl_prerequisites(self):
         """Check WSL prerequisites and provide Windows Server specific guidance"""
@@ -1076,6 +1121,122 @@ networkingMode=mirrored
             self.log_output(f"Warning: Error disabling IPv6: {e}")
             self.log_output("Continuing with installation anyway...")
 
+    def configure_gpu_acceleration(self, wsl_cmd):
+        """Configure GPU acceleration based on pre-installation detection"""
+        try:
+            self.log_output("=== GPU ACCELERATION CONFIGURATION ===")
+            
+            if self.gpu_detection_results['gpu_acceleration'] == 'CPU_ONLY':
+                self.log_output("GPU acceleration: CPU-only mode (no supported hardware detected)")
+                return
+            
+            # Create GPU setup scripts based on detection results
+            if self.gpu_detection_results['nvidia_rtx_detected']:
+                self.log_output(f"Configuring NVIDIA RTX GPU acceleration...")
+                self.log_output(f"GPU: {self.gpu_detection_results['nvidia_gpu_name']}")
+                
+                # Copy and execute NVIDIA setup script
+                script_path = os.path.join(os.path.dirname(__file__), "setup_nvidia_gpu.sh")
+                if os.path.exists(script_path):
+                    # Copy script to WSL
+                    copy_cmd = f"cat > /usr/local/bin/setup_nvidia_gpu.sh"
+                    with open(script_path, 'r') as f:
+                        script_content = f.read()
+                    
+                    ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
+                    if ret == 0:
+                        # Make executable and run
+                        self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/setup_nvidia_gpu.sh'], timeout=15)
+                        self.log_output("Running NVIDIA GPU setup script...")
+                        ret, out, err = self.run_command(wsl_cmd + ['sudo', '/usr/local/bin/setup_nvidia_gpu.sh'], timeout=300)
+                        if ret == 0:
+                            self.log_output("NVIDIA GPU setup completed successfully")
+                        else:
+                            self.log_output(f"NVIDIA GPU setup failed: {err}")
+            
+            elif self.gpu_detection_results['intel_arc_detected']:
+                self.log_output(f"Configuring Intel Arc GPU acceleration...")
+                self.log_output(f"GPU: {self.gpu_detection_results['intel_gpu_name']}")
+                
+                # Copy and execute Intel Arc setup script
+                script_path = os.path.join(os.path.dirname(__file__), "setup_intel_arc_gpu.sh")
+                if os.path.exists(script_path):
+                    # Copy script to WSL
+                    copy_cmd = f"cat > /usr/local/bin/setup_intel_arc_gpu.sh"
+                    with open(script_path, 'r') as f:
+                        script_content = f.read()
+                    
+                    ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
+                    if ret == 0:
+                        # Make executable and run
+                        self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/setup_intel_arc_gpu.sh'], timeout=15)
+                        self.log_output("Running Intel Arc GPU setup script...")
+                        ret, out, err = self.run_command(wsl_cmd + ['sudo', '/usr/local/bin/setup_intel_arc_gpu.sh'], timeout=300)
+                        if ret == 0:
+                            self.log_output("Intel Arc GPU setup completed successfully")
+                        else:
+                            self.log_output(f"Intel Arc GPU setup failed: {err}")
+            
+            # Create GPU status script
+            status_script = f"""#!/bin/bash
+echo "=== Kamiwaza GPU Status ==="
+echo "Generated: $(date)"
+echo ""
+echo "GPU Detection Results:"
+echo "  NVIDIA RTX: {'Yes' if self.gpu_detection_results['nvidia_rtx_detected'] else 'No'}"
+echo "  Intel Arc: {'Yes' if self.gpu_detection_results['intel_arc_detected'] else 'No'}"
+echo "  Acceleration: {self.gpu_detection_results['gpu_acceleration']}"
+echo ""
+if [ -f /usr/local/bin/setup_nvidia_gpu.sh ]; then
+    echo "NVIDIA setup script available: /usr/local/bin/setup_nvidia_gpu.sh"
+elif [ -f /usr/local/bin/setup_intel_arc_gpu.sh ]; then
+    echo "Intel Arc setup script available: /usr/local/bin/setup_intel_arc_gpu.sh"
+else
+    echo "Running in CPU-only mode"
+fi
+echo "=== End GPU Status ==="
+"""
+            
+            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', f'echo \'{status_script}\' | sudo tee /usr/local/bin/kamiwaza_gpu_status.sh'], timeout=30)
+            if ret == 0:
+                self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/kamiwaza_gpu_status.sh'], timeout=15)
+                self.log_output("Created GPU status script: /usr/local/bin/kamiwaza_gpu_status.sh")
+            
+            # Ask user if they want to restart computer after GPU setup
+            if self.gpu_detection_results['gpu_acceleration'] == 'HARDWARE':
+                self.log_output("")
+                self.log_output("=== SYSTEM RESTART RECOMMENDED ===")
+                self.log_output("GPU acceleration has been configured.")
+                self.log_output("A system restart is recommended to ensure GPU drivers are properly loaded.")
+                self.log_output("")
+                
+                restart_prompt = input("Would you like to restart your computer now? (y/N): ").strip().lower()
+                if restart_prompt in ['y', 'yes']:
+                    self.log_output("Restarting computer in 10 seconds...")
+                    self.log_output("Save any unsaved work now!")
+                    
+                    # Countdown for user safety
+                    import time
+                    for i in range(10, 0, -1):
+                        print(f"Restarting in {i} seconds... (Press Ctrl+C to cancel)", end='\r')
+                        time.sleep(1)
+                    
+                    try:
+                        self.log_output("\nExecuting system restart...")
+                        # Use PowerShell to restart computer
+                        import subprocess
+                        subprocess.run(['powershell.exe', '-Command', 'Restart-Computer', '-Force'], check=True)
+                    except Exception as restart_error:
+                        self.log_output(f"Failed to restart computer: {restart_error}")
+                        self.log_output("Please restart manually to ensure GPU drivers are properly loaded.")
+                else:
+                    self.log_output("System restart skipped. You can restart manually later to ensure optimal GPU performance.")
+            
+            self.log_output("=== GPU ACCELERATION CONFIGURATION COMPLETE ===")
+            
+        except Exception as e:
+            self.log_output(f"Error configuring GPU acceleration: {e}")
+
     def install(self):
         """Main installation process"""
         self.log_output("=== STARTING MAIN INSTALLATION PROCESS ===")
@@ -1319,6 +1480,10 @@ networkingMode=mirrored
                 self.log_output(f"SUCCESS: apt install completed successfully")
                 if out:
                     self.log_output(f"Installation output: {out}")
+                
+                # Configure GPU acceleration after successful package installation
+                self.log_output("=== PHASE 6: GPU ACCELERATION CONFIGURATION ===", progress=85)
+                self.configure_gpu_acceleration(wsl_cmd)
                 
                 # Show success message from backup log if available
                 log_cmd = f"tail -10 /tmp/kamiwaza_install.log 2>/dev/null || echo 'Backup log not found'"
