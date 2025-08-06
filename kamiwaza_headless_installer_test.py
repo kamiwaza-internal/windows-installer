@@ -401,56 +401,7 @@ class HeadlessKamiwazaInstaller:
         wsl_instances = out.replace('\x00', '').replace(' ', '').replace('\r', '').replace('\n', ' ').split()
         wsl_instances = [name.strip() for name in wsl_instances if name.strip()]  # Remove empty entries
         if instance_name in wsl_instances:
-            self.log_output(f"Existing {instance_name} WSL instance found")
-            self.log_output("Restarting WSL to ensure clean state for installation...")
-            
-            # Stop the existing WSL instance
-            self.log_output(f"Stopping {instance_name} WSL instance...")
-            stop_ret, stop_out, stop_err = self.run_command(['wsl', '--terminate', instance_name], timeout=30)
-            if stop_ret == 0:
-                self.log_output(f"Successfully stopped {instance_name} instance")
-            else:
-                self.log_output(f"Warning: Could not stop {instance_name} instance: {stop_err}")
-            
-            # Shutdown all WSL instances to ensure clean restart
-            self.log_output("Shutting down all WSL instances for clean restart...")
-            shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'], timeout=60)
-            if shutdown_ret == 0:
-                self.log_output("Successfully shutdown all WSL instances")
-            else:
-                self.log_output(f"Warning: WSL shutdown command failed: {shutdown_err}")
-            
-            # Wait a moment for WSL to fully shutdown
-            import time
-            self.log_output("Waiting for WSL to fully shutdown...")
-            time.sleep(3)
-            
-            # Verify the instance is accessible after restart
-            self.log_output(f"Verifying {instance_name} instance accessibility after restart...")
-            test_ret, test_out, test_err = self.run_command(['wsl', '-d', instance_name, 'echo', 'restart_test'], timeout=30)
-            if test_ret == 0:
-                self.log_output(f"Successfully restarted and verified {instance_name} instance")
-                self.log_output(f"Test output: {test_out.strip()}")
-            else:
-                self.log_output(f"ERROR: Could not access {instance_name} instance after restart: {test_err}")
-                
-                # Check if it's a disk corruption issue
-                if "Failed to attach disk" in test_err or "ERROR_PATH_NOT_FOUND" in test_err:
-                    self.log_output("DETECTED: WSL instance disk corruption - missing or corrupted .vhdx file")
-                    self.log_output(f"Attempting to remove corrupted {instance_name} instance and create fresh one...")
-                    
-                    # Remove the corrupted instance
-                    unregister_ret, unregister_out, unregister_err = self.run_command(['wsl', '--unregister', instance_name], timeout=30)
-                    if unregister_ret == 0:
-                        self.log_output(f"Successfully removed corrupted {instance_name} instance")
-                        # Continue to create a fresh instance below
-                    else:
-                        self.log_output(f"ERROR: Could not remove corrupted {instance_name} instance: {unregister_err}")
-                        return None
-                else:
-                    self.log_output("This may indicate a different WSL issue. Please check WSL configuration.")
-                    return None
-            
+            self.log_output(f"Using existing {instance_name} WSL instance")
             return instance_name
         
         # Create kamiwaza instance from Ubuntu 24.04 cloud image
@@ -601,49 +552,7 @@ class HeadlessKamiwazaInstaller:
             wsl_instances = out.replace('\x00', '').replace(' ', '').replace('\r', '').replace('\n', ' ').split()
             wsl_instances = [name.strip() for name in wsl_instances if name.strip()]  # Remove empty entries
             if 'Ubuntu-24.04' in wsl_instances:
-                self.log_output("Existing Ubuntu-24.04 WSL instance found")
-                self.log_output("Restarting WSL to ensure clean state for installation...")
-                
-                # Stop the existing Ubuntu-24.04 instance
-                self.log_output("Stopping Ubuntu-24.04 WSL instance...")
-                stop_ret, stop_out, stop_err = self.run_command(['wsl', '--terminate', 'Ubuntu-24.04'], timeout=30)
-                if stop_ret == 0:
-                    self.log_output("Successfully stopped Ubuntu-24.04 instance")
-                else:
-                    self.log_output(f"Warning: Could not stop Ubuntu-24.04 instance: {stop_err}")
-                
-                # Shutdown all WSL instances to ensure clean restart
-                self.log_output("Shutting down all WSL instances for clean restart...")
-                shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'], timeout=60)
-                if shutdown_ret == 0:
-                    self.log_output("Successfully shutdown all WSL instances")
-                else:
-                    self.log_output(f"Warning: WSL shutdown command failed: {shutdown_err}")
-                
-                # Wait a moment for WSL to fully shutdown
-                import time
-                self.log_output("Waiting for WSL to fully shutdown...")
-                time.sleep(3)
-                
-                # Verify the instance is accessible after restart
-                self.log_output("Verifying Ubuntu-24.04 instance accessibility after restart...")
-                test_ret, test_out, test_err = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'echo', 'restart_test'], timeout=30)
-                if test_ret == 0:
-                    self.log_output("Successfully restarted and verified Ubuntu-24.04 instance")
-                    self.log_output(f"Test output: {test_out.strip()}")
-                else:
-                    self.log_output(f"ERROR: Could not access Ubuntu-24.04 instance after restart: {test_err}")
-                    
-                    # Check if it's a disk corruption issue
-                    if "Failed to attach disk" in test_err or "ERROR_PATH_NOT_FOUND" in test_err:
-                        self.log_output("DETECTED: Ubuntu-24.04 WSL instance disk corruption - missing or corrupted .vhdx file")
-                        self.log_output("Ubuntu-24.04 instance appears to be corrupted. Cannot proceed with this instance.")
-                        self.log_output("Consider removing the corrupted instance: wsl --unregister Ubuntu-24.04")
-                        return None
-                    else:
-                        self.log_output("This may indicate a different WSL issue. Please check WSL configuration.")
-                        return None
-                
+                self.log_output("Using existing Ubuntu-24.04")
                 # Ensure Ubuntu-24.04 also uses kamiwaza as default user
                 self.log_output("Verifying default user for Ubuntu-24.04...")
                 ret, whoami_out, _ = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'whoami'], timeout=15)
@@ -715,7 +624,7 @@ networkingMode=mirrored
 
     def get_deb_url(self):
         """Get DEB URL - will be replaced during build"""
-        return "{{DEB_FILE_URL}}"
+        return "https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_v0.5.0_noble_amd64_build37.deb"
 
     def get_deb_filename(self):
         """Get DEB filename from URL"""

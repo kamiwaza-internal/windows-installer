@@ -95,8 +95,22 @@ if "%SKIP_UPLOAD%"=="1" (
     echo [INFO] Skipping build check: --no-upload flag specified
 ) else if not "%R2_ENDPOINT_URL%"=="" (
     echo [INFO] Checking for existing builds on AWS...
-    for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper.ps1 -Operation "find-build" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%"') do (
-        if "%%A"=="FINAL_BUILD_NUMBER" set FINAL_BUILD_NUMBER=%%B
+    
+    REM Try regular wrapper first
+    set BUILD_CHECK_SUCCESS=0
+    for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper.ps1 -Operation "find-build" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%" 2^>nul') do (
+        if "%%A"=="FINAL_BUILD_NUMBER" (
+            set FINAL_BUILD_NUMBER=%%B
+            set BUILD_CHECK_SUCCESS=1
+        )
+    )
+    
+    REM If regular build check failed, try fallback wrapper
+    if "%BUILD_CHECK_SUCCESS%"=="0" (
+        echo [WARN] Regular build check failed, trying fallback method...
+        for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper_fallback.ps1 -Operation "find-build" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%"') do (
+            if "%%A"=="FINAL_BUILD_NUMBER" set FINAL_BUILD_NUMBER=%%B
+        )
     )
 ) else (
     echo [WARN] Skipping build check: R2_ENDPOINT_URL not configured
@@ -217,20 +231,44 @@ if "%R2_ENDPOINT_URL%"=="" (
 )
 
 echo [INFO] Uploading files to AWS...
-for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%"') do (
+
+REM Try the regular AWS wrapper first
+set UPLOAD_SUCCESS=0
+for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%" 2^>nul') do (
     echo [DEBUG] Parsing output: %%A=%%B
     if "%%A"=="MSI_SUCCESS" (
         if "%%B"=="True" (
             set MSI_SUCCESS=1
+            set UPLOAD_SUCCESS=1
             echo [SUCCESS] MSI uploaded successfully
         ) else (
             set MSI_SUCCESS=0
-            echo [ERROR] MSI upload failed!
         )
     )
     if "%%A"=="MSI_NAME" (
         set MSI_NAME=%%B
         echo [DEBUG] MSI_NAME set to: %%B
+    )
+)
+
+REM If regular upload failed, try the fallback wrapper
+if "%UPLOAD_SUCCESS%"=="0" (
+    echo [WARN] Regular upload failed, trying fallback method...
+    for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper_fallback.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%"') do (
+        echo [DEBUG] Fallback parsing output: %%A=%%B
+        if "%%A"=="MSI_SUCCESS" (
+            if "%%B"=="True" (
+                set MSI_SUCCESS=1
+                echo [SUCCESS] MSI uploaded successfully via fallback method
+            ) else (
+                set MSI_SUCCESS=0
+                echo [ERROR] MSI upload failed even with fallback method!
+            )
+        )
+        if "%%A"=="MSI_NAME" (
+            set MSI_NAME=%%B
+            echo [DEBUG] MSI_NAME set to: %%B
+        )
     )
 )
 
