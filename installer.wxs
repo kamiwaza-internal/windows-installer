@@ -67,6 +67,10 @@
                         <File Id="ConfigFile" Name="config.yaml" Source="config.yaml"/>
                         <File Id="WSLCleanupScript" Name="cleanup_wsl_kamiwaza.ps1" Source="cleanup_wsl_kamiwaza.ps1"/>
                         <File Id="WSLCleanupBatch" Name="cleanup_installs.bat" Source="cleanup_installs.bat"/>
+                        <File Id="GPUDetectionScript" Name="detect_gpu.ps1" Source="detect_gpu.ps1"/>
+                        <File Id="GPUDetectionCMDScript" Name="detect_gpu_cmd.bat" Source="detect_gpu_cmd.bat"/>
+                        <File Id="NvidiaSetupScript" Name="setup_nvidia_gpu.sh" Source="setup_nvidia_gpu.sh"/>
+                        <File Id="IntelArcSetupScript" Name="setup_intel_arc_gpu.sh" Source="setup_intel_arc_gpu.sh"/>
                         <RegistryValue Root="HKCU" Key="Software\Kamiwaza\Installer" Name="installed" Type="string" Value="1" KeyPath="yes"/>
                         <!-- Removes the entire Kamiwaza installation folder -->
                         <RemoveFolder Id="RemoveKamiwazaFolder" Directory="INSTALLFOLDER" On="uninstall"/>
@@ -178,10 +182,26 @@
                     </ComboBox>
                 </Control>
                 
-                <!-- Memory Configuration -->
+                <!-- Memory Configuration with Dropdown -->
                 <Control Id="MemoryLabel" Type="Text" X="15" Y="165" Width="140" Height="12" NoPrefix="yes" Text="Kamiwaza Dedicated Memory:" />
-                <Control Id="MemoryEdit" Type="Edit" X="160" Y="165" Width="80" Height="18" Property="WSLMEMORY" />
-                <Control Id="MemoryHelp" Type="Text" X="15" Y="185" Width="340" Height="24" NoPrefix="yes" Text="This configures WSL memory allocation specifically for Kamiwaza. Higher values improve performance but use more system RAM. Your .wslconfig file will be automatically updated." />
+                <Control Id="MemoryCombo" Type="ComboBox" X="160" Y="165" Width="100" Height="18" Property="WSLMEMORY" ComboList="yes" Sorted="no">
+                    <ComboBox Property="WSLMEMORY">
+                        <ListItem Text=" 4GB" Value="4GB" />
+                        <ListItem Text=" 6GB" Value="6GB" />
+                        <ListItem Text=" 8GB" Value="8GB" />
+                        <ListItem Text="10GB" Value="10GB" />
+                        <ListItem Text="12GB" Value="12GB" />
+                        <ListItem Text="14GB" Value="14GB" />
+                        <ListItem Text="16GB" Value="16GB" />
+                        <ListItem Text="20GB" Value="20GB" />
+                        <ListItem Text="24GB" Value="24GB" />
+                        <ListItem Text="28GB" Value="28GB" />
+                        <ListItem Text="32GB" Value="32GB" />
+                        <ListItem Text="48GB" Value="48GB" />
+                        <ListItem Text="64GB" Value="64GB" />
+                    </ComboBox>
+                </Control>
+                <Control Id="MemoryHelp" Type="Text" X="15" Y="185" Width="340" Height="24" NoPrefix="yes" Text="Select memory allocation for Kamiwaza. Higher values improve performance but use more system RAM. Your .wslconfig file will be automatically updated." />
                 
                 <!-- Navigation buttons -->
                 <Control Id="Back" Type="PushButton" X="180" Y="253" Width="56" Height="17" Text="&amp;Back">
@@ -201,7 +221,13 @@
             
             <!-- Customize the exit dialog title and message -->
             <Property Id="WIXUI_EXITDIALOGTITLE" Value="Kamiwaza Setup Complete!" />
-            <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Setup is complete! The Kamiwaza installation will continue in a separate 'Kamiwaza Installer' window when you click Finish." />
+            <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Setup is complete! The Kamiwaza installation will continue in a separate 'Kamiwaza Installer' window when you click Finish.
+
+After installation completes:
+• Access your deployment at https://localhost (or the URL shown in the installer output)
+• For troubleshooting, run: wsl -d kamiwaza
+• Use Start Menu shortcuts to manage your Kamiwaza platform
+• To access Kamiwaza WSL instance directly: wsl -d kamiwaza" />
         </UI>
 
         <!-- Custom Actions -->
@@ -209,6 +235,20 @@
                       FileKey="DebugTestBatch"
                       ExeCommand="debug_test_from_msi"
                       Execute="deferred" 
+                      Impersonate="yes"
+                      Return="ignore" />
+                      
+        <CustomAction Id="DetectGPUCmd"
+                      FileKey="GPUDetectionCMDScript"
+                      ExeCommand=""
+                      Execute="deferred"
+                      Impersonate="yes"
+                      Return="ignore" />
+                      
+        <CustomAction Id="DetectGPU"
+                      ExeCommand='powershell.exe -ExecutionPolicy Bypass -File "[INSTALLFOLDER]detect_gpu.ps1" -WSLDistribution "kamiwaza"'
+                      Directory="TARGETDIR"
+                      Execute="deferred"
                       Impersonate="yes"
                       Return="ignore" />
                       
@@ -259,7 +299,9 @@
         <InstallExecuteSequence>
             <Custom Action="ReservePorts" After="InstallFiles">NOT Installed AND NOT REMOVE</Custom>
             <Custom Action="DebugTest" After="ReservePorts">NOT Installed AND NOT REMOVE</Custom>
-            <Custom Action="RunKamiwazaInstaller" After="DebugTest">NOT Installed AND NOT REMOVE</Custom>
+            <Custom Action="DetectGPUCmd" After="DebugTest">NOT Installed AND NOT REMOVE</Custom>
+            <Custom Action="RunKamiwazaInstaller" After="DetectGPUCmd">NOT Installed AND NOT REMOVE</Custom>
+            <Custom Action="DetectGPU" After="RunKamiwazaInstaller">NOT Installed AND NOT REMOVE</Custom>
             <Custom Action="ComprehensiveCleanup" Before="RemoveFiles">Installed AND REMOVE</Custom>
             <Custom Action="ReleasePorts" After="ComprehensiveCleanup">Installed AND REMOVE</Custom>
         </InstallExecuteSequence>

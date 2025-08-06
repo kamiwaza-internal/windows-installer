@@ -20,7 +20,8 @@
       "Bash(curl:*)",
       "Bash(grep:*)",
       "Bash(wsl:*)",
-      "Bash(build.bat --no-upload)"
+      "Bash(build.bat --no-upload)",
+      "Bash(.build.bat --no-upload)"
     ],
     "deny": []
   }
