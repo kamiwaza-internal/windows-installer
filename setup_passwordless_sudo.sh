@@ -31,7 +31,7 @@ chmod 440 "$SUDOERS_FILE"
 
 # Validate the sudoers file
 if visudo -c -f "$SUDOERS_FILE"; then
-    echo "✅ Sudoers configuration created successfully!"
+    echo "[OK] Sudoers configuration created successfully!"
     echo "The kamiwaza user can now run administrative commands without password prompts."
     echo ""
     echo "Commands enabled:"
@@ -42,7 +42,7 @@ if visudo -c -f "$SUDOERS_FILE"; then
     echo ""
     echo "Test with: sudo -u kamiwaza sudo -n apt-get --version"
 else
-    echo "❌ Error: Invalid sudoers configuration!"
+    echo "[ERROR] Error: Invalid sudoers configuration!"
     rm -f "$SUDOERS_FILE"
     exit 1
 fi 

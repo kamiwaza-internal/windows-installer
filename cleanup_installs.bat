@@ -13,12 +13,13 @@ echo.
 echo WARNING: This action cannot be undone!
 echo.
 
-set /p confirm="Are you sure you want to proceed? (y/N): "
-if /i not "%confirm%"=="y" (
-    echo Cleanup cancelled.
-    pause
-    exit /b 0
-)
+REM Non-interactive mode for MSI uninstall
+REM set /p confirm="Are you sure you want to proceed? (y/N): "
+REM if /i not "%confirm%"=="y" (
+REM     echo Cleanup cancelled.
+REM     pause
+REM     exit /b 0
+REM )
 
 echo.
 echo Starting cleanup...
@@ -27,6 +28,9 @@ echo.
 REM Run the PowerShell cleanup script
 powershell.exe -ExecutionPolicy Bypass -File "%~dp0cleanup_wsl_kamiwaza.ps1" -Force
 
+@REM Unregister kamiwaza ubuntu-24.04 instance (ignore errors)
+wsl --unregister kamiwaza 2>nul
+
 echo.
 echo Cleanup completed!
-pause 
+REM pause 

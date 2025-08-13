@@ -83,9 +83,9 @@ echo.
 
 REM Display summary
 echo === GPU Detection Summary ===
-if !NVIDIA_RTX_DETECTED!==1 echo ✓ NVIDIA GeForce RTX GPU detected
-if !INTEL_ARC_DETECTED!==1 echo ✓ Intel Arc GPU detected  
-if !NVIDIA_RTX_DETECTED!==0 if !INTEL_ARC_DETECTED!==0 echo ⚠ No supported GPU hardware detected
+if !NVIDIA_RTX_DETECTED!==1 echo [OK] NVIDIA GeForce RTX GPU detected
+if !INTEL_ARC_DETECTED!==1 echo [OK] Intel Arc GPU detected  
+if !NVIDIA_RTX_DETECTED!==0 if !INTEL_ARC_DETECTED!==0 echo [WARN] No supported GPU hardware detected
 echo.
 
 REM Set environment variables for the installer

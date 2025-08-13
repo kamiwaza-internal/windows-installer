@@ -83,6 +83,7 @@ class HeadlessKamiwazaInstaller:
         results = {
             'nvidia_rtx_detected': False,
             'intel_arc_detected': False,
+            'intel_integrated_detected': False,
             'gpu_acceleration': 'CPU_ONLY',
             'nvidia_gpu_name': '',
             'intel_gpu_name': '',
@@ -98,6 +99,8 @@ class HeadlessKamiwazaInstaller:
                             results['nvidia_rtx_detected'] = True
                         elif line.startswith('INTEL_ARC_DETECTED=1'):
                             results['intel_arc_detected'] = True
+                        elif line.startswith('INTEL_INTEGRATED_DETECTED=1'):
+                            results['intel_integrated_detected'] = True
                         elif line.startswith('GPU_ACCELERATION='):
                             results['gpu_acceleration'] = line.split('=', 1)[1]
                         elif line.startswith('NVIDIA_GPU_NAME='):
@@ -110,6 +113,7 @@ class HeadlessKamiwazaInstaller:
                 self.log_output("GPU detection results loaded:")
                 self.log_output(f"  NVIDIA RTX: {results['nvidia_rtx_detected']}")
                 self.log_output(f"  Intel Arc: {results['intel_arc_detected']}")
+                self.log_output(f"  Intel Integrated: {results['intel_integrated_detected']}")
                 self.log_output(f"  GPU Acceleration: {results['gpu_acceleration']}")
             else:
                 self.log_output("No GPU detection results found - using CPU-only mode")
@@ -118,8 +122,96 @@ class HeadlessKamiwazaInstaller:
         
         return results
 
+    def download_gpu_drivers(self, wsl_cmd):
+        """Download GPU drivers in WSL before package installation"""
+        try:
+            self.log_output("Preparing GPU driver downloads based on detection results...")
+            
+            if self.gpu_detection_results['nvidia_rtx_detected']:
+                self.log_output(f"NVIDIA RTX detected: {self.gpu_detection_results['nvidia_gpu_name']}")
+                self.log_output("Downloading NVIDIA drivers...")
+                
+                # Download NVIDIA drivers
+                nvidia_cmd = """
+                wget -O /tmp/cuda-keyring.deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+                sudo dpkg -i /tmp/cuda-keyring.deb
+                sudo apt update -qq
+                sudo apt install -y cuda-drivers-fabricmanager-555 nvidia-container-toolkit
+                """
+                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', nvidia_cmd], timeout=300)
+                if ret == 0:
+                    self.log_output("[OK] NVIDIA drivers downloaded successfully")
+                else:
+                    self.log_output(f"[WARN] NVIDIA driver download failed: {err}")
+            
+            elif self.gpu_detection_results['intel_arc_detected']:
+                self.log_output(f"Intel Arc detected: {self.gpu_detection_results['intel_gpu_name']}")
+                self.log_output("Downloading Intel Arc drivers...")
+                
+                # Download Intel Arc drivers
+                intel_cmd = """
+                wget -qO- https://repositories.intel.com/gpu/intel-graphics.key | sudo gpg --dearmor --output /usr/share/keyrings/intel-graphics.gpg
+                echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy client" | sudo tee /etc/apt/sources.list.d/intel-gpu-jammy.list
+                sudo apt update -qq
+                sudo apt install -y intel-opencl-icd intel-level-zero-gpu level-zero intel-media-va-driver-non-free libmfx1 libmfxgen1 libvpl2
+                """
+                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', intel_cmd], timeout=300)
+                if ret == 0:
+                    self.log_output("[OK] Intel Arc drivers downloaded successfully")
+                else:
+                    self.log_output(f"[WARN] Intel Arc driver download failed: {err}")
+            
+            elif self.gpu_detection_results['intel_integrated_detected']:
+                self.log_output(f"Intel Integrated Graphics detected: {self.gpu_detection_results['intel_gpu_name']}")
+                self.log_output("Downloading Intel integrated graphics drivers...")
+                
+                # Download Intel integrated drivers  
+                intel_int_cmd = """
+                sudo apt update -qq
+                sudo apt install -y intel-media-va-driver vainfo intel-gpu-tools
+                """
+                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', intel_int_cmd], timeout=120)
+                if ret == 0:
+                    self.log_output("[OK] Intel integrated graphics drivers downloaded successfully")
+                else:
+                    self.log_output(f"[WARN] Intel integrated driver download failed: {err}")
+            
+            else:
+                self.log_output("No supported GPU detected - skipping GPU driver downloads")
+                self.log_output("Kamiwaza will run with CPU-only acceleration")
+                
+        except Exception as e:
+            self.log_output(f"Warning: GPU driver download failed: {e}")
+            self.log_output("Continuing with installation - Kamiwaza will run in CPU-only mode")
+
+    def verify_gpu_drivers(self, wsl_cmd):
+        """Simple verification that GPU drivers are available"""
+        try:
+            self.log_output("Verifying GPU driver installations...")
+            
+            if self.gpu_detection_results['nvidia_rtx_detected']:
+                # Check if NVIDIA drivers are available
+                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', 'which nvidia-smi'], timeout=30)
+                if ret == 0:
+                    self.log_output("[OK] NVIDIA drivers appear to be available")
+                else:
+                    self.log_output("[WARN] NVIDIA drivers not found - may need system restart")
+            
+            elif self.gpu_detection_results['intel_arc_detected'] or self.gpu_detection_results['intel_integrated_detected']:
+                # Check if Intel drivers are available
+                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', 'which vainfo'], timeout=30)
+                if ret == 0:
+                    self.log_output("[OK] Intel GPU drivers appear to be available")
+                else:
+                    self.log_output("[WARN] Intel GPU drivers not found")
+            
+            self.log_output("GPU driver verification complete")
+            
+        except Exception as e:
+            self.log_output(f"Warning: GPU driver verification failed: {e}")
+
     def check_wsl_prerequisites(self):
-        """Check WSL prerequisites and provide Windows Server specific guidance"""
+        """Check WSL prerequisites and automatically install if not present"""
         self.log_output("Checking WSL prerequisites...")
         
         # Test basic WSL availability
@@ -127,12 +219,79 @@ class HeadlessKamiwazaInstaller:
         if ret != 0:
             self.log_output("WSL not installed or not available")
             
-            # Provide Windows Server specific guidance
+            # Check if this is Windows Server
             try:
                 import platform
                 windows_version = platform.platform()
-                if "Server" in windows_version:
-                    self.log_output("WINDOWS SERVER SETUP REQUIRED:")
+                is_windows_server = "Server" in windows_version
+            except:
+                is_windows_server = False
+            
+            if is_windows_server:
+                self.log_output("WINDOWS SERVER DETECTED:")
+                self.log_output("Windows Server requires manual WSL setup")
+                self.log_output("1. Open PowerShell as Administrator")
+                
+                if "2022" in windows_version:
+                    self.log_output("2. Run: wsl --install")
+                    self.log_output("3. Restart the server")
+                    self.log_output("4. Re-run this installer")
+                else:  # 2019 or other
+                    self.log_output("2. Enable WSL feature:")
+                    self.log_output("   Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux")
+                    self.log_output("3. Restart the server")
+                    self.log_output("4. Re-run this installer")
+                    self.log_output("NOTE: Server 2019 only supports WSL 1")
+                
+                self.log_output("ERROR: WSL prerequisites not met")
+                self.log_output("Please follow the instructions above to enable WSL, then re-run this installer")
+                return False
+            else:
+                # Regular Windows - attempt automatic installation
+                self.log_output("Attempting automatic WSL installation...")
+                self.log_output("Running: wsl --install")
+                self.log_output("This may take several minutes and may require a system restart...")
+                
+                # Run wsl --install and wait for completion
+                install_ret, install_out, install_err = self.run_command(['wsl', '--install'], timeout=300)  # 5 minute timeout
+                
+                if install_ret == 0:
+                    self.log_output("WSL installation command completed successfully")
+                    self.log_output("WSL installation may require a system restart")
+                    self.log_output("Please restart your system and re-run this installer")
+                    self.log_output("")
+                    self.log_output("Note: You can use check_wsl_installation_status() to verify installation progress")
+                    return False
+                else:
+                    self.log_output(f"WSL installation failed with error: {install_err}")
+                    self.log_output("Please install WSL manually using: wsl --install")
+                    return False
+        else:
+            self.log_output("[OK] WSL version command succeeded")
+            if out:
+                # Show WSL version info
+                for line in out.strip().split('\n')[:3]:  # First 3 lines
+                    self.log_output(f"  {line}")
+            
+            # Additional check: Test if WSL service is actually functional
+            self.log_output("Testing WSL service functionality...")
+            service_test_ret, service_test_out, service_test_err = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+            if service_test_ret != 0:
+                self.log_output("WARNING: WSL version command succeeded but service is not functional")
+                self.log_output(f"Service test error: {service_test_err}")
+                self.log_output("This indicates WSL is installed but not properly enabled")
+                
+                # Check if this is Windows Server
+                try:
+                    import platform
+                    windows_version = platform.platform()
+                    is_windows_server = "Server" in windows_version
+                except:
+                    is_windows_server = False
+                
+                if is_windows_server:
+                    self.log_output("WINDOWS SERVER DETECTED:")
+                    self.log_output("Windows Server requires manual WSL setup")
                     self.log_output("1. Open PowerShell as Administrator")
                     
                     if "2022" in windows_version:
@@ -146,18 +305,135 @@ class HeadlessKamiwazaInstaller:
                         self.log_output("4. Re-run this installer")
                         self.log_output("NOTE: Server 2019 only supports WSL 1")
                 else:
-                    self.log_output("Please install WSL using: wsl --install")
-            except:
-                self.log_output("Please install WSL using: wsl --install")
+                    self.log_output("REGULAR WINDOWS DETECTED:")
+                    self.log_output("WSL appears to be installed but not properly enabled")
+                    self.log_output("Attempting to fix WSL installation...")
+                    self.log_output("Running: wsl --update")
+                    
+                    # Try to update WSL first
+                    update_ret, update_out, update_err = self.run_command(['wsl', '--update'], timeout=120)
+                    if update_ret == 0:
+                        self.log_output("WSL update completed successfully")
+                        self.log_output("Testing WSL service again...")
+                        
+                        # Test service again
+                        retest_ret, retest_out, retest_err = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+                        if retest_ret == 0:
+                            self.log_output("SUCCESS: WSL service is now functional")
+                            return True
+                        else:
+                            self.log_output("WSL service still not functional after update")
+                            self.log_output("Attempting full WSL reinstall...")
+                            
+                            # Try full reinstall
+                            reinstall_ret, reinstall_out, reinstall_err = self.run_command(['wsl', '--unregister', 'Ubuntu'], timeout=60)
+                            if reinstall_ret == 0:
+                                self.log_output("Removed existing Ubuntu distribution")
+                            
+                            install_ret, install_out, install_err = self.run_command(['wsl', '--install'], timeout=300)
+                            if install_ret == 0:
+                                self.log_output("WSL reinstallation completed successfully")
+                                self.log_output("Please restart your system and re-run this installer")
+                                return False
+                            else:
+                                self.log_output(f"WSL reinstallation failed: {install_err}")
+                                self.log_output("Please install WSL manually using: wsl --install")
+                                return False
+                    else:
+                        self.log_output(f"WSL update failed: {update_err}")
+                        self.log_output("Attempting full WSL reinstall...")
+                        
+                        # Try full reinstall
+                        reinstall_ret, reinstall_out, reinstall_err = self.run_command(['wsl', '--unregister', 'Ubuntu'], timeout=60)
+                        if reinstall_ret == 0:
+                            self.log_output("Removed existing Ubuntu distribution")
+                        
+                        install_ret, install_out, install_err = self.run_command(['wsl', '--install'], timeout=300)
+                        if install_ret == 0:
+                            self.log_output("WSL reinstallation completed successfully")
+                            self.log_output("Please restart your system and re-run this installer")
+                            return False
+                        else:
+                            self.log_output(f"WSL reinstallation failed: {install_err}")
+                            self.log_output("Please install WSL manually using: wsl --install")
+                            return False
+                
+                return False
             
-            return False
-        else:
-            self.log_output("[OK] WSL is available")
-            if out:
-                # Show WSL version info
-                for line in out.strip().split('\n')[:3]:  # First 3 lines
-                    self.log_output(f"  {line}")
+            self.log_output("[OK] WSL service is functional")
             return True
+    
+    def check_wsl_installation_status(self):
+        """Check if WSL installation is in progress or if restart is needed"""
+        self.log_output("Checking WSL installation status...")
+        
+        # Try to run wsl --version again to see if installation completed
+        ret, out, err = self.run_command(['wsl', '--version'], timeout=10)
+        if ret == 0:
+            self.log_output("WSL is now available after installation")
+            return True
+        
+        # Check if WSL feature is enabled but not fully installed
+        try:
+            import subprocess
+            # Check if WSL feature is enabled
+            feature_check = subprocess.run(['powershell', '-Command', 'Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux'], 
+                                        capture_output=True, text=True, timeout=30)
+            if 'Enabled' in feature_check.stdout:
+                self.log_output("WSL feature is enabled but may need a restart")
+                self.log_output("Please restart your system and re-run this installer")
+                return False
+            else:
+                self.log_output("WSL feature is not enabled")
+                return False
+        except Exception as e:
+            self.log_output(f"Could not check WSL feature status: {e}")
+            return False
+    
+    def fix_hcs_service_error(self):
+        """Attempt to fix HCS service errors that commonly occur with WSL"""
+        self.log_output("Attempting to fix HCS service error...")
+        self.log_output("This error typically indicates WSL service is not properly running")
+        
+        # Try to restart WSL service
+        self.log_output("Restarting WSL service...")
+        restart_ret, restart_out, restart_err = self.run_command(['wsl', '--shutdown'], timeout=60)
+        if restart_ret == 0:
+            self.log_output("WSL shutdown completed successfully")
+        else:
+            self.log_output(f"WSL shutdown failed: {restart_err}")
+        
+        # Wait a moment for services to fully stop
+        import time
+        self.log_output("Waiting for services to fully stop...")
+        time.sleep(5)
+        
+        # Try to start WSL again
+        self.log_output("Attempting to restart WSL...")
+        start_ret, start_out, start_err = self.run_command(['wsl', '--list', '--quiet'], timeout=30)
+        if start_ret == 0:
+            self.log_output("SUCCESS: WSL service is now functional")
+            return True
+        else:
+            self.log_output(f"WSL service still not functional: {start_err}")
+            self.log_output("Attempting to enable WSL feature...")
+            
+            # Try to enable WSL feature using PowerShell
+            try:
+                import subprocess
+                enable_cmd = ['powershell', '-Command', 'Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -All']
+                enable_ret = subprocess.run(enable_cmd, capture_output=True, text=True, timeout=120)
+                
+                if enable_ret.returncode == 0:
+                    self.log_output("WSL feature enabled successfully")
+                    self.log_output("Please restart your system and re-run this installer")
+                    return False
+                else:
+                    self.log_output(f"Failed to enable WSL feature: {enable_ret.stderr}")
+                    return False
+            except Exception as e:
+                self.log_output(f"Error enabling WSL feature: {e}")
+                return False
 
     def copy_logs_to_windows(self, wsl_cmd, timestamp):
         """Copy WSL logs to Windows AppData folder for easy access"""
@@ -338,7 +614,7 @@ class HeadlessKamiwazaInstaller:
                 if (current_time - last_heartbeat).total_seconds() > 30:
                     elapsed = int((current_time - start_time).total_seconds())
                     if (current_time - last_output_time).total_seconds() > 10:  # Only if no recent output
-                        self.log_output(f"  ⏳ Installation in progress... ({elapsed}s elapsed)")
+                        self.log_output(f"  [WAIT] Installation in progress... ({elapsed}s elapsed)")
                     last_heartbeat = current_time
                 
                 line = process.stdout.readline()
@@ -392,7 +668,25 @@ class HeadlessKamiwazaInstaller:
 
     def run_command(self, command, timeout=None):
         """Run command and return exit code, stdout, stderr"""
-        self.log_output(f"Running: {' '.join(command)}")
+        # Format command display with proper quoting for WSL bash commands
+        if len(command) >= 4 and command[0] == 'wsl' and 'bash' in command and '-c' in command:
+            # Find the bash -c command and quote it properly for PowerShell display
+            bash_cmd_index = None
+            for i, arg in enumerate(command):
+                if arg == '-c' and i + 1 < len(command):
+                    bash_cmd_index = i + 1
+                    break
+            
+            if bash_cmd_index and bash_cmd_index < len(command):
+                # Quote the bash command for PowerShell (the argument after -c)
+                display_cmd = command[:bash_cmd_index] + [f'"{command[bash_cmd_index]}"']
+                if bash_cmd_index + 1 < len(command):
+                    display_cmd.extend(command[bash_cmd_index + 1:])
+                self.log_output(f"Running: {' '.join(display_cmd)}")
+            else:
+                self.log_output(f"Running: {' '.join(command)}")
+        else:
+            self.log_output(f"Running: {' '.join(command)}")
         try:
             env = os.environ.copy()
             env["PYTHONIOENCODING"] = "UTF-8"
@@ -534,6 +828,7 @@ class HeadlessKamiwazaInstaller:
         
         # Import as kamiwaza WSL instance
         self.log_output(f"Importing as '{instance_name}' WSL instance...")
+        self.log_output(f"Import command: wsl --import {instance_name} {wsl_dir} {rootfs_file}")
         ret, _, err = self.run_command(['wsl', '--import', instance_name, wsl_dir, rootfs_file], timeout=300)
         
         # Clean up downloaded file
@@ -545,7 +840,37 @@ class HeadlessKamiwazaInstaller:
         
         if ret != 0:
             self.log_output(f"ERROR: Failed to import {instance_name} instance: {err}")
-            return None
+            
+            # Check for specific HCS service error
+            if "HCS_E_SERVICE_NOT_AVAILABLE" in err or "required feature is not installed" in err:
+                self.log_output("DETECTED: HCS service error - WSL service is not properly running")
+                self.log_output("Attempting to fix WSL service...")
+                
+                # Try to fix the HCS service error
+                if self.fix_hcs_service_error():
+                    self.log_output("WSL service fixed successfully, retrying import...")
+                    ret, _, err = self.run_command(['wsl', '--import', instance_name, wsl_dir, rootfs_file], timeout=300)
+                    if ret == 0:
+                        self.log_output("SUCCESS: WSL import completed after fixing service")
+                    else:
+                        self.log_output(f"ERROR: WSL import still failed after service fix: {err}")
+                        return None
+                else:
+                    self.log_output("Failed to fix WSL service, cannot proceed")
+                    return None
+            else:
+                self.log_output(f"Unknown import error: {err}")
+                return None
+        else:
+            self.log_output(f"WSL import completed successfully")
+            # Verify what WSL instances exist after import
+            ret_check, out_check, _ = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+            if ret_check == 0:
+                instances_after = out_check.replace('\x00', '').replace(' ', '').replace('\r', '').replace('\n', ' ').split()
+                instances_after = [name.strip() for name in instances_after if name.strip()]
+                self.log_output(f"WSL instances after import: {instances_after}")
+            else:
+                self.log_output("Could not list WSL instances after import")
         
         # Verify and initialize the new instance
         self.log_output(f"Verifying and initializing '{instance_name}' instance...")
@@ -607,7 +932,7 @@ class HeadlessKamiwazaInstaller:
         # Initialize basic packages needed for installation (as root since we need sudo)
         init_commands = [
             'apt update',
-            'apt install -y wget curl sudo'
+            'apt install -y wget curl sudo file'
         ]
         
         for cmd in init_commands:
@@ -642,6 +967,30 @@ class HeadlessKamiwazaInstaller:
         # User explicitly requested: "We should only use the existing wsl if its name is KAMIWAZA - nothing else"
         # and "We NEVER want 22.04 - only 24.04"
         ret, out, _ = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+        if ret != 0:
+            self.log_output("ERROR: WSL is not available")
+            
+            # Check for specific HCS service error
+            if "HCS_E_SERVICE_NOT_AVAILABLE" in str(out) or "required feature is not installed" in str(out):
+                self.log_output("DETECTED: HCS service error - WSL service is not properly running")
+                self.log_output("Attempting to fix WSL service...")
+                
+                # Try to fix the HCS service error
+                if self.fix_hcs_service_error():
+                    self.log_output("WSL service fixed successfully, retrying distribution check...")
+                    ret, out, _ = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+                    if ret != 0:
+                        self.log_output("WSL service still not functional after fix attempt")
+                        return None
+                else:
+                    self.log_output("Failed to fix WSL service, cannot proceed")
+                    return None
+            else:
+                self.log_output("On Windows Server, you may need to manually enable WSL:")
+                self.log_output("  - Server 2022: Run 'wsl --install' as Administrator")
+                self.log_output("  - Server 2019: Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux")
+                return None
+        
         if ret == 0:
             wsl_instances = out.replace('\x00', '').replace(' ', '').replace('\r', '').replace('\n', ' ').split()
             wsl_instances = [name.strip() for name in wsl_instances if name.strip()]  # Remove empty entries
@@ -760,7 +1109,7 @@ networkingMode=mirrored
 
     def get_deb_url(self):
         """Get DEB URL - will be replaced during build"""
-        return "{{DEB_FILE_URL}}"
+        return "https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_v0.5.0_noble_amd64_build67.deb"
 
     def get_deb_filename(self):
         """Get DEB filename from URL"""
@@ -1121,7 +1470,7 @@ networkingMode=mirrored
             self.log_output(f"Warning: Error disabling IPv6: {e}")
             self.log_output("Continuing with installation anyway...")
 
-    def configure_gpu_acceleration(self, wsl_cmd):
+    def OLD_configure_gpu_acceleration(self, wsl_cmd):
         """Configure GPU acceleration based on pre-installation detection"""
         try:
             self.log_output("=== GPU ACCELERATION CONFIGURATION ===")
@@ -1130,7 +1479,8 @@ networkingMode=mirrored
                 self.log_output("GPU acceleration: CPU-only mode (no supported hardware detected)")
                 return
             
-            # Create GPU setup scripts based on detection results
+            # Run GPU setup script based on detection results
+            # Only run the appropriate script for the detected hardware
             if self.gpu_detection_results['nvidia_rtx_detected']:
                 self.log_output(f"Configuring NVIDIA RTX GPU acceleration...")
                 self.log_output(f"GPU: {self.gpu_detection_results['nvidia_gpu_name']}")
@@ -1138,21 +1488,62 @@ networkingMode=mirrored
                 # Copy and execute NVIDIA setup script
                 script_path = os.path.join(os.path.dirname(__file__), "setup_nvidia_gpu.sh")
                 if os.path.exists(script_path):
-                    # Copy script to WSL
-                    copy_cmd = f"cat > /usr/local/bin/setup_nvidia_gpu.sh"
+                    self.log_output(f"Found NVIDIA setup script: {script_path}")
+                    
+                    # Read script content
                     with open(script_path, 'r') as f:
                         script_content = f.read()
                     
+                    # Copy script to WSL using a more reliable method
+                    # First write to a temporary file, then copy to final location
+                    temp_script_path = os.path.join(tempfile.gettempdir(), 'setup_nvidia_gpu_temp.sh')
+                    with open(temp_script_path, 'w') as f:
+                        f.write(script_content)
+                    
+                    # Copy the temporary file to WSL
+                    copy_cmd = f"cat '{temp_script_path}' | sudo tee /usr/local/bin/setup_nvidia_gpu.sh"
                     ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
+                    
+                    # Clean up temporary file
+                    try:
+                        os.remove(temp_script_path)
+                    except:
+                        pass
+                    
                     if ret == 0:
-                        # Make executable and run
-                        self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/setup_nvidia_gpu.sh'], timeout=15)
-                        self.log_output("Running NVIDIA GPU setup script...")
-                        ret, out, err = self.run_command(wsl_cmd + ['sudo', '/usr/local/bin/setup_nvidia_gpu.sh'], timeout=300)
+                        self.log_output("NVIDIA setup script copied to WSL successfully")
+                        
+                        # Make executable
+                        ret, out, err = self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/setup_nvidia_gpu.sh'], timeout=15)
                         if ret == 0:
-                            self.log_output("NVIDIA GPU setup completed successfully")
+                            self.log_output("NVIDIA setup script made executable")
+                            
+                            # Fix line endings (remove CRLF if present)
+                            ret, out, err = self.run_command(wsl_cmd + ['sudo', 'dos2unix', '/usr/local/bin/setup_nvidia_gpu.sh'], timeout=15)
+                            if ret == 0:
+                                self.log_output("NVIDIA setup script line endings fixed")
+                            else:
+                                self.log_output(f"Warning: Could not fix line endings: {err}")
+                            
+                            # Execute the script as kamiwaza user
+                            self.log_output("Running NVIDIA GPU setup script as kamiwaza user...")
+                            ret, out, err = self.run_command(wsl_cmd + ['sudo', '-u', 'kamiwaza', '/usr/local/bin/setup_nvidia_gpu.sh'], timeout=300)
+                            if ret == 0:
+                                self.log_output("NVIDIA GPU setup completed successfully")
+                                if out:
+                                    self.log_output(f"Setup output: {out}")
+                            else:
+                                self.log_output(f"NVIDIA GPU setup failed with exit code {ret}")
+                                if err:
+                                    self.log_output(f"Setup error: {err}")
+                                if out:
+                                    self.log_output(f"Setup output: {out}")
                         else:
-                            self.log_output(f"NVIDIA GPU setup failed: {err}")
+                            self.log_output(f"Failed to make NVIDIA script executable: {err}")
+                    else:
+                        self.log_output(f"Failed to copy NVIDIA script to WSL: {err}")
+                else:
+                    self.log_output(f"ERROR: NVIDIA setup script not found at {script_path}")
             
             elif self.gpu_detection_results['intel_arc_detected']:
                 self.log_output(f"Configuring Intel Arc GPU acceleration...")
@@ -1161,23 +1552,132 @@ networkingMode=mirrored
                 # Copy and execute Intel Arc setup script
                 script_path = os.path.join(os.path.dirname(__file__), "setup_intel_arc_gpu.sh")
                 if os.path.exists(script_path):
-                    # Copy script to WSL
-                    copy_cmd = f"cat > /usr/local/bin/setup_intel_arc_gpu.sh"
+                    self.log_output(f"Found Intel Arc setup script: {script_path}")
+                    
+                    # Read script content
                     with open(script_path, 'r') as f:
                         script_content = f.read()
                     
+                    # Copy script to WSL using a more reliable method
+                    # First write to a temporary file, then copy to final location
+                    temp_script_path = os.path.join(tempfile.gettempdir(), 'setup_intel_arc_gpu_temp.sh')
+                    with open(temp_script_path, 'w') as f:
+                        f.write(script_content)
+                    
+                    # Copy the temporary file to WSL
+                    copy_cmd = f"cat '{temp_script_path}' | sudo tee /usr/local/bin/setup_intel_arc_gpu.sh"
                     ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
+                    
+                    # Clean up temporary file
+                    try:
+                        os.remove(temp_script_path)
+                    except:
+                        pass
+                    
                     if ret == 0:
-                        # Make executable and run
-                        self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/setup_intel_arc_gpu.sh'], timeout=15)
-                        self.log_output("Running Intel Arc GPU setup script...")
-                        ret, out, err = self.run_command(wsl_cmd + ['sudo', '/usr/local/bin/setup_intel_arc_gpu.sh'], timeout=300)
+                        self.log_output("Intel Arc setup script copied to WSL successfully")
+                        
+                        # Make executable
+                        ret, out, err = self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/setup_intel_arc_gpu.sh'], timeout=15)
                         if ret == 0:
-                            self.log_output("Intel Arc GPU setup completed successfully")
+                            self.log_output("Intel Arc setup script made executable")
+                            
+                            # Fix line endings (remove CRLF if present)
+                            ret, out, err = self.run_command(wsl_cmd + ['sudo', 'dos2unix', '/usr/local/bin/setup_intel_arc_gpu.sh'], timeout=15)
+                            if ret == 0:
+                                self.log_output("Intel Arc setup script line endings fixed")
+                            else:
+                                self.log_output(f"Warning: Could not fix line endings: {err}")
+                            
+                            # Execute the script as kamiwaza user
+                            self.log_output("Running Intel Arc GPU setup script as kamiwaza user...")
+                            ret, out, err = self.run_command(wsl_cmd + ['sudo', '-u', 'kamiwaza', '/usr/local/bin/setup_intel_arc_gpu.sh'], timeout=300)
+                            if ret == 0:
+                                self.log_output("Intel Arc GPU setup completed successfully")
+                                if out:
+                                    self.log_output(f"Setup output: {out}")
+                            else:
+                                self.log_output(f"Intel Arc GPU setup failed with exit code {ret}")
+                                if err:
+                                    self.log_output(f"Setup error: {err}")
+                                if out:
+                                    self.log_output(f"Setup output: {out}")
                         else:
-                            self.log_output(f"Intel Arc GPU setup failed: {err}")
+                            self.log_output(f"Failed to make Intel Arc script executable: {err}")
+                    else:
+                        self.log_output(f"Failed to copy Intel Arc script to WSL: {err}")
+                else:
+                    self.log_output(f"ERROR: Intel Arc setup script not found at {script_path}")
             
-            # Create GPU status script
+            elif self.gpu_detection_results['intel_integrated_detected']:
+                self.log_output(f"Configuring Intel integrated graphics acceleration...")
+                self.log_output(f"GPU: {self.gpu_detection_results['intel_gpu_name']}")
+                
+                # Copy and execute Intel integrated setup script
+                script_path = os.path.join(os.path.dirname(__file__), "setup_intel_integrated_gpu.sh")
+                if os.path.exists(script_path):
+                    self.log_output(f"Found Intel integrated setup script: {script_path}")
+                    
+                    # Read script content
+                    with open(script_path, 'r') as f:
+                        script_content = f.read()
+                    
+                    # Copy script to WSL using a more reliable method
+                    # First write to a temporary file, then copy to final location
+                    temp_script_path = os.path.join(tempfile.gettempdir(), 'setup_intel_integrated_gpu_temp.sh')
+                    with open(temp_script_path, 'w') as f:
+                        f.write(script_content)
+                    
+                    # Copy the temporary file to WSL
+                    copy_cmd = f"cat '{temp_script_path}' | sudo tee /usr/local/bin/setup_intel_integrated_gpu.sh"
+                    ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
+                    
+                    # Clean up temporary file
+                    try:
+                        os.remove(temp_script_path)
+                    except:
+                        pass
+                    
+                    if ret == 0:
+                        self.log_output("Intel integrated setup script copied to WSL successfully")
+                        
+                        # Make executable
+                        ret, out, err = self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/setup_intel_integrated_gpu.sh'], timeout=15)
+                        if ret == 0:
+                            self.log_output("Intel integrated setup script made executable")
+                            
+                            # Fix line endings (remove CRLF if present)
+                            ret, out, err = self.run_command(wsl_cmd + ['sudo', 'dos2unix', '/usr/local/bin/setup_intel_integrated_gpu.sh'], timeout=15)
+                            if ret == 0:
+                                self.log_output("Intel integrated setup script line endings fixed")
+                            else:
+                                self.log_output(f"Warning: Could not fix line endings: {err}")
+                            
+                            # Execute the script as kamiwaza user
+                            self.log_output("Running Intel integrated graphics setup script as kamiwaza user...")
+                            ret, out, err = self.run_command(wsl_cmd + ['sudo', '-u', 'kamiwaza', '/usr/local/bin/setup_intel_integrated_gpu.sh'], timeout=300)
+                            if ret == 0:
+                                self.log_output("Intel integrated graphics setup completed successfully")
+                                if out:
+                                    self.log_output(f"Setup output: {out}")
+                            else:
+                                self.log_output(f"Intel integrated graphics setup failed with exit code {ret}")
+                                if err:
+                                    self.log_output(f"Setup error: {err}")
+                                if out:
+                                    self.log_output(f"Setup output: {out}")
+                        else:
+                            self.log_output(f"Failed to make Intel integrated script executable: {err}")
+                    else:
+                        self.log_output(f"Failed to copy Intel integrated script to WSL: {err}")
+                else:
+                    self.log_output(f"ERROR: Intel integrated setup script not found at {script_path}")
+            
+            else:
+                self.log_output("No supported GPU hardware detected - skipping GPU setup scripts")
+                self.log_output("Kamiwaza will run with CPU-only acceleration")
+            
+            # Create GPU status script based on actual detection results
             status_script = f"""#!/bin/bash
 echo "=== Kamiwaza GPU Status ==="
 echo "Generated: $(date)"
@@ -1185,16 +1685,43 @@ echo ""
 echo "GPU Detection Results:"
 echo "  NVIDIA RTX: {'Yes' if self.gpu_detection_results['nvidia_rtx_detected'] else 'No'}"
 echo "  Intel Arc: {'Yes' if self.gpu_detection_results['intel_arc_detected'] else 'No'}"
+echo "  Intel Integrated: {'Yes' if self.gpu_detection_results['intel_integrated_detected'] else 'No'}"
 echo "  Acceleration: {self.gpu_detection_results['gpu_acceleration']}"
 echo ""
-if [ -f /usr/local/bin/setup_nvidia_gpu.sh ]; then
-    echo "NVIDIA setup script available: /usr/local/bin/setup_nvidia_gpu.sh"
-elif [ -f /usr/local/bin/setup_intel_arc_gpu.sh ]; then
-    echo "Intel Arc setup script available: /usr/local/bin/setup_intel_arc_gpu.sh"
+"""
+            
+            # Add script availability based on what was actually detected and set up
+            if self.gpu_detection_results['nvidia_rtx_detected']:
+                status_script += """if [ -f /usr/local/bin/setup_nvidia_gpu.sh ]; then
+    echo "NVIDIA RTX setup script available: /usr/local/bin/setup_nvidia_gpu.sh"
+    echo "Run: sudo -u kamiwaza /usr/local/bin/setup_nvidia_gpu.sh"
 else
-    echo "Running in CPU-only mode"
+    echo "NVIDIA RTX setup script not found"
 fi
-echo "=== End GPU Status ==="
+"""
+            elif self.gpu_detection_results['intel_arc_detected']:
+                status_script += """if [ -f /usr/local/bin/setup_intel_arc_gpu.sh ]; then
+    echo "Intel Arc setup script available: /usr/local/bin/setup_intel_arc_gpu.sh"
+    echo "Run: sudo -u kamiwaza /usr/local/bin/setup_intel_arc_gpu.sh"
+else
+    echo "Intel Arc setup script not found"
+fi
+"""
+            elif self.gpu_detection_results['intel_integrated_detected']:
+                status_script += """if [ -f /usr/local/bin/setup_intel_integrated_gpu.sh ]; then
+    echo "Intel integrated graphics setup script available: /usr/local/bin/setup_intel_integrated_gpu.sh"
+    echo "Run: sudo -u kamiwaza /usr/local/bin/setup_intel_integrated_gpu.sh"
+else
+    echo "Intel integrated graphics setup script not found"
+fi
+"""
+            else:
+                status_script += """echo "No supported GPU hardware detected"
+echo "Running in CPU-only mode"
+echo "No GPU setup scripts available"
+"""
+            
+            status_script += """echo "=== End GPU Status ==="
 """
             
             ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', f'echo \'{status_script}\' | sudo tee /usr/local/bin/kamiwaza_gpu_status.sh'], timeout=30)
@@ -1202,40 +1729,146 @@ echo "=== End GPU Status ==="
                 self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/kamiwaza_gpu_status.sh'], timeout=15)
                 self.log_output("Created GPU status script: /usr/local/bin/kamiwaza_gpu_status.sh")
             
-            # Ask user if they want to restart computer after GPU setup
-            if self.gpu_detection_results['gpu_acceleration'] == 'HARDWARE':
+            # Create restart flag for auto-start after restart (for headless installer)
+            # Only create restart flag if GPU acceleration was actually configured
+            gpu_configured = (self.gpu_detection_results['nvidia_rtx_detected'] or 
+                             self.gpu_detection_results['intel_arc_detected'] or 
+                             self.gpu_detection_results['intel_integrated_detected'])
+            
+            if gpu_configured:
                 self.log_output("")
-                self.log_output("=== SYSTEM RESTART RECOMMENDED ===")
-                self.log_output("GPU acceleration has been configured.")
-                self.log_output("A system restart is recommended to ensure GPU drivers are properly loaded.")
-                self.log_output("")
+                self.log_output("=== GPU ACCELERATION CONFIGURED ===")
+                self.log_output("GPU acceleration has been configured successfully.")
+                self.log_output("A system restart will be recommended to ensure GPU drivers are properly loaded.")
                 
-                restart_prompt = input("Would you like to restart your computer now? (y/N): ").strip().lower()
-                if restart_prompt in ['y', 'yes']:
-                    self.log_output("Restarting computer in 10 seconds...")
-                    self.log_output("Save any unsaved work now!")
-                    
-                    # Countdown for user safety
-                    import time
-                    for i in range(10, 0, -1):
-                        print(f"Restarting in {i} seconds... (Press Ctrl+C to cancel)", end='\r')
-                        time.sleep(1)
-                    
-                    try:
-                        self.log_output("\nExecuting system restart...")
-                        # Use PowerShell to restart computer
-                        import subprocess
-                        subprocess.run(['powershell.exe', '-Command', 'Restart-Computer', '-Force'], check=True)
-                    except Exception as restart_error:
-                        self.log_output(f"Failed to restart computer: {restart_error}")
-                        self.log_output("Please restart manually to ensure GPU drivers are properly loaded.")
-                else:
-                    self.log_output("System restart skipped. You can restart manually later to ensure optimal GPU performance.")
+                # Create restart flag file for auto-start script (in AppData for autostart script)
+                restart_flag_file = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'restart_required.flag')
+                try:
+                    # Ensure the directory exists
+                    os.makedirs(os.path.dirname(restart_flag_file), exist_ok=True)
+                    with open(restart_flag_file, 'w') as f:
+                        f.write(f"GPU_ACCELERATION_CONFIGURED\n")
+                        f.write(f"NVIDIA_RTX={self.gpu_detection_results['nvidia_rtx_detected']}\n")
+                        f.write(f"INTEL_ARC={self.gpu_detection_results['intel_arc_detected']}\n")
+                        f.write(f"INTEL_INTEGRATED={self.gpu_detection_results['intel_integrated_detected']}\n")
+                        import time
+                        f.write(f"TIMESTAMP={time.time()}\n")
+                    self.log_output(f"Restart flag created: {restart_flag_file}")
+                    self.log_output("Kamiwaza will automatically start after system restart.")
+                except Exception as e:
+                    self.log_output(f"Warning: Could not create restart flag: {e}")
+                    self.log_output("You may need to start Kamiwaza manually after restart.")
+                
+                # For interactive installer, still ask about immediate restart
+                # Only prompt if not in headless mode (check if we can get user input)
+                try:
+                    # Check if we're in an interactive environment
+                    import sys
+                    if sys.stdin.isatty() and hasattr(sys.stdin, 'readline'):
+                        restart_prompt = input("Would you like to restart your computer now? (y/N): ").strip().lower()
+                        if restart_prompt in ['y', 'yes']:
+                            self.log_output("Restarting computer in 10 seconds...")
+                            self.log_output("Save any unsaved work now!")
+                            
+                            # Countdown for user safety
+                            import time
+                            for i in range(10, 0, -1):
+                                print(f"Restarting in {i} seconds... (Press Ctrl+C to cancel)", end='\r')
+                                time.sleep(1)
+                            
+                            try:
+                                self.log_output("\nExecuting system restart...")
+                                # Use PowerShell to restart computer
+                                import subprocess
+                                subprocess.run(['powershell.exe', '-Command', 'Restart-Computer', '-Force'], check=True)
+                            except Exception as restart_error:
+                                self.log_output(f"Failed to restart computer: {restart_error}")
+                                self.log_output("Please restart manually to ensure GPU drivers are properly loaded.")
+                        else:
+                            self.log_output("System restart skipped. You can restart manually later to ensure optimal GPU performance.")
+                    else:
+                        # Non-interactive mode - skip restart prompt
+                        self.log_output("Non-interactive mode detected - restart will be handled by auto-start script")
+                except:
+                    # In headless mode, input() will fail, so we just continue
+                    self.log_output("Headless mode detected - restart will be handled by auto-start script")
+            
+            # Verify GPU drivers are actually working
+            self.log_output("")
+            self.log_output("=== VERIFYING GPU DRIVER STATUS ===")
+            self.verify_gpu_driver_status(wsl_cmd)
             
             self.log_output("=== GPU ACCELERATION CONFIGURATION COMPLETE ===")
             
         except Exception as e:
             self.log_output(f"Error configuring GPU acceleration: {e}")
+
+    def OLD_verify_gpu_driver_status(self, wsl_cmd):
+        """Verify that GPU drivers are actually working"""
+        try:
+            if self.gpu_detection_results['nvidia_rtx_detected']:
+                self.log_output("Verifying NVIDIA GPU drivers...")
+                
+                # Check if nvidia-smi works
+                ret, out, err = self.run_command(wsl_cmd + ['nvidia-smi', '--query-gpu=name,driver_version', '--format=csv,noheader'], timeout=30)
+                if ret == 0 and out.strip():
+                    gpu_info = out.strip()
+                    self.log_output(f"[OK] NVIDIA GPU detected: {gpu_info}")
+                    
+                    # Check PyTorch CUDA support
+                    pytorch_cmd = 'python3 -c "import torch; print(f\"CUDA available: {torch.cuda.is_available()}\"); print(f\"CUDA device count: {torch.cuda.device_count()}\"); print(f\"CUDA version: {torch.version.cuda}\")"'
+                    ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', pytorch_cmd], timeout=30)
+                    if ret == 0:
+                        self.log_output(f"[OK] PyTorch CUDA status: {out.strip()}")
+                    else:
+                        self.log_output(f"[WARN] PyTorch CUDA check failed: {err}")
+                else:
+                    self.log_output(f"[ERROR] NVIDIA GPU not detected or drivers not working: {err}")
+                    
+            elif self.gpu_detection_results['intel_arc_detected']:
+                self.log_output("Verifying Intel Arc GPU drivers...")
+                
+                # Check if clinfo works and shows Intel devices
+                ret, out, err = self.run_command(wsl_cmd + ['clinfo'], timeout=30)
+                if ret == 0:
+                    if 'intel' in out.lower():
+                        self.log_output("[OK] Intel OpenCL platform detected")
+                        if 'device type: gpu' in out.lower():
+                            self.log_output("[OK] Intel GPU device detected")
+                        else:
+                            self.log_output("[WARN] Intel OpenCL detected but showing as CPU device (reboot may be needed)")
+                    else:
+                        self.log_output("[ERROR] Intel OpenCL platform not detected")
+                else:
+                    self.log_output(f"[ERROR] clinfo command failed: {err}")
+                    
+            elif self.gpu_detection_results['intel_integrated_detected']:
+                self.log_output("Verifying Intel integrated graphics...")
+                
+                # Check if vainfo works
+                ret, out, err = self.run_command(wsl_cmd + ['vainfo'], timeout=30)
+                if ret == 0:
+                    if 'intel' in out.lower():
+                        self.log_output("[OK] Intel VA-API drivers detected")
+                    else:
+                        self.log_output("[WARN] VA-API detected but Intel drivers may not be active")
+                else:
+                    self.log_output(f"[ERROR] VA-API check failed: {err}")
+                    
+                # Check OpenCL
+                ret, out, err = self.run_command(wsl_cmd + ['clinfo'], timeout=30)
+                if ret == 0:
+                    if 'intel' in out.lower():
+                        self.log_output("[OK] Intel OpenCL platform detected")
+                    else:
+                        self.log_output("[WARN] Intel OpenCL not detected")
+                else:
+                    self.log_output(f"[ERROR] OpenCL check failed: {err}")
+            else:
+                self.log_output("No GPU hardware detected - running in CPU-only mode")
+                
+        except Exception as e:
+            self.log_output(f"Error verifying GPU driver status: {e}")
 
     def install(self):
         """Main installation process"""
@@ -1250,9 +1883,14 @@ echo "=== End GPU Status ==="
             
             # Check WSL prerequisites first
             self.log_output("=== PHASE 0: WSL PREREQUISITES CHECK ===", progress=5)
-            if not self.check_wsl_prerequisites():
+            wsl_check_result = self.check_wsl_prerequisites()
+            if not wsl_check_result:
                 self.log_output("ERROR: WSL prerequisites not met")
-                self.log_output("Please follow the instructions above to enable WSL, then re-run this installer")
+                # The check_wsl_prerequisites method already provided specific instructions
+                # Just add a reminder about restarting if WSL was installed
+                self.log_output("")
+                self.log_output("IMPORTANT: If WSL was just installed, you may need to restart your system")
+                self.log_output("After restarting, re-run this installer")
                 self._wait_for_user_input("Press Enter to exit...")
                 return 1
             
@@ -1336,8 +1974,13 @@ echo "=== End GPU Status ==="
             
             self.log_output("=== PHASE 3 COMPLETE ===\n")
             
+            # GPU Driver Downloads (before package installation)
+            self.log_output("=== PHASE 4: GPU DRIVER PREPARATION ===", progress=35)
+            self.download_gpu_drivers(wsl_cmd)
+            self.log_output("=== PHASE 4 COMPLETE ===\n")
+            
             # Download DEB
-            self.log_output("=== PHASE 4: PACKAGE DOWNLOAD ===", progress=40)
+            self.log_output("=== PHASE 5: PACKAGE DOWNLOAD ===", progress=40)
             deb_url = self.get_deb_url()
             deb_filename = self.get_deb_filename()
             deb_path = f"/tmp/{deb_filename}"
@@ -1361,18 +2004,36 @@ echo "=== End GPU Status ==="
                 self._wait_for_user_input("Press Enter to exit...")
                 return 1
             
-            # Verify downloaded file
-            verify_cmd = f"ls -la {deb_path} && file {deb_path}"
+            # Ensure file command is available before verification
+            file_check_cmd = f"which file"
+            file_check_ret, _, _ = self.run_command(wsl_cmd + ['bash', '-c', file_check_cmd], timeout=15)
+            if file_check_ret != 0:
+                self.log_output("Installing file command...")
+                install_file_cmd = f"sudo apt update -qq"
+                self.run_command(wsl_cmd + ['bash', '-c', install_file_cmd], timeout=60)
+                install_file_cmd2 = f"sudo apt install -y file"
+                self.run_command(wsl_cmd + ['bash', '-c', install_file_cmd2], timeout=60)
+            
+            # Verify downloaded file (split into separate commands)
+            verify_cmd = f"ls -la {deb_path}"
             verify_ret, verify_out, verify_err = self.run_command(wsl_cmd + ['bash', '-c', verify_cmd], timeout=30)
             if verify_ret == 0:
                 self.log_output(f"SUCCESS: Download verified: {verify_out.strip()}")
+                
+                # Get file type
+                file_cmd = f"file {deb_path}"
+                file_ret, file_out, file_err = self.run_command(wsl_cmd + ['bash', '-c', file_cmd], timeout=30)
+                if file_ret == 0:
+                    self.log_output(f"File type: {file_out.strip()}")
+                else:
+                    self.log_output(f"Could not determine file type: {file_err.strip()}")
             else:
                 self.log_output(f"WARNING: Could not verify download: {verify_err}")
             
-            self.log_output("=== PHASE 4 COMPLETE ===\n")
+            self.log_output("=== PHASE 5 COMPLETE ===\n")
             
             # Install DEB
-            self.log_output("=== PHASE 5: PACKAGE INSTALLATION ===", progress=60)
+            self.log_output("=== PHASE 6: PACKAGE INSTALLATION ===", progress=60)
             self.log_output("This is the critical phase - installing the Kamiwaza package")
             self.log_output("All output from this phase will be logged to systemd journal")
             self.log_output("You can view logs later with: wsl -d kamiwaza journalctl -t kamiwaza-install")
@@ -1481,9 +2142,9 @@ echo "=== End GPU Status ==="
                 if out:
                     self.log_output(f"Installation output: {out}")
                 
-                # Configure GPU acceleration after successful package installation
-                self.log_output("=== PHASE 6: GPU ACCELERATION CONFIGURATION ===", progress=85)
-                self.configure_gpu_acceleration(wsl_cmd)
+                # Verify GPU drivers after successful package installation
+                self.log_output("=== PHASE 7: GPU DRIVER VERIFICATION ===", progress=85)
+                self.verify_gpu_drivers(wsl_cmd)
                 
                 # Show success message from backup log if available
                 log_cmd = f"tail -10 /tmp/kamiwaza_install.log 2>/dev/null || echo 'Backup log not found'"
@@ -1574,6 +2235,23 @@ echo "=== End GPU Status ==="
                 else:
                     self.log_output(f"Could not get status (exit code {status_ret}): {status_err}")
                     self.log_output("Platform may still be starting up. Check status manually with: kamiwaza status")
+            
+            # Check if restart is required (for GPU acceleration)
+            restart_flag_file = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'restart_required.flag')
+            restart_required = os.path.exists(restart_flag_file)
+            
+            if restart_required:
+                self.log_output("")
+                self.log_output("=== INSTALLATION COMPLETE - RESTART REQUIRED ===", progress=95)
+                self.log_output("GPU acceleration has been configured.")
+                self.log_output("Kamiwaza will be automatically started after system restart.")
+                self.log_output("The installer UI will prompt for restart confirmation.")
+                start_ret = 0  # Set success for flow control
+                start_out = "Installation complete - restart required"
+                start_err = ""
+            else:
+                self.log_output("")
+                self.log_output("=== INSTALLATION COMPLETE - NO RESTART REQUIRED ===", progress=95)
             
             self.log_output("")
             self.log_output("=== LOG ACCESS INFORMATION ===")

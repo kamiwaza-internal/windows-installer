@@ -301,21 +301,31 @@ try {
         Write-Verbose "Logs directory not found: $appDataLogs"
     }
     
-    # Clean up the entire Kamiwaza AppData directory if it's empty
-    $kamiwazaAppData = Join-Path $env:LOCALAPPDATA "Kamiwaza"
-    if (Test-Path $kamiwazaAppData) {
-        $remainingItems = Get-ChildItem -Path $kamiwazaAppData -Recurse -Force -ErrorAction SilentlyContinue
-        if ($remainingItems.Count -eq 0) {
-            Write-Host "Removing empty Kamiwaza AppData directory: $kamiwazaAppData" -ForegroundColor Yellow
+    # Remove entire Kamiwaza AppData directory
+    $kamiwazaAppDataFull = Join-Path $env:LOCALAPPDATA "Kamiwaza"
+    if (Test-Path $kamiwazaAppDataFull) {
+        Write-Host "Removing entire Kamiwaza AppData directory: $kamiwazaAppDataFull" -ForegroundColor Yellow
+        try {
+            Remove-Item -Path $kamiwazaAppDataFull -Recurse -Force -ErrorAction Stop
+            Write-Host "Successfully removed entire Kamiwaza AppData directory" -ForegroundColor Green
+        } catch {
+            Write-Host "Warning: Could not remove entire Kamiwaza AppData directory: $($_.Exception.Message)" -ForegroundColor Yellow
+            
+            # Try alternative method using cmd.exe
+            Write-Verbose "Trying alternative removal method using cmd.exe..."
             try {
-                Remove-Item -Path $kamiwazaAppData -Force -ErrorAction Stop
-                Write-Host "Successfully removed empty Kamiwaza AppData directory" -ForegroundColor Green
+                $cmdResult = & cmd.exe /c "rmdir /s /q `"$kamiwazaAppDataFull`" >nul 2>&1"
+                if (-not (Test-Path $kamiwazaAppDataFull)) {
+                    Write-Host "Successfully removed Kamiwaza AppData directory using cmd.exe" -ForegroundColor Green
+                } else {
+                    Write-Host "Warning: Could not remove Kamiwaza AppData directory even with cmd.exe" -ForegroundColor Yellow
+                }
             } catch {
-                Write-Host "Warning: Could not remove Kamiwaza AppData directory: $($_.Exception.Message)" -ForegroundColor Yellow
+                Write-Host "Warning: Alternative removal method also failed: $($_.Exception.Message)" -ForegroundColor Yellow
             }
-        } else {
-            Write-Verbose "Kamiwaza AppData directory not empty, keeping: $($remainingItems.Count) items remain"
         }
+    } else {
+        Write-Verbose "Kamiwaza AppData directory not found: $kamiwazaAppDataFull"
     }
     
     Write-Host "WSL cleanup completed successfully!" -ForegroundColor Green
