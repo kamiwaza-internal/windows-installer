@@ -27,3 +27,6 @@ embedded_python/*
 *.pyzw
 *.pyzwz
 nul
+*.backup
+embedded_python/
+kamiwaza_headless_installer_template.py.backup

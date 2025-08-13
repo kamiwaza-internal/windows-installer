@@ -211,6 +211,53 @@ main() {
     
     check_prerequisites
     
+    # Ask user about rebooting before proceeding
+    header "Pre-Installation Reboot Check"
+    echo
+    warn "IMPORTANT: GPU acceleration requires a FULL SYSTEM REBOOT after installation!"
+    log "This script will install Intel GPU drivers that need a system restart to activate."
+    echo
+    echo -e "${YELLOW}Do you want to continue with the installation?${NC}"
+    echo -e "${YELLOW}You will need to reboot your computer after installation completes.${NC}"
+    echo
+    echo -e "${BLUE}Options:${NC}"
+    echo -e "  ${GREEN}y${NC} - Yes, continue with installation (will need reboot later)"
+    echo -e "  ${GREEN}n${NC} - No, exit script"
+    echo -e "  ${GREEN}s${NC} - Show reboot information"
+    echo
+    
+    while true; do
+        read -p "Enter your choice (y/n/s): " choice
+        case $choice in
+            [Yy]* )
+                log "User chose to continue with installation. Proceeding..."
+                echo
+                break
+                ;;
+            [Nn]* )
+                log "User chose to exit. Exiting script."
+                exit 0
+                ;;
+            [Ss]* )
+                show_reboot_instructions
+                echo
+                echo -e "${YELLOW}Do you want to continue with the installation now? (y/n):${NC}"
+                read -p "Enter your choice: " continue_choice
+                if [[ $continue_choice =~ ^[Yy]$ ]]; then
+                    log "User chose to continue after viewing instructions. Proceeding..."
+                    echo
+                    break
+                else
+                    log "User chose to exit. Exiting script."
+                    exit 0
+                fi
+                ;;
+            * )
+                echo "Please enter y, n, or s."
+                ;;
+        esac
+    done
+    
     # Execute the exact commands as specified
     log "Executing required commands..."
     

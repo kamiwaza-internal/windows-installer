@@ -1109,7 +1109,7 @@ networkingMode=mirrored
 
     def get_deb_url(self):
         """Get DEB URL - will be replaced during build"""
-        return "https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/kamiwaza_v0.5.0_noble_amd64_build67.deb"
+        return "{{DEB_FILE_URL}}"
 
     def get_deb_filename(self):
         """Get DEB filename from URL"""
