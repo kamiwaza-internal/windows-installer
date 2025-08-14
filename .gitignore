@@ -9,7 +9,6 @@ dist/
 *.wixpdb
 *.wixlib
 *.zip
-License.rtf
 Kamiwaza_Installer.zip
 windows_installer.spec
 kamiwaza_installer.spec
@@ -30,3 +29,4 @@ nul
 *.backup
 embedded_python/
 kamiwaza_headless_installer_template.py.backup
+*.bmp
