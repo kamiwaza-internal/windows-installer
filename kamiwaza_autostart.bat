@@ -10,6 +10,17 @@ echo ===============================================
 echo Time: %DATE% %TIME%
 echo.
 
+REM Determine the correct WSL instance to use
+set WSL_INSTANCE=
+for /f "tokens=*" %%i in ('wsl --list --quiet ^| findstr /R "^kamiwaza-"') do (
+    set WSL_INSTANCE=%%i
+    goto :found_instance
+)
+:found_instance
+if "%WSL_INSTANCE%"=="" set WSL_INSTANCE=kamiwaza
+
+echo [DEBUG] Using WSL instance: %WSL_INSTANCE%
+ 
 REM Check if restart flag exists
 set FLAG_FILE=%LOCALAPPDATA%\Kamiwaza\restart_required.flag
 echo [DEBUG] Checking for restart flag: %FLAG_FILE%
@@ -52,13 +63,13 @@ echo ===============================================
 echo.
 
 REM Start Kamiwaza in the dedicated WSL instance
-echo [INFO] Executing: wsl -d kamiwaza -- kamiwaza start
+echo [INFO] Executing: wsl -d %WSL_INSTANCE% -- kamiwaza start
 echo [INFO] Please wait while Kamiwaza initializes...
 echo [INFO] This may take several minutes for first startup
 echo.
 
 REM Run kamiwaza start and keep the window open
-wsl -d kamiwaza -- kamiwaza start
+wsl -d %WSL_INSTANCE% -- kamiwaza start
 
 REM Check exit code
 if %ERRORLEVEL% EQU 0 (

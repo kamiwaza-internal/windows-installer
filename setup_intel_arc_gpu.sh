@@ -49,16 +49,18 @@ check_user() {
 check_wsl2() {
     if ! grep -qi microsoft /proc/version; then
         error "This script is designed for WSL2. Please run on WSL2."
-        read -p "Press Enter to continue anyway..."
+        warn "Continuing anyway for debugging purposes..."
     fi
     
-    # Check kernel version
-    kernel_version=$(uname -r | cut -d. -f1,2)
-    if [[ $(echo "$kernel_version >= 5.15" | bc -l) -eq 0 ]]; then
-        warn "WSL2 kernel version is $kernel_version. Recommended: 5.15+. Consider updating WSL2."
-        read -p "Press Enter to continue..."
+    # Check kernel version without bc dependency
+    kernel_version=$(uname -r | cut -d- -f1)
+    major=$(echo "$kernel_version" | cut -d. -f1)
+    minor=$(echo "$kernel_version" | cut -d. -f2)
+    if [ "$major" -lt 5 ] || { [ "$major" -eq 5 ] && [ "$minor" -lt 15 ]; }; then
+        warn "WSL2 kernel version is ${major}.${minor}. Recommended: 5.15+. Consider updating WSL2."
+        warn "Continuing anyway for debugging purposes..."
     else
-        log "WSL2 kernel version: $kernel_version [OK]"
+        log "WSL2 kernel version: ${major}.${minor} [OK]"
     fi
 }
 
@@ -66,7 +68,7 @@ check_wsl2() {
 check_ubuntu_version() {
     if ! lsb_release -d | grep -q "Ubuntu 24.04"; then
         warn "This script is optimized for Ubuntu 24.04 (Noble). Your version: $(lsb_release -d | cut -f2)"
-        warn "Continuing with installation..."
+        warn "Continuing with installation for debugging purposes..."
     else
         log "Ubuntu 24.04 (Noble) detected [OK]"
     fi
@@ -83,6 +85,10 @@ request_reboot() {
     log "to properly initialize and become available to WSL2."
     echo
     
+    # Always show reboot instructions first
+    show_reboot_instructions
+    echo
+    
     # Check if we're in an interactive terminal
     if [ -t 0 ]; then
         echo -e "${YELLOW}Would you like to reboot your computer now?${NC}"
@@ -91,11 +97,11 @@ request_reboot() {
         echo -e "${BLUE}Options:${NC}"
         echo -e "  ${GREEN}y${NC} - Yes, reboot now (recommended)"
         echo -e "  ${GREEN}n${NC} - No, I'll reboot manually later"
-        echo -e "  ${GREEN}s${NC} - Show reboot instructions"
+        echo -e "  ${GREEN}d${NC} - Debug mode - keep terminal open"
         echo
         
         while true; do
-            read -p "Enter your choice (y/n/s): " choice
+            read -p "Enter your choice (y/n/d): " choice
             case $choice in
                 [Yy]* )
                     log "User chose to reboot now. Preparing system restart..."
@@ -138,12 +144,13 @@ request_reboot() {
                     log "Remember: GPU acceleration will not work until you restart your computer."
                     return 0
                     ;;
-                [Ss]* )
-                    show_reboot_instructions
+                [Dd]* )
+                    log "Debug mode selected. Terminal will remain open for debugging."
+                    log "You can manually run commands to troubleshoot any issues."
                     return 0
                     ;;
                 * )
-                    echo "Please enter y, n, or s."
+                    echo "Please enter y, n, or d."
                     ;;
             esac
         done
@@ -163,9 +170,9 @@ show_reboot_instructions() {
     log "To complete Intel Arc GPU setup, please restart your computer:"
     echo
     echo -e "${BLUE}Method 1: Windows Start Menu${NC}"
-echo "  1. Click the Windows Start button"
-echo "  2. Click the Power button (power icon)"
-echo "  3. Select 'Restart'"
+    echo "  1. Click the Windows Start button"
+    echo "  2. Click the Power button (power icon)"
+    echo "  3. Select 'Restart'"
     echo
     echo -e "${BLUE}Method 2: Windows Settings${NC}"
     echo "  1. Press Windows + I to open Settings"
@@ -184,7 +191,50 @@ echo "  3. Select 'Restart'"
     echo
     warn "IMPORTANT: After restart, wait for Windows to fully boot before starting WSL2"
     log "GPU acceleration will be available once the system has fully restarted."
+    log "Kamiwaza will start automatically after the restart is complete."
     echo
+}
+
+# Function to verify installation and show debugging info
+verify_installation() {
+    header "Installation Verification"
+    echo
+    log "Verifying Intel GPU driver installation..."
+    echo
+    
+    # Check if OpenCL packages are installed
+    log "Checking OpenCL packages..."
+    dpkg -l | grep -E "(ocl-icd|intel-opencl|libze)" | head -10
+    
+    echo
+    log "Checking Intel oneAPI packages..."
+    dpkg -l | grep -E "(intel-oneapi|intel-basekit)" | head -10
+    
+    echo
+    log "Checking OpenCL runtime..."
+    if command -v clinfo >/dev/null 2>&1; then
+        log "clinfo command found - testing OpenCL detection..."
+        echo "Running: clinfo | head -20"
+        clinfo | head -20
+    else
+        warn "clinfo command not found - OpenCL may not be properly installed"
+    fi
+    
+    echo
+    log "Checking Intel GPU device files..."
+    ls -la /dev/dri/ 2>/dev/null || warn "No /dev/dri directory found"
+    
+    echo
+    log "Checking user groups..."
+    groups $USER
+    
+    echo
+    log "Checking system logs for Intel GPU..."
+    dmesg | grep -i intel | tail -5 2>/dev/null || warn "No Intel GPU messages in dmesg"
+    
+    echo
+    log "Checking package installation status..."
+    apt list --installed | grep -E "(ocl-icd|intel-opencl|libze)" | head -10
 }
 
 # Prerequisites check
@@ -217,92 +267,214 @@ main() {
     warn "IMPORTANT: GPU acceleration requires a FULL SYSTEM REBOOT after installation!"
     log "This script will install Intel GPU drivers that need a system restart to activate."
     echo
-    echo -e "${YELLOW}Do you want to continue with the installation?${NC}"
-    echo -e "${YELLOW}You will need to reboot your computer after installation completes.${NC}"
-    echo
-    echo -e "${BLUE}Options:${NC}"
-    echo -e "  ${GREEN}y${NC} - Yes, continue with installation (will need reboot later)"
-    echo -e "  ${GREEN}n${NC} - No, exit script"
-    echo -e "  ${GREEN}s${NC} - Show reboot information"
-    echo
-    
-    while true; do
-        read -p "Enter your choice (y/n/s): " choice
-        case $choice in
-            [Yy]* )
-                log "User chose to continue with installation. Proceeding..."
-                echo
-                break
-                ;;
-            [Nn]* )
-                log "User chose to exit. Exiting script."
-                exit 0
-                ;;
-            [Ss]* )
-                show_reboot_instructions
-                echo
-                echo -e "${YELLOW}Do you want to continue with the installation now? (y/n):${NC}"
-                read -p "Enter your choice: " continue_choice
-                if [[ $continue_choice =~ ^[Yy]$ ]]; then
-                    log "User chose to continue after viewing instructions. Proceeding..."
+
+    if [ -t 0 ]; then
+        echo -e "${YELLOW}Do you want to continue with the installation?${NC}"
+        echo -e "${YELLOW}You will need to reboot your computer after installation completes.${NC}"
+        echo
+        echo -e "${BLUE}Options:${NC}"
+        echo -e "  ${GREEN}y${NC} - Yes, continue with installation (will need reboot later)"
+        echo -e "  ${GREEN}n${NC} - No, exit script"
+        echo -e "  ${GREEN}s${NC} - Show reboot information"
+        echo
+        while true; do
+            read -p "Enter your choice (y/n/s): " choice
+            case $choice in
+                [Yy]* )
+                    log "User chose to continue with installation. Proceeding..."
                     echo
                     break
-                else
+                    ;;
+                [Nn]* )
                     log "User chose to exit. Exiting script."
                     exit 0
-                fi
-                ;;
-            * )
-                echo "Please enter y, n, or s."
-                ;;
-        esac
-    done
+                    ;;
+                [Ss]* )
+                    show_reboot_instructions
+                    echo
+                    echo -e "${YELLOW}Do you want to continue with the installation now? (y/n):${NC}"
+                    read -p "Enter your choice: " continue_choice
+                    if [[ $continue_choice =~ ^[Yy]$ ]]; then
+                        log "User chose to continue after viewing instructions. Proceeding..."
+                        echo
+                        break
+                    else
+                        log "User chose to exit. Exiting script."
+                        exit 0
+                    fi
+                    ;;
+                * )
+                    echo "Please enter y, n, or s."
+                    ;;
+            esac
+        done
+    else
+        log "Non-interactive mode detected. Proceeding with installation without prompt."
+        echo
+    fi
     
     # Execute the exact commands as specified
     log "Executing required commands..."
     
+    # Track installation success
+    installation_success=true
+    
     # 1. Update system
     log "1. Updating system packages..."
-    sudo apt update && sudo apt upgrade -y
+    if sudo apt update && sudo apt upgrade -y; then
+        log "  [OK] System update completed"
+    else
+        warn "  [WARN] System update had issues - continuing anyway"
+        installation_success=false
+    fi
     
     # 2. Clean previous installations (optional)
     log "2. Cleaning previous installations..."
     sudo apt-get purge -y intel-opencl-icd 2>/dev/null || true
     sudo apt-get autoremove -y
     sudo apt-get clean
+    log "  [OK] Cleanup completed"
     
     # 3. Install OpenCL loader and tools
     log "3. Installing OpenCL loader and tools..."
-    sudo apt-get update
-    sudo apt-get install -y ocl-icd-libopencl1 ocl-icd-opencl-dev opencl-headers clinfo
+    if sudo apt-get update && sudo apt-get install -y ocl-icd-libopencl1 ocl-icd-opencl-dev opencl-headers clinfo; then
+        log "  [OK] OpenCL loader and tools installed"
+    else
+        error "  [ERROR] Failed to install OpenCL loader and tools"
+        installation_success=false
+    fi
     
     # 4. Add Intel Graphics PPA and install OpenCL runtime
     log "4. Adding Intel Graphics PPA and installing OpenCL runtime..."
-    sudo apt-get install -y software-properties-common
-    sudo add-apt-repository -y ppa:kobuk-team/intel-graphics
-    sudo apt-get update
-    sudo apt-get install -y libze-intel-gpu1 libze1 intel-opencl-icd
+    if sudo apt-get install -y software-properties-common && \
+       sudo add-apt-repository -y ppa:kobuk-team/intel-graphics && \
+       sudo apt-get update && \
+       sudo apt-get install -y libze-intel-gpu1 libze1 intel-opencl-icd; then
+        log "  [OK] Intel Graphics PPA and OpenCL runtime installed"
+    else
+        error "  [ERROR] Failed to install Intel Graphics PPA and OpenCL runtime"
+        installation_success=false
+    fi
     
-    # 5. Configure permissions
-    log "5. Configuring permissions..."
-    sudo usermod -a -G render $USER
-    newgrp render
+    # 5. Install Intel oneAPI for SYCL Support (Recommended for Best Performance)
+    log "5. Installing Intel oneAPI for SYCL support..."
+    if sudo apt-get install -y wget gpg; then
+        log "  [OK] Prerequisites for oneAPI installation"
+        
+        # Add Intel's GPG key
+        if wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
+           gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-keyring.gpg > /dev/null; then
+            log "  [OK] Intel GPG key added"
+            
+            # Add the oneAPI repository
+            if echo "deb [signed-by=/usr/share/keyrings/oneapi-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | \
+               sudo tee /etc/apt/sources.list.d/oneAPI.list; then
+                log "  [OK] oneAPI repository added"
+                
+                # Update and install Intel oneAPI
+                if sudo apt update && sudo apt install -y intel-basekit; then
+                    log "  [OK] Intel oneAPI basekit installed"
+                else
+                    warn "  [WARN] Intel oneAPI installation had issues - continuing anyway"
+                    installation_success=false
+                fi
+            else
+                warn "  [WARN] Failed to add oneAPI repository - continuing anyway"
+                installation_success=false
+            fi
+        else
+            warn "  [WARN] Failed to add Intel GPG key - continuing anyway"
+            installation_success=false
+        fi
+    else
+        warn "  [WARN] Failed to install oneAPI prerequisites - continuing anyway"
+        installation_success=false
+    fi
+    
+    # 6. Configure permissions
+    log "6. Configuring permissions..."
+    if sudo usermod -a -G render $USER; then
+        log "  [OK] User added to render group"
+        # Note: newgrp render won't work in this context, but the group change will take effect after restart
+        log "  [INFO] Group membership will take effect after restart or newgrp command"
+    else
+        warn "  [WARN] Failed to add user to render group - continuing anyway"
+    fi
     
     echo
-    log "Setup completed successfully! [SUCCESS]"
-    log "All required commands have been executed."
+    if [ "$installation_success" = true ]; then
+        log "Setup completed successfully! [SUCCESS]"
+        log "All required commands have been executed."
+    else
+        warn "Setup completed with warnings. Some components may not have installed properly."
+        log "Please review the output above for any error messages."
+    fi
     echo
     
-    # Request system reboot
-    request_reboot
+    # Always verify installation
+    verify_installation
+    echo
+    
+    # Set up Windows autostart for Kamiwaza after reboot
+    log "Setting up Windows autostart for Kamiwaza..."
+    if command -v powershell.exe >/dev/null 2>&1; then
+        log "Creating restart flag file and setting up autostart..."
+        
+        # Create the restart flag file that Windows autostart script looks for
+        powershell.exe -Command "
+            \$flagDir = \"$env:LOCALAPPDATA\\Kamiwaza\"
+            if (!(Test-Path \$flagDir)) { New-Item -ItemType Directory -Path \$flagDir -Force | Out-Null }
+            \$flagFile = \"\$flagDir\\restart_required.flag\"
+            Set-Content -Path \$flagFile -Value \"GPU setup completed - Kamiwaza should start automatically after restart\"
+            Write-Host \"Restart flag created: \$flagFile\"
+            
+            # Set up Task Scheduler to run kamiwaza_autostart.bat after reboot
+            \$scriptPath = \"$PWD/kamiwaza_autostart.bat\"
+            if (Test-Path \$scriptPath) {
+                \$action = New-ScheduledTaskAction -Execute \$scriptPath
+                \$trigger = New-ScheduledTaskTrigger -AtStartup
+                \$principal = New-ScheduledTaskPrincipal -UserId \"$env:USERNAME\" -LogonType Interactive -RunLevel Highest
+                \$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+                
+                Register-ScheduledTask -TaskName \"Kamiwaza GPU Autostart\" -Action \$action -Trigger \$trigger -Principal \$principal -Settings \$settings -Force | Out-Null
+                Write-Host \"Task Scheduler entry created for Kamiwaza autostart\"
+            } else {
+                Write-Host \"Warning: kamiwaza_autostart.bat not found at \$scriptPath\"
+            }
+        "
+        
+        if [ $? -eq 0 ]; then
+            log "  [OK] Windows autostart configured for Kamiwaza"
+        else
+            warn "  [WARN] Windows autostart configuration had issues - continuing anyway"
+        fi
+    else
+        warn "  [WARN] PowerShell not available - cannot configure Windows autostart"
+        log "  [INFO] You will need to start Kamiwaza manually after restart"
+    fi
+    
+    echo
+    log "IMPORTANT: After restart, Kamiwaza will start automatically with GPU acceleration!"
+    log "The autostart script will run and execute: wsl -d kamiwaza -- kamiwaza start"
+    echo
+    
+    # MSI installer will handle the reboot - just inform user
+    log "GPU setup completed successfully!"
+    log "The MSI installer will now prompt for a system restart to activate GPU drivers."
+    log "After restart, Kamiwaza will start automatically with GPU acceleration ready."
     
     echo
     log "=== Intel Arc GPU Setup Complete ==="
     log "Next steps:"
-    log "1. Restart your computer (if not done automatically)"
-    log "2. After restart, verify GPU support with: clinfo"
-    log "3. Test OpenCL with: python3 -c \"import pyopencl; print('OpenCL available')\""
+    log "1. MSI installer will prompt for system restart"
+    log "2. After restart, Kamiwaza will start automatically with GPU acceleration"
+    log "3. Verify GPU support with: clinfo"
+    log "4. Test OpenCL with: python3 -c \"import pyopencl; print('OpenCL available')\""
+    log "5. Verify oneAPI installation: dpkg -l | grep oneapi"
     echo
+    
+    # Script completed successfully - exit cleanly
+    log "Script completed successfully. Exiting..."
 }
 
 # Run main function

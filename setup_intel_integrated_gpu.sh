@@ -49,7 +49,7 @@ check_user() {
 check_wsl2() {
     if ! grep -qi microsoft /proc/version; then
         error "This script is designed for WSL2. Please run on WSL2."
-        read -p "Press Enter to continue anyway..."
+        warn "Continuing anyway for debugging purposes..."
     fi
     log "WSL2 environment detected [OK]"
 }
@@ -58,7 +58,7 @@ check_wsl2() {
 check_ubuntu_version() {
     if ! lsb_release -d | grep -q "Ubuntu 24.04"; then
         warn "This script is optimized for Ubuntu 24.04. Your version: $(lsb_release -d | cut -f2)"
-        warn "Continuing with installation..."
+        warn "Continuing with installation for debugging purposes..."
     else
         log "Ubuntu 24.04 detected [OK]"
     fi
@@ -232,6 +232,10 @@ request_reboot() {
     log "to properly initialize and become available to WSL2."
     echo
     
+    # Always show reboot instructions first
+    show_reboot_instructions
+    echo
+    
     # Check if we're in an interactive terminal
     if [ -t 0 ]; then
         echo -e "${YELLOW}Would you like to reboot your computer now?${NC}"
@@ -240,11 +244,11 @@ request_reboot() {
         echo -e "${BLUE}Options:${NC}"
         echo -e "  ${GREEN}y${NC} - Yes, reboot now (recommended)"
         echo -e "  ${GREEN}n${NC} - No, I'll reboot manually later"
-        echo -e "  ${GREEN}s${NC} - Show reboot instructions"
+        echo -e "  ${GREEN}d${NC} - Debug mode - keep terminal open"
         echo
         
         while true; do
-            read -p "Enter your choice (y/n/s): " choice
+            read -p "Enter your choice (y/n/d): " choice
             case $choice in
                 [Yy]* )
                     log "User chose to reboot now. Preparing system restart..."
@@ -287,12 +291,13 @@ request_reboot() {
                     log "Remember: GPU acceleration will not work until you restart your computer."
                     return 0
                     ;;
-                [Ss]* )
-                    show_reboot_instructions
+                [Dd]* )
+                    log "Debug mode selected. Terminal will remain open for debugging."
+                    log "You can manually run commands to troubleshoot any issues."
                     return 0
                     ;;
                 * )
-                    echo "Please enter y, n, or s."
+                    echo "Please enter y, n, or d."
                     ;;
             esac
         done
@@ -312,9 +317,9 @@ show_reboot_instructions() {
     log "To complete Intel integrated graphics setup, please restart your computer:"
     echo
     echo -e "${BLUE}Method 1: Windows Start Menu${NC}"
-echo "  1. Click the Windows Start button"
-echo "  2. Click the Power button (power icon)"
-echo "  3. Select 'Restart'"
+    echo "  1. Click the Windows Start button"
+    echo "  2. Click the Power button (power icon)"
+    echo "  3. Select 'Restart'"
     echo
     echo -e "${BLUE}Method 2: Windows Settings${NC}"
     echo "  1. Press Windows + I to open Settings"
@@ -336,6 +341,54 @@ echo "  3. Select 'Restart'"
     echo
 }
 
+# Function to verify installation and show debugging info
+verify_installation() {
+    header "Installation Verification"
+    echo
+    log "Verifying Intel integrated graphics driver installation..."
+    echo
+    
+    # Check if Intel packages are installed
+    log "Checking Intel packages..."
+    dpkg -l | grep -E "(intel|va-driver|libmfx|libvpl)" | head -10
+    
+    echo
+    log "Checking Intel GPU detection..."
+    if command -v vainfo >/dev/null 2>&1; then
+        log "vainfo command found - testing Intel GPU detection..."
+        echo "Running: vainfo | head -20"
+        vainfo | head -20 2>/dev/null || warn "vainfo failed to detect Intel GPU"
+    else
+        warn "vainfo command not found - Intel drivers may not be properly installed"
+    fi
+    
+    echo
+    log "Checking OpenCL support..."
+    if command -v clinfo >/dev/null 2>&1; then
+        log "clinfo command found - testing OpenCL detection..."
+        echo "Running: clinfo | grep -i intel | head -10"
+        clinfo | grep -i intel | head -10 2>/dev/null || warn "No Intel OpenCL platforms detected"
+    else
+        warn "clinfo command not found - OpenCL may not be properly installed"
+    fi
+    
+    echo
+    log "Checking Intel device files..."
+    ls -la /dev/dri/ 2>/dev/null || warn "No /dev/dri directory found"
+    
+    echo
+    log "Checking user groups..."
+    groups $USER
+    
+    echo
+    log "Checking system logs for Intel GPU..."
+    dmesg | grep -i intel | tail -5 2>/dev/null || warn "No Intel GPU messages in dmesg"
+    
+    echo
+    log "Checking package installation status..."
+    apt list --installed | grep -E "(intel|va-driver|libmfx|libvpl)" | head -10
+}
+
 # Main execution
 main() {
     header "Intel Integrated Graphics Setup for WSL2"
@@ -343,17 +396,186 @@ main() {
     echo
     
     check_prerequisites
-    update_system
-    install_intel_drivers
-    install_opencl_tools
-    configure_environment
-    configure_permissions
-    verify_installation
-    final_instructions
+    
+    # Ask user about rebooting before proceeding
+    header "Pre-Installation Reboot Check"
+    echo
+    warn "IMPORTANT: GPU acceleration requires a FULL SYSTEM REBOOT after installation!"
+    log "This script will install Intel integrated graphics drivers that need a system restart to activate."
+    echo
+    echo -e "${YELLOW}Do you want to continue with the installation?${NC}"
+    echo -e "${YELLOW}You will need to reboot your computer after installation completes.${NC}"
+    echo
+    echo -e "${BLUE}Options:${NC}"
+    echo -e "  ${GREEN}y${NC} - Yes, continue with installation (will need reboot later)"
+    echo -e "  ${GREEN}n${NC} - No, exit script"
+    echo -e "  ${GREEN}s${NC} - Show reboot information"
+    echo
+    
+    while true; do
+        read -p "Enter your choice (y/n/s): " choice
+        case $choice in
+            [Yy]* )
+                log "User chose to continue with installation. Proceeding..."
+                echo
+                break
+                ;;
+            [Nn]* )
+                log "User chose to exit. Exiting script."
+                exit 0
+                ;;
+            [Ss]* )
+                show_reboot_instructions
+                echo
+                echo -e "${YELLOW}Do you want to continue with the installation now? (y/n):${NC}"
+                read -p "Enter your choice: " continue_choice
+                if [[ $continue_choice =~ ^[Yy]$ ]]; then
+                    log "User chose to continue after viewing instructions. Proceeding..."
+                    echo
+                    break
+                else
+                    log "User chose to exit. Exiting script."
+                    exit 0
+                fi
+                ;;
+            * )
+                echo "Please enter y, n, or s."
+                ;;
+        esac
+    done
+    
+    # Track installation success
+    installation_success=true
+    
+    # Update system
+    header "Updating System"
+    log "Updating package lists and upgrading system..."
+    if sudo apt update && sudo apt upgrade -y; then
+        log "System update completed [OK]"
+    else
+        warn "System update had issues - continuing anyway"
+        installation_success=false
+    fi
+    
+    # Install Intel integrated graphics drivers
+    header "Installing Intel Integrated Graphics Drivers"
+    log "Installing Intel media drivers and OpenCL support..."
+    
+    if sudo apt install -y intel-media-va-driver-non-free intel-opencl-icd vainfo libmfx-gen1 libvpl2 libvpl-tools libva-glx2 va-driver-all; then
+        log "Intel integrated graphics drivers installed [OK]"
+    else
+        error "Failed to install Intel integrated graphics drivers"
+        installation_success=false
+    fi
+    
+    # Install OpenCL tools
+    header "Installing OpenCL Tools"
+    log "Installing OpenCL development tools..."
+    
+    if sudo apt install -y ocl-icd-libopencl1 ocl-icd-opencl-dev opencl-headers clinfo; then
+        log "OpenCL tools installed [OK]"
+    else
+        error "Failed to install OpenCL tools"
+        installation_success=false
+    fi
+    
+    # Configure environment
+    header "Configuring Environment"
+    log "Setting up environment variables for Intel graphics..."
+    
+    # Add Intel graphics environment variables
+    if echo 'export LIBVA_DRIVER_NAME=iHD' >> ~/.bashrc && \
+       echo 'export VDPAU_DRIVER=va_gl' >> ~/.bashrc; then
+        log "Environment variables configured [OK]"
+        source ~/.bashrc
+    else
+        warn "Failed to configure environment variables - continuing anyway"
+    fi
+    
+    # Configure permissions
+    header "Configuring Permissions"
+    log "Setting up user permissions for Intel graphics..."
+    
+    if sudo usermod -a -G video $USER; then
+        log "User added to video group [OK]"
+    else
+        warn "Failed to add user to video group - continuing anyway"
+    fi
     
     echo
-    log "Setup completed successfully! [SUCCESS]"
+    if [ "$installation_success" = true ]; then
+        log "Setup completed successfully! [SUCCESS]"
+        log "All required commands have been executed."
+    else
+        warn "Setup completed with warnings. Some components may not have installed properly."
+        log "Please review the output above for any error messages."
+    fi
+    echo
+    
+    # Always verify installation
+    verify_installation
+    echo
+    
+    # Always request system reboot
+    request_reboot
+    
+    echo
+    log "=== Intel Integrated Graphics Setup Complete ==="
+    log "Next steps:"
+    log "1. Restart your computer (if not done automatically)"
+    log "2. After restart, verify GPU support with: vainfo"
+    log "3. Test OpenCL with: clinfo"
+    echo
+    
+    # Final user interaction - keep terminal open for debugging
+    header "Debug Mode - Terminal Will Remain Open"
+    echo
+    log "This terminal will remain open for debugging purposes."
+    log "You can run additional commands to troubleshoot any issues."
+    echo
+    log "Useful debugging commands:"
+    echo "  - vainfo                      # Check Intel VA-API drivers"
+    echo "  - clinfo                      # Check OpenCL platforms and devices"
+    echo "  - dpkg -l | grep intel        # Check installed Intel packages"
+    echo "  - ls -la /dev/dri/            # Check GPU device files"
+    echo "  - groups                      # Check user groups"
+    echo "  - dmesg | grep -i intel       # Check kernel messages for Intel GPU"
+    echo
+    log "To close this terminal, type 'exit' or press Ctrl+D"
+    echo
+    
+    # Keep the terminal open indefinitely
+    while true; do
+        echo -e "${BLUE}Debug shell ready. Type 'exit' to close or run commands:${NC}"
+        if [ -t 0 ]; then
+            # Interactive mode - provide a simple command prompt
+            read -p "kamiwaza@intel-integrated-debug:~$ " debug_cmd
+            if [ "$debug_cmd" = "exit" ]; then
+                log "Exiting debug mode..."
+                break
+            elif [ -n "$debug_cmd" ]; then
+                log "Executing: $debug_cmd"
+                eval "$debug_cmd"
+                echo
+            fi
+        else
+            # Non-interactive mode - just wait
+            log "Non-interactive mode - terminal will remain open for 60 seconds"
+            sleep 60
+            break
+        fi
+    done
+    
+    log "Debug mode ended. Terminal closing."
 }
+
+# Error handling - ensure script doesn't exit unexpectedly
+trap 'echo -e "\n${RED}[ERROR] Script interrupted. Terminal will remain open for debugging.${NC}"; echo "Type 'exit' to close or run commands manually."; exec bash' INT TERM
 
 # Run main function
 main "$@"
+
+# If we somehow get here, keep the terminal open
+echo -e "\n${YELLOW}[WARN] Script completed but terminal will remain open for debugging.${NC}"
+echo "Type 'exit' to close or run commands manually."
+exec bash

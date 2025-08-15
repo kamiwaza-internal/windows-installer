@@ -441,6 +441,85 @@ class HardwareDetector:
         
         self.log("=== HARDWARE CONFIGURATION COMPLETE ===")
         return self.detected_hardware
+    
+    def detect_gpu_hardware(self):
+        """Detect GPU hardware and return detection results for the installer"""
+        try:
+            import subprocess
+            import platform
+            
+            # Default results
+            results = {
+                'gpu_acceleration': 'CPU_ONLY',
+                'nvidia_rtx_detected': False,
+                'intel_arc_detected': False,
+                'intel_integrated_detected': False,
+                'nvidia_gpu_name': '',
+                'intel_gpu_name': ''
+            }
+            
+            # Try to detect GPUs using PowerShell (Windows-specific)
+            if platform.system() == "Windows":
+                try:
+                    # Run PowerShell GPU detection
+                    ps_cmd = [
+                        'powershell.exe', '-Command',
+                        'Get-CimInstance Win32_VideoController | Select-Object Name, AdapterCompatibility | ConvertTo-Json'
+                    ]
+                    
+                    result = subprocess.run(ps_cmd, capture_output=True, text=True, timeout=30)
+                    
+                    if result.returncode == 0 and result.stdout.strip():
+                        import json
+                        gpus = json.loads(result.stdout)
+                        
+                        # Handle single GPU vs multiple GPUs
+                        if not isinstance(gpus, list):
+                            gpus = [gpus]
+                        
+                        for gpu in gpus:
+                            gpu_name = gpu.get('Name', '').lower()
+                            
+                            # Check for NVIDIA RTX
+                            if 'nvidia' in gpu_name and 'rtx' in gpu_name:
+                                results['nvidia_rtx_detected'] = True
+                                results['nvidia_gpu_name'] = gpu.get('Name', 'NVIDIA RTX GPU')
+                                results['gpu_acceleration'] = 'NVIDIA_RTX'
+                                
+                            # Check for Intel Arc
+                            elif 'intel' in gpu_name and 'arc' in gpu_name:
+                                results['intel_arc_detected'] = True
+                                results['intel_gpu_name'] = gpu.get('Name', 'Intel Arc GPU')
+                                results['gpu_acceleration'] = 'INTEL_ARC'
+                                
+                            # Check for Intel integrated graphics
+                            elif 'intel' in gpu_name and any(x in gpu_name for x in ['uhd', 'iris', 'hd graphics']):
+                                results['intel_integrated_detected'] = True
+                                results['intel_gpu_name'] = gpu.get('Name', 'Intel Integrated Graphics')
+                                if results['gpu_acceleration'] == 'CPU_ONLY':
+                                    results['gpu_acceleration'] = 'INTEL_INTEGRATED'
+                        
+                        # If we found any GPU, update acceleration type
+                        if any([results['nvidia_rtx_detected'], results['intel_arc_detected'], results['intel_integrated_detected']):
+                            if results['gpu_acceleration'] == 'CPU_ONLY':
+                                results['gpu_acceleration'] = 'GPU_ACCELERATED'
+                                
+                except Exception as e:
+                    self.log(f"PowerShell GPU detection failed: {e}")
+            
+            return results
+            
+        except Exception as e:
+            self.log(f"GPU detection failed: {e}")
+            # Return default CPU-only results
+            return {
+                'gpu_acceleration': 'CPU_ONLY',
+                'nvidia_rtx_detected': False,
+                'intel_arc_detected': False,
+                'intel_integrated_detected': False,
+                'nvidia_gpu_name': '',
+                'intel_gpu_name': ''
+            }
 
 
 # Example usage for testing
@@ -457,3 +536,9 @@ if __name__ == "__main__":
     print("- get_arm_gpu_support_commands()")
     print("- get_vendor_specific_optimizations(wsl_cmd)")
     print("- detect_and_configure_hardware(wsl_cmd, run_command_func)")
+    print("- detect_gpu_hardware() - NEW: Detects GPU hardware for installer")
+    
+    # Test GPU detection
+    print("\nTesting GPU detection...")
+    gpu_results = detector.detect_gpu_hardware()
+    print(f"GPU detection results: {gpu_results}")

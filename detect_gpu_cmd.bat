@@ -102,5 +102,7 @@ echo [INFO] GPU detection completed successfully
 echo [INFO] Results will be used during Kamiwaza platform installation
 echo.
 
-REM Exit with success
-exit /b 0
+echo ===============================================
+echo GPU Detection Complete - Press any key to continue...
+echo ===============================================
+pause >nul

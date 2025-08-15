@@ -6,3 +6,6 @@ echo [DEBUG] Arguments: %* >> "%TEMP%\kamiwaza_debug.log"
 echo [DEBUG] LOCALAPPDATA: %LOCALAPPDATA% >> "%TEMP%\kamiwaza_debug.log"
 echo [DEBUG] Test completed successfully >> "%TEMP%\kamiwaza_debug.log"
 echo Test batch executed - check %TEMP%\kamiwaza_debug.log
+echo.
+echo [DEBUG] Script completed. Press any key to close...
+pause >nul

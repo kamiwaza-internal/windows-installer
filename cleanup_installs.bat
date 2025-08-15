@@ -33,4 +33,6 @@ wsl --unregister kamiwaza 2>nul
 
 echo.
 echo Cleanup completed!
-REM pause 
+echo.
+echo [DEBUG] Script completed. Press any key to close...
+pause >nul 

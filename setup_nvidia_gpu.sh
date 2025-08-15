@@ -348,10 +348,178 @@ check_prerequisites() {
     echo
 }
 
-# Main execution following the exact order specified
+# Function to request and execute system reboot
+request_reboot() {
+    header "System Reboot Required"
+    echo
+    warn "IMPORTANT: GPU acceleration requires a FULL SYSTEM REBOOT!"
+    log "Please reboot your entire Windows system (not just WSL2) to activate GPU support."
+    echo
+    log "The NVIDIA GPU drivers have been installed, but they need a full system restart"
+    log "to properly initialize and become available to WSL2."
+    echo
+    
+    # Always show reboot instructions first
+    show_reboot_instructions
+    echo
+    
+    # Check if we're in an interactive terminal
+    if [ -t 0 ]; then
+        echo -e "${YELLOW}Would you like to reboot your computer now?${NC}"
+        echo -e "${YELLOW}This will restart your ENTIRE Windows system, not just WSL2.${NC}"
+        echo
+        echo -e "${BLUE}Options:${NC}"
+        echo -e "  ${GREEN}y${NC} - Yes, reboot now (recommended)"
+        echo -e "  ${GREEN}n${NC} - No, I'll reboot manually later"
+        echo -e "  ${GREEN}d${NC} - Debug mode - keep terminal open"
+        echo
+        
+        while true; do
+            read -p "Enter your choice (y/n/d): " choice
+            case $choice in
+                [Yy]* )
+                    log "User chose to reboot now. Preparing system restart..."
+                    echo
+                    warn "WARNING: Your computer will restart in 10 seconds!"
+                    warn "Save any unsaved work immediately!"
+                    echo
+                    
+                    # Countdown for user safety
+                    for i in {10..1}; do
+                        echo -e "${RED}Restarting in $i seconds... (Press Ctrl+C to cancel)${NC}"
+                        sleep 1
+                    done
+                    
+                    echo
+                    log "Executing system restart..."
+                    
+                    # Try multiple methods to reboot the Windows system
+                    # Method 1: Use WSL's Windows integration with PowerShell
+                    if command -v powershell.exe >/dev/null 2>&1; then
+                        log "Using PowerShell to restart Windows..."
+                        powershell.exe -Command "Restart-Computer -Force"
+                    # Method 2: Use Windows shutdown command through WSL
+                    elif command -v cmd.exe >/dev/null 2>&1; then
+                        log "Using Windows shutdown command..."
+                        cmd.exe /c "shutdown /r /t 0"
+                    # Method 3: Use WSL's Windows integration with shutdown
+                    else
+                        log "Using WSL Windows integration..."
+                        /mnt/c/Windows/System32/shutdown.exe /r /t 0
+                    fi
+                    
+                    # If we get here, the reboot command failed
+                    error "Failed to execute system restart command"
+                    log "Please restart your computer manually to complete GPU setup"
+                    return 1
+                    ;;
+                [Nn]* )
+                    log "Reboot skipped. You can restart manually later."
+                    log "Remember: GPU acceleration will not work until you restart your computer."
+                    return 0
+                    ;;
+                [Dd]* )
+                    log "Debug mode selected. Terminal will remain open for debugging."
+                    log "You can manually run commands to troubleshoot any issues."
+                    return 0
+                    ;;
+                * )
+                    echo "Please enter y, n, or d."
+                    ;;
+            esac
+        done
+    else
+        # Non-interactive mode
+        warn "Non-interactive mode detected - cannot prompt for reboot"
+        log "Please restart your computer manually to complete GPU setup"
+        show_reboot_instructions
+        return 0
+    fi
+}
+
+# Function to show reboot instructions
+show_reboot_instructions() {
+    header "Manual Reboot Instructions"
+    echo
+    log "To complete NVIDIA GPU setup, please restart your computer:"
+    echo
+    echo -e "${BLUE}Method 1: Windows Start Menu${NC}"
+    echo "  1. Click the Windows Start button"
+    echo "  2. Click the Power button (power icon)"
+    echo "  3. Select 'Restart'"
+    echo
+    echo -e "${BLUE}Method 2: Windows Settings${NC}"
+    echo "  1. Press Windows + I to open Settings"
+    echo "  2. Go to System > Recovery"
+    echo "  3. Click 'Restart now' under Advanced startup"
+    echo
+    echo -e "${BLUE}Method 3: Command Prompt (as Administrator)${NC}"
+    echo "  1. Press Windows + X and select 'Windows Terminal (Admin)'"
+    echo "  2. Type: shutdown /r /t 0"
+    echo "  3. Press Enter"
+    echo
+    echo -e "${BLUE}Method 4: PowerShell (as Administrator)${NC}"
+    echo "  1. Press Windows + X and select 'Windows PowerShell (Admin)'"
+    echo "  2. Type: Restart-Computer -Force"
+    echo "  3. Press Enter"
+    echo
+    warn "IMPORTANT: After restart, wait for Windows to fully boot before starting WSL2"
+    log "GPU acceleration will be available once the system has fully restarted."
+    echo
+}
+
+# Function to verify installation and show debugging info
+verify_installation() {
+    header "Installation Verification"
+    echo
+    log "Verifying NVIDIA GPU driver installation..."
+    echo
+    
+    # Check if NVIDIA packages are installed
+    log "Checking NVIDIA packages..."
+    dpkg -l | grep -E "(nvidia|cuda)" | head -10
+    
+    echo
+    log "Checking NVIDIA GPU detection..."
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        log "nvidia-smi command found - testing GPU detection..."
+        echo "Running: nvidia-smi --query-gpu=name,driver_version --format=csv,noheader"
+        nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null || warn "nvidia-smi failed to detect GPU"
+    else
+        warn "nvidia-smi command not found - NVIDIA drivers may not be properly installed"
+    fi
+    
+    echo
+    log "Checking NVIDIA device files..."
+    ls -la /dev/nvidia* 2>/dev/null || warn "No NVIDIA device files found"
+    
+    echo
+    log "Checking user groups..."
+    groups $USER
+    
+    echo
+    log "Checking system logs for NVIDIA GPU..."
+    dmesg | grep -i nvidia | tail -5 2>/dev/null || warn "No NVIDIA GPU messages in dmesg"
+    
+    echo
+    log "Checking package installation status..."
+    apt list --installed | grep -E "(nvidia|cuda)" | head -10
+    
+    echo
+    log "Checking CUDA availability..."
+    if command -v nvcc >/dev/null 2>&1; then
+        log "CUDA compiler found - checking version..."
+        nvcc --version 2>/dev/null || warn "nvcc version check failed"
+    else
+        warn "CUDA compiler not found - CUDA may not be properly installed"
+    fi
+}
+
+# Main execution
 main() {
-    header "NVIDIA GPU Setup for WSL2"
-    log "Setting up NVIDIA GeForce RTX GPU support on WSL2 Ubuntu 24.04 (Noble)"
+    header "NVIDIA GPU CUDA Setup for WSL2"
+    log "Setting up CUDA support for NVIDIA RTX GPU on WSL2 Ubuntu 24.04 (Noble)"
+    log "Using NVIDIA's official CUDA repository for Ubuntu 24.04"
     echo
     
     check_prerequisites
@@ -403,427 +571,133 @@ main() {
         esac
     done
     
-    # Detect GPU and configure accordingly
-    detect_gpu
+    # Execute the exact commands as specified
+    log "Executing required commands..."
     
-    # Step 1: Update package lists
-    header "Step 1: Updating Package Lists"
-    log "Running: sudo apt update"
-    sudo apt update
+    # Track installation success
+    installation_success=true
     
-    # Step 2: Install nvidia-utils based on GPU type
-    header "Step 2: Installing nvidia-utils-$DRIVER_VERSION"
-    log "Installing nvidia-utils-$DRIVER_VERSION for $GPU_TYPE"
-    log "Running: sudo apt install nvidia-utils-$DRIVER_VERSION"
-    sudo apt install nvidia-utils-$DRIVER_VERSION
-    
-    # Step 2.1: Ensure nvidia-smi is accessible to all users
-    header "Step 2.1: Configuring nvidia-smi for All Users"
-    log "Setting up nvidia-smi accessibility for all users..."
-    
-    # Check if nvidia-smi exists and get its location
-    NVIDIA_SMI_PATH=$(which nvidia-smi 2>/dev/null)
-    if [ -z "$NVIDIA_SMI_PATH" ]; then
-        # Try common locations
-        for path in /usr/bin/nvidia-smi /usr/local/bin/nvidia-smi /opt/nvidia/bin/nvidia-smi; do
-            if [ -f "$path" ]; then
-                NVIDIA_SMI_PATH="$path"
-                break
-            fi
-        done
-    fi
-    
-    if [ -n "$NVIDIA_SMI_PATH" ]; then
-        log "Found nvidia-smi at: $NVIDIA_SMI_PATH"
-        
-        # Ensure it's executable by all users
-        sudo chmod 755 "$NVIDIA_SMI_PATH"
-        log "Set executable permissions on nvidia-smi"
-        
-        # Create symbolic link in /usr/local/bin if not already there
-        if [ "$NVIDIA_SMI_PATH" != "/usr/local/bin/nvidia-smi" ]; then
-            sudo ln -sf "$NVIDIA_SMI_PATH" /usr/local/bin/nvidia-smi
-            log "Created symbolic link in /usr/local/bin"
-        fi
-        
-        # Add /usr/local/bin to PATH for all users if not already present
-        if ! grep -q "/usr/local/bin" /etc/environment; then
-            echo 'PATH="/usr/local/bin:$PATH"' | sudo tee -a /etc/environment
-            log "Added /usr/local/bin to system PATH"
-        fi
-        
-        # Create a wrapper script for better user access
-        sudo tee /usr/local/bin/nvidia-smi-wrapper > /dev/null << 'EOF'
-#!/bin/bash
-# Wrapper script for nvidia-smi to ensure proper access
-export PATH="/usr/local/bin:$PATH"
-
-# Check if running as root or with sudo
-if [ "$EUID" -eq 0 ]; then
-    exec nvidia-smi "$@"
-else
-    # Try to run with sudo if not root
-    if command -v sudo >/dev/null 2>&1; then
-        exec sudo nvidia-smi "$@"
+    # 1. Update system
+    log "1. Updating system packages..."
+    if sudo apt update && sudo apt upgrade -y; then
+        log "  [OK] System update completed"
     else
-        exec nvidia-smi "$@"
+        warn "  [WARN] System update had issues - continuing anyway"
+        installation_success=false
     fi
-fi
-EOF
-        
-        sudo chmod 755 /usr/local/bin/nvidia-smi-wrapper
-        log "Created nvidia-smi wrapper script"
-        
-        # Test nvidia-smi accessibility
-        log "Testing nvidia-smi accessibility..."
-        if timeout 10s nvidia-smi --query-gpu=name --format=csv,noheader >/dev/null 2>&1; then
-            success "nvidia-smi is accessible and working!"
-        else
-            warn "nvidia-smi may require sudo access. Testing with sudo..."
-            if timeout 10s sudo nvidia-smi --query-gpu=name --format=csv,noheader >/dev/null 2>&1; then
-                success "nvidia-smi works with sudo access"
-            else
-                error "nvidia-smi is not working properly"
-            fi
-        fi
-        
+    
+    # 2. Clean previous installations (optional)
+    log "2. Cleaning previous installations..."
+    sudo apt-get purge -y nvidia-* cuda-* 2>/dev/null || true
+    sudo apt-get autoremove -y
+    sudo apt-get clean
+    log "  [OK] Cleanup completed"
+    
+    # 3. Install CUDA repository and key
+    log "3. Installing CUDA repository and key..."
+    if sudo apt-get install -y wget gpg && \
+       wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb && \
+       sudo dpkg -i cuda-keyring_1.1-1_all.deb && \
+       sudo apt-get update; then
+        log "  [OK] CUDA repository and key installed"
     else
-        error "Could not locate nvidia-smi after installation"
-        warn "Continuing with installation..."
+        error "  [ERROR] Failed to install CUDA repository and key"
+        installation_success=false
     fi
     
-    # Step 3: Install PyTorch with CUDA support (optimized for RTX 5080/5090)
-    header "Step 3: Installing PyTorch with CUDA Support"
-    log "Installing PyTorch with CUDA $CUDA_VERSION support for $GPU_TYPE"
-    log "Running: pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/$PYTORCH_CUDA"
-    pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/$PYTORCH_CUDA
-    
-    # Step 4: Get platform architecture
-    header "Step 4: Detecting Platform Architecture"
-    PLATFORM=$(dpkg --print-architecture)
-    echo "Platform: $PLATFORM"
-    
-    # Step 5: Add NVIDIA container toolkit repository
-    header "Step 5: Adding NVIDIA Container Toolkit Repository"
-    log "Adding NVIDIA GPG key..."
-    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-    
-    log "Adding NVIDIA container toolkit repository..."
-    echo "deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://nvidia.github.io/libnvidia-container/stable/deb/${PLATFORM} /" | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-    
-    # Step 6: Activate Kamiwaza virtual environment
-    header "Step 6: Activating Kamiwaza Virtual Environment"
-    log "Running: source /opt/kamiwaza/kamiwaza/venv/bin/activate"
-    source /opt/kamiwaza/kamiwaza/venv/bin/activate
-    
-    # Step 7: Update package lists again
-    header "Step 7: Updating Package Lists (After Adding Repository)"
-    log "Running: sudo apt update"
-    sudo apt update
-    
-    # Step 8: Install nvidia-container-toolkit
-    header "Step 8: Installing nvidia-container-toolkit"
-    log "Running: sudo apt install -y nvidia-container-toolkit"
-    sudo apt install -y nvidia-container-toolkit
-    
-    # Step 9: Configure NVIDIA container runtime
-    header "Step 9: Configuring NVIDIA Container Runtime"
-    log "Running: sudo nvidia-ctk runtime configure --runtime=docker"
-    sudo nvidia-ctk runtime configure --runtime=docker
-    
-    # Step 10: Restart Docker service
-    header "Step 10: Restarting Docker Service"
-    log "Running: sudo systemctl restart docker"
-    sudo systemctl restart docker
-    
-    # Step 11: Test NVIDIA container runtime
-    header "Step 11: Testing NVIDIA Container Runtime"
-    log "Running: sudo docker run --rm --gpus all nvidia/cuda:11.0.3-base-ubuntu20.04 nvidia-smi"
-    sudo docker run --rm --gpus all nvidia/cuda:11.0.3-base-ubuntu20.04 nvidia-smi
-    
-    # Step 12: Apply GPU-specific optimizations
-    header "Step 12: Applying GPU-Specific Optimizations"
-    configure_gpu_optimizations
-    
-    # Step 13: Reserve ports
-    header "Step 13: Reserving Ports for Kamiwaza"
-    log "Reserving specific ports (comma-separated list or ranges)"
-    sudo sysctl -w net.ipv4.ip_local_reserved_ports="8080,8443,9000-9100"
-    
-    # Step 14: Make port reservation permanent
-    header "Step 14: Making Port Reservation Permanent"
-    log "Making permanent"
-    echo "net.ipv4.ip_local_reserved_ports = 8080,8443,9000-9100" | sudo tee -a /etc/sysctl.conf
-    
-    # Step 15: Make GPU optimizations permanent
-    header "Step 15: Making GPU Optimizations Permanent"
-    log "Adding $GPU_TYPE optimizations to /etc/environment"
-    
-    # Add common environment variables for all GPUs
-    echo "CUDA_VISIBLE_DEVICES=0" | sudo tee -a /etc/environment
-    echo "TF_FORCE_GPU_ALLOW_GROWTH=true" | sudo tee -a /etc/environment
-    echo "TORCH_CUDNN_V8_API_ENABLED=1" | sudo tee -a /etc/environment
-    
-    # Add GPU-specific memory fraction
-    case "$GPU_TYPE" in
-        "RTX_5090"|"RTX_4090"|"RTX_3090")
-            echo "TF_GPU_MEMORY_FRACTION=0.95" | sudo tee -a /etc/environment
-            echo "PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512" | sudo tee -a /etc/environment
-            ;;
-        "RTX_5080"|"RTX_4080"|"RTX_3080")
-            echo "TF_GPU_MEMORY_FRACTION=0.90" | sudo tee -a /etc/environment
-            echo "PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256" | sudo tee -a /etc/environment
-            ;;
-        "RTX_4070"|"RTX_3070")
-            echo "TF_GPU_MEMORY_FRACTION=0.85" | sudo tee -a /etc/environment
-            echo "PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128" | sudo tee -a /etc/environment
-            ;;
-        "RTX_3060")
-            echo "TF_GPU_MEMORY_FRACTION=0.80" | sudo tee -a /etc/environment
-            echo "PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:64" | sudo tee -a /etc/environment
-            ;;
-        *)
-            echo "TF_GPU_MEMORY_FRACTION=0.75" | sudo tee -a /etc/environment
-            echo "PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:64" | sudo tee -a /etc/environment
-            ;;
-    esac
-    
-    # Step 15.1: Create udev rules for NVIDIA device access
-    header "Step 15.1: Creating udev Rules for NVIDIA Access"
-    log "Setting up udev rules to allow all users to access NVIDIA devices..."
-    
-    # Create udev rules directory if it doesn't exist
-    sudo mkdir -p /etc/udev/rules.d
-    
-    # Create udev rule for NVIDIA devices
-    sudo tee /etc/udev/rules.d/99-nvidia.rules > /dev/null << 'EOF'
-# NVIDIA GPU access for all users
-SUBSYSTEM=="nvidia", MODE="0666"
-SUBSYSTEM=="nvidia_uvm", MODE="0666"
-SUBSYSTEM=="nvidia_uvm_tools", MODE="0666"
-SUBSYSTEM=="nvidia_modeset", MODE="0666"
-SUBSYSTEM=="nvidia_drm", MODE="0666"
-
-# NVIDIA device nodes
-KERNEL=="nvidia*", MODE="0666"
-KERNEL=="nvidia_uvm*", MODE="0666"
-KERNEL=="nvidia_modeset*", MODE="0666"
-KERNEL=="nvidia_drm*", MODE="0666"
-
-# CUDA device access
-KERNEL=="nvidiactl", MODE="0666"
-KERNEL=="nvidia-uvm", MODE="0666"
-KERNEL=="nvidia-uvm-tools", MODE="0666"
-EOF
-    
-    log "Created udev rules for NVIDIA device access"
-    
-    # Reload udev rules
-    if command -v udevadm >/dev/null 2>&1; then
-        sudo udevadm control --reload-rules
-        sudo udevadm trigger
-        log "Reloaded udev rules"
+    # 4. Install CUDA toolkit and drivers
+    log "4. Installing CUDA toolkit and drivers..."
+    if sudo apt-get install -y cuda-toolkit-12-4 cuda-drivers; then
+        log "  [OK] CUDA toolkit and drivers installed"
+    else
+        error "  [ERROR] Failed to install CUDA toolkit and drivers"
+        installation_success=false
     fi
     
-    # Create nvidia group and add users if it doesn't exist
-    if ! getent group nvidia >/dev/null 2>&1; then
-        sudo groupadd nvidia
-        log "Created nvidia group"
+    # 5. Configure environment variables
+    log "5. Configuring environment variables..."
+    if echo 'export PATH=/usr/local/cuda-12.4/bin:$PATH' >> ~/.bashrc && \
+       echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.4/lib64:$LD_LIBRARY_PATH' >> ~/.bashrc; then
+        log "  [OK] Environment variables configured"
+        source ~/.bashrc
+    else
+        warn "  [WARN] Failed to configure environment variables - continuing anyway"
     fi
     
-    # Add current user to nvidia group
-    CURRENT_USER=$(whoami)
-    if [ "$CURRENT_USER" != "root" ]; then
-        sudo usermod -a -G nvidia "$CURRENT_USER"
-        log "Added user $CURRENT_USER to nvidia group"
-    fi
-    
-    # Add kamiwaza user to nvidia group if different from current user
-    if [ "$CURRENT_USER" != "kamiwaza" ]; then
-        sudo usermod -a -G nvidia kamiwaza
-        log "Added kamiwaza user to nvidia group"
-    fi
-    
-    # Final instructions
-    header "Installation Complete!"
     echo
-    success "NVIDIA GPU support has been set up successfully for $GPU_TYPE!"
-    echo
-    warn "IMPORTANT: GPU acceleration may require a FULL SYSTEM REBOOT!"
-    echo
-    warn "NOTE: Group membership changes require logging out and back in to take effect."
+    if [ "$installation_success" = true ]; then
+        log "Setup completed successfully! [SUCCESS]"
+        log "All required commands have been executed."
+    else
+        warn "Setup completed with warnings. Some components may not have installed properly."
+        log "Please review the output above for any error messages."
+    fi
     echo
     
-    # Request system reboot
+    # Always verify installation
+    verify_installation
+    echo
+    
+    # Always request system reboot
     request_reboot
     
     echo
-    log "Next Steps:"
-    echo "  1. Verify NVIDIA drivers: 'nvidia-smi' (now accessible to all users)"
-    echo "  2. Test PyTorch CUDA: 'python -c \"import torch; print(torch.cuda.is_available())\"'" 
-    echo "  3. If GPU not detected, ensure WSL2 GPU passthrough is enabled"
-    echo "  4. Verify Python 3.12: 'python3 --version'"
-    echo "  5. Test nvidia-smi as regular user: 'nvidia-smi' (no sudo needed)"
-    echo "  6. If needed, use wrapper: 'nvidia-smi-wrapper'"
-    echo
-    # Display GPU-specific features
-    case "$GPU_TYPE" in
-        "RTX_5090"|"RTX_4090"|"RTX_3090")
-            log "High-End GPU Features (24GB VRAM):"
-            echo "  - 24GB VRAM optimized for large models"
-            echo "  - Enhanced 8K gaming support"
-            echo "  - Improved AI/ML performance"
-            echo "  - Advanced memory management"
-            echo
-            ;;
-        "RTX_5080"|"RTX_4080"|"RTX_3080")
-            log "Mid-High GPU Features (16GB/10GB VRAM):"
-            echo "  - High-performance gaming and AI workloads"
-            echo "  - Optimized memory management"
-            echo "  - Balanced performance settings"
-            echo
-            ;;
-        "RTX_4070"|"RTX_3070")
-            log "Mid-Range GPU Features (12GB/8GB VRAM):"
-            echo "  - Balanced performance for gaming and AI"
-            echo "  - Efficient memory utilization"
-            echo "  - Cost-effective performance"
-            echo
-            ;;
-        "RTX_3060")
-            log "Entry-Level GPU Features (12GB VRAM):"
-            echo "  - Good performance for entry-level workloads"
-            echo "  - Efficient memory management"
-            echo "  - Budget-friendly optimization"
-            echo
-            ;;
-    esac
-    log "Troubleshooting:"
-    echo "  - Check WSL2 GPU support: 'nvidia-smi'"
-    echo "  - Verify PyTorch CUDA: 'python -c \"import torch; print(torch.cuda.device_count())\"'"
-    echo "  - Ensure Windows NVIDIA drivers are up to date"
-    echo "  - Verify Python version: python3 --version"
-    echo
-    read -p "Press Enter to finish installation..."
-    
-    echo
-    success "Setup completed successfully for $GPU_TYPE! [SUCCESS]"
-}
-
-# Function to request and execute system reboot
-request_reboot() {
-    header "System Reboot Required"
-    echo
-    warn "IMPORTANT: GPU acceleration requires a FULL SYSTEM REBOOT!"
-    log "Please reboot your entire Windows system (not just WSL2) to activate GPU support."
-    echo
-    log "The NVIDIA GPU drivers have been installed, but they need a full system restart"
-    log "to properly initialize and become available to WSL2."
+    log "=== NVIDIA GPU Setup Complete ==="
+    log "Next steps:"
+    log "1. Restart your computer (if not done automatically)"
+    log "2. After restart, verify GPU support with: nvidia-smi"
+    log "3. Test CUDA with: nvcc --version"
     echo
     
-    # Check if we're in an interactive terminal
-    if [ -t 0 ]; then
-        echo -e "${YELLOW}Would you like to reboot your computer now?${NC}"
-        echo -e "${YELLOW}This will restart your ENTIRE Windows system, not just WSL2.${NC}"
-        echo
-        echo -e "${BLUE}Options:${NC}"
-        echo -e "  ${GREEN}y${NC} - Yes, reboot now (recommended)"
-        echo -e "  ${GREEN}n${NC} - No, I'll reboot manually later"
-        echo -e "  ${GREEN}s${NC} - Show reboot instructions"
-        echo
-        
-        while true; do
-            read -p "Enter your choice (y/n/s): " choice
-            case $choice in
-                [Yy]* )
-                    log "User chose to reboot now. Preparing system restart..."
-                    echo
-                    warn "WARNING: Your computer will restart in 10 seconds!"
-                    warn "Save any unsaved work immediately!"
-                    echo
-                    
-                    # Countdown for user safety
-                    for i in {10..1}; do
-                        echo -e "${RED}Restarting in $i seconds... (Press Ctrl+C to cancel)${NC}"
-                        sleep 1
-                    done
-                    
-                    echo
-                    log "Executing system restart..."
-                    
-                    # Try multiple methods to reboot the Windows system
-                    # Method 1: Use WSL's Windows integration with PowerShell
-                    if command -v powershell.exe >/dev/null 2>&1; then
-                        log "Using PowerShell to restart Windows..."
-                        powershell.exe -Command "Restart-Computer -Force"
-                    # Method 2: Use Windows shutdown command through WSL
-                    elif command -v cmd.exe >/dev/null 2>&1; then
-                        log "Using Windows shutdown command..."
-                        cmd.exe /c "shutdown /r /t 0"
-                    # Method 3: Use WSL's Windows integration with shutdown
-                    else
-                        log "Using WSL Windows integration..."
-                        /mnt/c/Windows/System32/shutdown.exe /r /t 0
-                    fi
-                    
-                    # If we get here, the reboot command failed
-                    error "Failed to execute system restart command"
-                    log "Please restart your computer manually to complete GPU setup"
-                    return 1
-                    ;;
-                [Nn]* )
-                    log "Reboot skipped. You can restart manually later."
-                    log "Remember: GPU acceleration will not work until you restart your computer."
-                    return 0
-                    ;;
-                [Ss]* )
-                    show_reboot_instructions
-                    return 0
-                    ;;
-                * )
-                    echo "Please enter y, n, or s."
-                    ;;
-            esac
-        done
-    else
-        # Non-interactive mode
-        warn "Non-interactive mode detected - cannot prompt for reboot"
-        log "Please restart your computer manually to complete GPU setup"
-        show_reboot_instructions
-        return 0
-    fi
+    # Final user interaction - keep terminal open for debugging
+    header "Debug Mode - Terminal Will Remain Open"
+    echo
+    log "This terminal will remain open for debugging purposes."
+    log "You can run additional commands to troubleshoot any issues."
+    echo
+    log "Useful debugging commands:"
+    echo "  - nvidia-smi                    # Check NVIDIA GPU status"
+    echo "  - nvcc --version               # Check CUDA compiler version"
+    echo "  - dpkg -l | grep nvidia       # Check installed NVIDIA packages"
+    echo "  - ls -la /dev/nvidia*         # Check NVIDIA device files"
+    echo "  - groups                       # Check user groups"
+    echo "  - dmesg | grep -i nvidia      # Check kernel messages for NVIDIA GPU"
+    echo
+    log "To close this terminal, type 'exit' or press Ctrl+D"
+    echo
+    
+    # Keep the terminal open indefinitely
+    while true; do
+        echo -e "${BLUE}Debug shell ready. Type 'exit' to close or run commands:${NC}"
+        if [ -t 0 ]; then
+            # Interactive mode - provide a simple command prompt
+            read -p "kamiwaza@nvidia-gpu-debug:~$ " debug_cmd
+            if [ "$debug_cmd" = "exit" ]; then
+                log "Exiting debug mode..."
+                break
+            elif [ -n "$debug_cmd" ]; then
+                log "Executing: $debug_cmd"
+                eval "$debug_cmd"
+                echo
+            fi
+        else
+            # Non-interactive mode - just wait
+            log "Non-interactive mode - terminal will remain open for 60 seconds"
+            sleep 60
+            break
+        fi
+    done
+    
+    log "Debug mode ended. Terminal closing."
 }
 
-# Function to show reboot instructions
-show_reboot_instructions() {
-    header "Manual Reboot Instructions"
-    echo
-    log "To complete NVIDIA GPU setup, please restart your computer:"
-    echo
-    echo -e "${BLUE}Method 1: Windows Start Menu${NC}"
-echo "  1. Click the Windows Start button"
-echo "  2. Click the Power button (power icon)"
-echo "  3. Select 'Restart'"
-    echo
-    echo -e "${BLUE}Method 2: Windows Settings${NC}"
-    echo "  1. Press Windows + I to open Settings"
-    echo "  2. Go to System > Recovery"
-    echo "  3. Click 'Restart now' under Advanced startup"
-    echo
-    echo -e "${BLUE}Method 3: Command Prompt (as Administrator)${NC}"
-    echo "  1. Press Windows + X and select 'Windows Terminal (Admin)'"
-    echo "  2. Type: shutdown /r /t 0"
-    echo "  3. Press Enter"
-    echo
-    echo -e "${BLUE}Method 4: PowerShell (as Administrator)${NC}"
-    echo "  1. Press Windows + X and select 'Windows PowerShell (Admin)'"
-    echo "  2. Type: Restart-Computer -Force"
-    echo "  3. Press Enter"
-    echo
-    warn "IMPORTANT: After restart, wait for Windows to fully boot before starting WSL2"
-    log "GPU acceleration will be available once the system has fully restarted."
-    echo
-}
+# Error handling - ensure script doesn't exit unexpectedly
+trap 'echo -e "\n${RED}[ERROR] Script interrupted. Terminal will remain open for debugging.${NC}"; echo "Type 'exit' to close or run commands manually."; exec bash' INT TERM
 
 # Run main function
-main "$@" 
+main "$@"
+
+# If we somehow get here, keep the terminal open
+echo -e "\n${YELLOW}[WARN] Script completed but terminal will remain open for debugging.${NC}"
+echo "Type 'exit' to close or run commands manually."
+exec bash 

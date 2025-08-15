@@ -36,4 +36,6 @@ echo [INFO] Executing installer...
 set EXIT_CODE=%ERRORLEVEL%
 
 echo [INFO] Installer completed with exit code: %EXIT_CODE%
-exit /b %EXIT_CODE%
+echo.
+echo [DEBUG] Script completed. Press any key to close...
+pause >nul

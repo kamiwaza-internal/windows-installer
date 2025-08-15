@@ -280,50 +280,26 @@ main "`$@"
         }
     }
     
-    if ($intelArc) {
+        if ($intelArc) {
         Write-LogMessage "Intel Arc GPU detected!" "INFO"
         Write-LogMessage "Setting up Intel Arc GPU acceleration in WSL..."
         
-        # Create Intel Arc setup script in WSL
-        $intelScript = @"
-#!/bin/bash
-
-# Intel GPU OpenCL Support Setup for WSL2 Ubuntu 24.04
-# Designed for Intel Arc 140V GPU and similar Intel GPUs
-
-set -e  # Exit on any error
-
-echo "=== Intel Arc GPU Configuration ==="
-echo "Setting up Intel Arc GPU acceleration for Kamiwaza..."
-echo "Timestamp: `$(date)`"
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Logging function
-log() {
-    echo -e "`${GREEN}`[INFO]`${NC} `$1"
-}
-
-warn() {
-    echo -e "`${YELLOW}`[WARN]`${NC} `$1"
-}
-
-error() {
-    echo -e "`${RED}`[ERROR]`${NC} `$1"
-}
-
-header() {
-    echo -e "`${BLUE}=== `$1 ===`${NC}"
-}
-
-# Check if running in WSL2
-check_wsl2() {
-    if ! grep -qi microsoft /proc/version; then
+        # Copy our maintained script into WSL and execute it
+        try {
+            $scriptSrc = Join-Path $PSScriptRoot "setup_intel_arc_gpu.sh"
+            if (-not (Test-Path $scriptSrc)) { throw "setup_intel_arc_gpu.sh not found at $scriptSrc" }
+            $currentDir = (Get-Location).Path
+            $wslPath = "/mnt/" + $currentDir.Replace(":", "").Replace("\", "/").ToLower()
+            wsl -d $WSLDistribution -- sudo mkdir -p /usr/local/bin
+            wsl -d $WSLDistribution -- bash -c "cat '$wslPath/setup_intel_arc_gpu.sh' | sed 's/\r$//' | sudo tee /usr/local/bin/setup_intel_arc_gpu.sh >/dev/null"
+            wsl -d $WSLDistribution -- sudo chmod +x /usr/local/bin/setup_intel_arc_gpu.sh
+            Write-LogMessage "Copied setup_intel_arc_gpu.sh into WSL: /usr/local/bin/setup_intel_arc_gpu.sh"
+            Write-LogMessage "Executing Intel Arc GPU setup as 'kamiwaza' user..."
+            wsl -d $WSLDistribution -- sudo -u kamiwaza /usr/local/bin/setup_intel_arc_gpu.sh
+        } catch {
+            Write-LogMessage "Failed to set up Intel Arc GPU: $($_.Exception.Message)" "ERROR"
+        }
+            if ! grep -qi microsoft /proc/version; then
         error "This script is designed for WSL2. Please run on WSL2."
         exit 1
     fi
@@ -574,6 +550,32 @@ main "`$@"
 #!/bin/bash
 # Generic GPU Information for Kamiwaza
 echo "=== GPU Detection Results ==="
+"@
+        
+    } else {
+        # Configure Windows autostart: create restart flag and per-user AtLogOn task
+        try {
+            $flagDir = Join-Path $env:LOCALAPPDATA 'Kamiwaza'
+            New-Item -ItemType Directory -Path $flagDir -Force | Out-Null
+            $flagFile = Join-Path $flagDir 'restart_required.flag'
+            Set-Content -Path $flagFile -Value "GPU setup completed - Kamiwaza should start automatically after restart"
+            Write-LogMessage "Created restart flag at $flagFile"
+
+            $scriptPath = Join-Path $PSScriptRoot 'kamiwaza_autostart.bat'
+            if (Test-Path $scriptPath) {
+                $action = New-ScheduledTaskAction -Execute $scriptPath
+                $trigger = New-ScheduledTaskTrigger -AtLogOn
+                $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
+                $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+                Register-ScheduledTask -TaskName 'Kamiwaza GPU Autostart' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+                Write-LogMessage "Registered per-user Task Scheduler entry for autostart"
+            } else {
+                Write-LogMessage "Autostart script not found at $scriptPath" 'WARN'
+            }
+        } catch {
+            Write-LogMessage "Failed to configure Windows autostart: $($_.Exception.Message)" 'WARN'
+        }
+        
 echo "No NVIDIA GeForce RTX or Intel Arc GPUs detected"
 echo "Available graphics hardware:"
 lspci | grep -i vga || echo "No VGA devices found"
