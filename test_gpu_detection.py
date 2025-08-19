@@ -23,22 +23,22 @@ def test_gpu_detection():
     
     # Determine GPU type
     if os.path.exists(nvidia_script):
-        print("\n✅ NVIDIA RTX GPU detected!")
+        print("\n[SUCCESS] NVIDIA RTX GPU detected!")
         print("   GPU acceleration: NVIDIA_RTX")
         print("   Restart required: YES")
         
     elif os.path.exists(intel_arc_script):
-        print("\n✅ Intel Arc GPU detected!")
+        print("\n[SUCCESS] Intel Arc GPU detected!")
         print("   GPU acceleration: INTEL_ARC")
         print("   Restart required: YES")
         
     elif os.path.exists(intel_integrated_script):
-        print("\n✅ Intel Integrated GPU detected!")
+        print("\n[SUCCESS] Intel Integrated GPU detected!")
         print("   GPU acceleration: INTEL_INTEGRATED")
         print("   Restart required: YES")
         
     else:
-        print("\n❌ No GPU setup scripts found")
+        print("\n[ERROR] No GPU setup scripts found")
         print("   GPU acceleration: CPU_ONLY")
         print("   Restart required: NO")
         print("\n   This means either:")

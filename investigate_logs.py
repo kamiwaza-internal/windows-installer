@@ -64,7 +64,7 @@ def investigate_log_locations():
     # Check if MSI log exists
     msi_log = os.path.join(temp_dir, "kamiwaza_install.log")
     if os.path.exists(msi_log):
-        print(f"   ✓ MSI log exists: {msi_log}")
+        print(f"   [INFO] MSI log exists: {msi_log}")
         try:
             size = os.path.getsize(msi_log)
             print(f"     Size: {size} bytes")
@@ -92,7 +92,7 @@ def investigate_log_locations():
         print(f"\n   Checking: {location}")
         ret, out, err = run_command(['wsl', '-d', 'kamiwaza', 'ls', '-la', location], timeout=10)
         if ret == 0:
-            print(f"   ✓ EXISTS: {location}")
+            print(f"   [INFO] EXISTS: {location}")
             # For directories, show recent files
             if location.endswith('/'):
                 print("     Recent files:")
@@ -161,7 +161,7 @@ if __name__ == "__main__":
     
     if success:
         suggest_improvements()
-        print("\n✓ Log investigation completed successfully")
+        print("\n[INFO] Log investigation completed successfully")
     else:
         print("\n✗ Log investigation failed")
     

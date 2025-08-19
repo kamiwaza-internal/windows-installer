@@ -89,78 +89,11 @@ request_reboot() {
     show_reboot_instructions
     echo
     
-    # Check if we're in an interactive terminal
-    if [ -t 0 ]; then
-        echo -e "${YELLOW}Would you like to reboot your computer now?${NC}"
-        echo -e "${YELLOW}This will restart your ENTIRE Windows system, not just WSL2.${NC}"
-        echo
-        echo -e "${BLUE}Options:${NC}"
-        echo -e "  ${GREEN}y${NC} - Yes, reboot now (recommended)"
-        echo -e "  ${GREEN}n${NC} - No, I'll reboot manually later"
-        echo -e "  ${GREEN}d${NC} - Debug mode - keep terminal open"
-        echo
-        
-        while true; do
-            read -p "Enter your choice (y/n/d): " choice
-            case $choice in
-                [Yy]* )
-                    log "User chose to reboot now. Preparing system restart..."
-                    echo
-                    warn "WARNING: Your computer will restart in 10 seconds!"
-                    warn "Save any unsaved work immediately!"
-                    echo
-                    
-                    # Countdown for user safety
-                    for i in {10..1}; do
-                        echo -e "${RED}Restarting in $i seconds... (Press Ctrl+C to cancel)${NC}"
-                        sleep 1
-                    done
-                    
-                    echo
-                    log "Executing system restart..."
-                    
-                    # Try multiple methods to reboot the Windows system
-                    # Method 1: Use WSL's Windows integration with PowerShell
-                    if command -v powershell.exe >/dev/null 2>&1; then
-                        log "Using PowerShell to restart Windows..."
-                        powershell.exe -Command "Restart-Computer -Force"
-                    # Method 2: Use Windows shutdown command through WSL
-                    elif command -v cmd.exe >/dev/null 2>&1; then
-                        log "Using Windows shutdown command..."
-                        cmd.exe /c "shutdown /r /t 0"
-                    # Method 3: Use WSL's Windows integration with shutdown
-                    else
-                        log "Using WSL Windows integration..."
-                        /mnt/c/Windows/System32/shutdown.exe /r /t 0
-                    fi
-                    
-                    # If we get here, the reboot command failed
-                    error "Failed to execute system restart command"
-                    log "Please restart your computer manually to complete GPU setup"
-                    return 1
-                    ;;
-                [Nn]* )
-                    log "Reboot skipped. You can restart manually later."
-                    log "Remember: GPU acceleration will not work until you restart your computer."
-                    return 0
-                    ;;
-                [Dd]* )
-                    log "Debug mode selected. Terminal will remain open for debugging."
-                    log "You can manually run commands to troubleshoot any issues."
-                    return 0
-                    ;;
-                * )
-                    echo "Please enter y, n, or d."
-                    ;;
-            esac
-        done
-    else
-        # Non-interactive mode
-        warn "Non-interactive mode detected - cannot prompt for reboot"
-        log "Please restart your computer manually to complete GPU setup"
-        show_reboot_instructions
-        return 0
-    fi
+    # Automated mode - just show instructions
+    log "Automated installation mode - reboot instructions will be shown"
+    log "Please restart your computer manually to complete GPU setup"
+    show_reboot_instructions
+    return 0
 }
 
 # Function to show reboot instructions
@@ -261,57 +194,9 @@ main() {
     
     check_prerequisites
     
-    # Ask user about rebooting before proceeding
-    header "Pre-Installation Reboot Check"
+    # Always proceed with installation (no user prompts)
+    log "Proceeding with installation automatically..."
     echo
-    warn "IMPORTANT: GPU acceleration requires a FULL SYSTEM REBOOT after installation!"
-    log "This script will install Intel GPU drivers that need a system restart to activate."
-    echo
-
-    if [ -t 0 ]; then
-        echo -e "${YELLOW}Do you want to continue with the installation?${NC}"
-        echo -e "${YELLOW}You will need to reboot your computer after installation completes.${NC}"
-        echo
-        echo -e "${BLUE}Options:${NC}"
-        echo -e "  ${GREEN}y${NC} - Yes, continue with installation (will need reboot later)"
-        echo -e "  ${GREEN}n${NC} - No, exit script"
-        echo -e "  ${GREEN}s${NC} - Show reboot information"
-        echo
-        while true; do
-            read -p "Enter your choice (y/n/s): " choice
-            case $choice in
-                [Yy]* )
-                    log "User chose to continue with installation. Proceeding..."
-                    echo
-                    break
-                    ;;
-                [Nn]* )
-                    log "User chose to exit. Exiting script."
-                    exit 0
-                    ;;
-                [Ss]* )
-                    show_reboot_instructions
-                    echo
-                    echo -e "${YELLOW}Do you want to continue with the installation now? (y/n):${NC}"
-                    read -p "Enter your choice: " continue_choice
-                    if [[ $continue_choice =~ ^[Yy]$ ]]; then
-                        log "User chose to continue after viewing instructions. Proceeding..."
-                        echo
-                        break
-                    else
-                        log "User chose to exit. Exiting script."
-                        exit 0
-                    fi
-                    ;;
-                * )
-                    echo "Please enter y, n, or s."
-                    ;;
-            esac
-        done
-    else
-        log "Non-interactive mode detected. Proceeding with installation without prompt."
-        echo
-    fi
     
     # Execute the exact commands as specified
     log "Executing required commands..."
@@ -361,29 +246,50 @@ main() {
     if sudo apt-get install -y wget gpg; then
         log "  [OK] Prerequisites for oneAPI installation"
         
-        # Add Intel's GPG key
+        # Add Intel's GPG key (using the exact command specified)
+        log "  [INFO] Adding Intel GPG key..."
         if wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
-           gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-keyring.gpg > /dev/null; then
-            log "  [OK] Intel GPG key added"
-            
-            # Add the oneAPI repository
-            if echo "deb [signed-by=/usr/share/keyrings/oneapi-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | \
-               sudo tee /etc/apt/sources.list.d/oneAPI.list; then
-                log "  [OK] oneAPI repository added"
-                
-                # Update and install Intel oneAPI
-                if sudo apt update && sudo apt install -y intel-basekit; then
-                    log "  [OK] Intel oneAPI basekit installed"
-                else
-                    warn "  [WARN] Intel oneAPI installation had issues - continuing anyway"
-                    installation_success=false
-                fi
-            else
-                warn "  [WARN] Failed to add oneAPI repository - continuing anyway"
-                installation_success=false
-            fi
+           gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null; then
+            log "  [OK] Intel GPG key added to oneapi-archive-keyring.gpg"
         else
             warn "  [WARN] Failed to add Intel GPG key - continuing anyway"
+            installation_success=false
+        fi
+        
+        # Add the oneAPI repository (using the exact command specified)
+        log "  [INFO] Adding oneAPI repository..."
+        if echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | \
+           sudo tee /etc/apt/sources.list.d/oneAPI.list; then
+            log "  [OK] oneAPI repository added"
+        else
+            warn "  [WARN] Failed to add oneAPI repository - continuing anyway"
+            installation_success=false
+        fi
+        
+        # Update package list (using the exact command specified)
+        log "  [INFO] Updating package list..."
+        if sudo apt update; then
+            log "  [OK] Package list updated"
+        else
+            warn "  [WARN] Failed to update package list - continuing anyway"
+            installation_success=false
+        fi
+        
+        # Install Intel oneAPI Runtime OpenCL (using the exact command specified)
+        log "  [INFO] Installing Intel oneAPI Runtime OpenCL..."
+        if sudo apt install intel-oneapi-runtime-opencl; then
+            log "  [OK] Intel oneAPI Runtime OpenCL installed"
+        else
+            warn "  [WARN] Intel oneAPI Runtime OpenCL installation had issues - continuing anyway"
+            installation_success=false
+        fi
+        
+        # Also install Intel oneAPI basekit for additional SYCL support
+        log "  [INFO] Installing Intel oneAPI basekit for additional SYCL support..."
+        if sudo apt install -y intel-basekit; then
+            log "  [OK] Intel oneAPI basekit installed"
+        else
+            warn "  [WARN] Intel oneAPI basekit installation had issues - continuing anyway"
             installation_success=false
         fi
     else
@@ -428,16 +334,19 @@ main() {
             Set-Content -Path \$flagFile -Value \"GPU setup completed - Kamiwaza should start automatically after restart\"
             Write-Host \"Restart flag created: \$flagFile\"
             
-            # Set up Task Scheduler to run kamiwaza_autostart.bat after reboot
+            # Set up RunOnce registry entry to run kamiwaza_autostart.bat after reboot (no admin rights required)
             \$scriptPath = \"$PWD/kamiwaza_autostart.bat\"
             if (Test-Path \$scriptPath) {
-                \$action = New-ScheduledTaskAction -Execute \$scriptPath
-                \$trigger = New-ScheduledTaskTrigger -AtStartup
-                \$principal = New-ScheduledTaskPrincipal -UserId \"$env:USERNAME\" -LogonType Interactive -RunLevel Highest
-                \$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+                \$runOnceKey = \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce\"
+                \$runOnceName = \"KamiwazaGPUAutostart\"
+                \$runOnceValue = \"\\\"\$scriptPath\\\"\"
                 
-                Register-ScheduledTask -TaskName \"Kamiwaza GPU Autostart\" -Action \$action -Trigger \$trigger -Principal \$principal -Settings \$settings -Force | Out-Null
-                Write-Host \"Task Scheduler entry created for Kamiwaza autostart\"
+                try {
+                    Set-ItemProperty -Path \$runOnceKey -Name \$runOnceName -Value \$runOnceValue -Type String -Force
+                    Write-Host \"RunOnce entry created for Kamiwaza autostart (no admin rights required)\"
+                } catch {
+                    Write-Host \"Warning: Failed to create RunOnce entry - continuing with restart flag only\"
+                }
             } else {
                 Write-Host \"Warning: kamiwaza_autostart.bat not found at \$scriptPath\"
             }

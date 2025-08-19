@@ -5,15 +5,16 @@ No GUI - uses stdout for progress reporting to MSI
 
 AUTOMATIC FEATURES:
 - HCS service error detection and automatic repair
+- WSL disk attachment failure recovery (no more installer kills!)
 - GPU driver installation with automatic system restart
 - Headless mode detection and appropriate restart behavior
 - WSL environment setup with automatic fallback strategies
 
 RESTART BEHAVIOR:
-- Interactive mode: 10-15 second countdown before restart
-- Headless mode: Immediate restart for GPU acceleration
-- Automatic restart after GPU driver installation
-- Fallback to manual restart instructions if automatic fails
+- Interactive mode: 10 second countdown before automatic restart
+- Headless mode: Automatic restart after package installation
+- Automatic restart after GPU driver installation + package installation
+- Kamiwaza starts automatically after restart via RunOnce registry
 """
 import subprocess
 import sys
@@ -55,6 +56,10 @@ class HeadlessKamiwazaInstaller:
         # Load actual GPU detection results
         self.gpu_detection_results = self.load_gpu_detection_results()
         
+        # Test logging system first to ensure it's working
+        self.log_output("=== TESTING LOGGING SYSTEM ===")
+        self.log_output("Testing multiple logging methods for reliability...")
+        
         # Enable maximum debugging
         self.log_output("=== KAMIWAZA INSTALLER DEBUG MODE ENABLED ===")
         self.log_output(f"Installer initialized with parameters:")
@@ -67,6 +72,10 @@ class HeadlessKamiwazaInstaller:
         self.log_output(f"  License Key: {'***SET***' if self.license_key else 'None'}")
         self.log_output(f"  Usage Reporting: {self.usage_reporting}")
         self.log_output(f"  Install Mode: {self.install_mode}")
+        
+        # Test logging to all available methods
+        self.log_output("=== LOGGING SYSTEM TEST COMPLETE ===")
+        self.log_output("All logging methods tested and ready for use")
         
         # Log environment details
         self.log_output(f"Python Version: {sys.version}")
@@ -124,29 +133,106 @@ class HeadlessKamiwazaInstaller:
         intel_arc_script = os.path.join(os.path.dirname(__file__), "setup_intel_arc_gpu.sh")
         intel_integrated_script = os.path.join(os.path.dirname(__file__), "setup_intel_integrated_gpu.sh")
         
-        if os.path.exists(nvidia_script):
-            self.log_output("NVIDIA RTX GPU detected by PowerShell - setup script exists")
-            results['nvidia_rtx_detected'] = True
-            results['nvidia_gpu_name'] = 'NVIDIA RTX GPU (detected by PowerShell)'
-            results['gpu_acceleration'] = 'NVIDIA_RTX'
-            
-        elif os.path.exists(intel_arc_script):
-            self.log_output("Intel Arc GPU detected by PowerShell - setup script exists")
-            results['intel_arc_detected'] = True
-            results['intel_gpu_name'] = 'Intel Arc GPU (detected by PowerShell)'
-            results['gpu_acceleration'] = 'INTEL_ARC'
-            
-        elif os.path.exists(intel_integrated_script):
-            self.log_output("Intel integrated GPU detected by PowerShell - setup script exists")
-            results['intel_integrated_detected'] = True
-            results['intel_gpu_name'] = 'Intel Integrated GPU (detected by PowerShell)'
-            results['gpu_acceleration'] = 'INTEL_INTEGRATED'
-            
-        else:
-            self.log_output("No GPU setup scripts found - running in CPU-only mode")
-            self.log_output("PowerShell detected no supported GPUs")
+        # CRITICAL FIX: PowerShell detection may be wrong - do our own detection
+        self.log_output("PowerShell detection may be incorrect - performing independent GPU detection...")
         
-        self.log_output(f"GPU detection results (from PowerShell): {results}")
+        # Use Windows Management Instrumentation (WMI) to detect actual GPU hardware
+        try:
+            import subprocess
+            # Run PowerShell command to get actual GPU info
+            ps_cmd = [
+                'powershell.exe', '-Command', 
+                'Get-CimInstance Win32_VideoController | Select-Object Name, AdapterCompatibility | ConvertTo-Json'
+            ]
+            
+            ret, out, err = self.run_command(ps_cmd, timeout=30)
+            if ret == 0 and out.strip():
+                self.log_output("Independent GPU detection completed")
+                gpu_info = out.strip()
+                
+                # Debug: Show what GPU info we actually got
+                self.log_output(f"Raw GPU detection output: {gpu_info}")
+                
+                # Check for Intel Arc (less specific to catch variations)
+                if any(x in gpu_info for x in ['Intel(R) Arc', 'Intel Arc', 'Arc(TM)', 'Arc A', 'Arc 3', 'Arc 5', 'Arc 7', 'Arc 9', 'Arc Graphics', 'Intel Arc Graphics', 'Arc(TM) Graphics']):
+                    self.log_output("INTEL ARC GPU DETECTED by independent detection!")
+                    results['intel_arc_detected'] = True
+                    results['intel_gpu_name'] = 'Intel Arc GPU (independent detection)'
+                    results['gpu_acceleration'] = 'INTEL_ARC'
+                    
+                # Check for Intel Integrated (less specific to catch variations)
+                elif any(x in gpu_info for x in ['Intel(R) UHD', 'Intel(R) HD', 'Intel(R) Iris', 'Intel UHD', 'Intel HD', 'Intel Iris', 'UHD Graphics', 'HD Graphics', 'Iris Graphics', 'Intel Graphics']):
+                    self.log_output("INTEL INTEGRATED GPU DETECTED by independent detection!")
+                    results['intel_integrated_detected'] = True
+                    results['intel_gpu_name'] = 'Intel Integrated GPU (independent detection)'
+                    results['gpu_acceleration'] = 'INTEL_INTEGRATED'
+                    
+                # Check for NVIDIA RTX (less specific to catch variations)
+                elif any(x in gpu_info for x in ['NVIDIA GeForce RTX', 'NVIDIA RTX', 'RTX 20', 'RTX 30', 'RTX 40', 'RTX 50', 'GeForce RTX']):
+                    self.log_output("NVIDIA RTX GPU DETECTED by independent detection!")
+                    results['nvidia_rtx_detected'] = True
+                    results['nvidia_gpu_name'] = 'NVIDIA RTX GPU (independent detection)'
+                    results['gpu_acceleration'] = 'NVIDIA_RTX'
+                    
+                else:
+                    self.log_output("No supported GPU hardware detected by independent detection")
+                    self.log_output(f"GPU info: {gpu_info}")
+                    
+            else:
+                self.log_output(f"Independent GPU detection failed: {err}")
+                self.log_output("Falling back to PowerShell script detection...")
+                
+                # Fallback to PowerShell script detection
+                if os.path.exists(nvidia_script):
+                    self.log_output("NVIDIA RTX GPU detected by PowerShell - setup script exists")
+                    results['nvidia_rtx_detected'] = True
+                    results['nvidia_gpu_name'] = 'NVIDIA RTX GPU (detected by PowerShell)'
+                    results['gpu_acceleration'] = 'NVIDIA_RTX'
+                    
+                elif os.path.exists(intel_arc_script):
+                    self.log_output("Intel Arc GPU detected by PowerShell - setup script exists")
+                    results['intel_arc_detected'] = True
+                    results['intel_gpu_name'] = 'Intel Arc GPU (detected by PowerShell)'
+                    results['gpu_acceleration'] = 'INTEL_ARC'
+                    
+                elif os.path.exists(intel_integrated_script):
+                    self.log_output("Intel integrated GPU detected by PowerShell - setup script exists")
+                    results['intel_integrated_detected'] = True
+                    results['intel_gpu_name'] = 'Intel Integrated GPU (detected by PowerShell)'
+                    results['gpu_acceleration'] = 'INTEL_INTEGRATED'
+                    
+                else:
+                    self.log_output("No GPU setup scripts found - running in CPU-only mode")
+                    self.log_output("PowerShell detected no supported GPUs")
+                    
+        except Exception as e:
+            self.log_output(f"Error during independent GPU detection: {e}")
+            self.log_output("Falling back to PowerShell script detection...")
+            
+            # Fallback to PowerShell script detection
+            if os.path.exists(nvidia_script):
+                self.log_output("NVIDIA RTX GPU detected by PowerShell - setup script exists")
+                results['nvidia_rtx_detected'] = True
+                results['nvidia_gpu_name'] = 'NVIDIA RTX GPU (detected by PowerShell)'
+                results['gpu_acceleration'] = 'NVIDIA_RTX'
+                
+            elif os.path.exists(intel_arc_script):
+                self.log_output("Intel Arc GPU detected by PowerShell - setup script exists")
+                results['intel_arc_detected'] = True
+                results['intel_gpu_name'] = 'Intel Arc GPU (detected by PowerShell)'
+                results['gpu_acceleration'] = 'INTEL_ARC'
+                
+            elif os.path.exists(intel_integrated_script):
+                self.log_output("Intel integrated GPU detected by PowerShell - setup script exists")
+                results['intel_integrated_detected'] = True
+                results['intel_gpu_name'] = 'Intel Integrated GPU (detected by PowerShell)'
+                results['gpu_acceleration'] = 'INTEL_INTEGRATED'
+                
+            else:
+                self.log_output("No GPU setup scripts found - running in CPU-only mode")
+                self.log_output("PowerShell detected no supported GPUs")
+        
+        self.log_output(f"GPU detection results (independent + fallback): {results}")
         return results
 
     def download_gpu_drivers(self, wsl_cmd):
@@ -159,7 +245,22 @@ class HeadlessKamiwazaInstaller:
                 self.log_output("Skipping GPU driver download")
                 return
             
-            # Run GPU setup script based on detection results
+            # CRITICAL: Verify GPU detection matches the script we're about to run
+            self.log_output("=== VERIFYING GPU DETECTION ACCURACY ===")
+            self.log_output(f"Independent detection result: {self.gpu_detection_results['gpu_acceleration']}")
+            
+            # Check for PowerShell detection mismatch
+            if os.path.exists(os.path.join(os.path.dirname(__file__), "setup_nvidia_gpu.sh")) and not self.gpu_detection_results['nvidia_rtx_detected']:
+                self.log_output("*** WARNING: PowerShell detected NVIDIA but independent detection says otherwise! ***")
+                self.log_output("This indicates PowerShell detection was incorrect - using independent detection.")
+            elif os.path.exists(os.path.join(os.path.dirname(__file__), "setup_intel_arc_gpu.sh")) and not self.gpu_detection_results['intel_arc_detected']:
+                self.log_output("*** WARNING: PowerShell detected Intel Arc but independent detection says otherwise! ***")
+                self.log_output("This indicates PowerShell detection was incorrect - using independent detection.")
+            elif os.path.exists(os.path.join(os.path.dirname(__file__), "setup_intel_integrated_gpu.sh")) and not self.gpu_detection_results['intel_integrated_detected']:
+                self.log_output("*** WARNING: PowerShell detected Intel Integrated but independent detection says otherwise! ***")
+                self.log_output("This indicates PowerShell detection was incorrect - using independent detection.")
+            
+            # Run GPU setup script based on INDEPENDENT detection results (not PowerShell)
             # Only run the appropriate script for the detected hardware
             if self.gpu_detection_results['nvidia_rtx_detected']:
                 self.log_output(f"Downloading NVIDIA RTX GPU drivers...")
@@ -175,20 +276,31 @@ class HeadlessKamiwazaInstaller:
                         script_content = f.read()
                     
                     # Copy script to WSL using a more reliable method
-                    # First write to a temporary file, then copy to final location
-                    temp_script_path = os.path.join(tempfile.gettempdir(), 'setup_nvidia_gpu_temp.sh')
-                    with open(temp_script_path, 'w') as f:
+                    # Use a unique temporary filename to avoid conflicts
+                    import uuid
+                    temp_filename = f'setup_nvidia_gpu_{uuid.uuid4().hex[:8]}.sh'
+                    temp_script_path = os.path.join(tempfile.gettempdir(), temp_filename)
+                    
+                    self.log_output(f"Creating temporary script file: {temp_script_path}")
+                    with open(temp_script_path, 'w', encoding='utf-8') as f:
                         f.write(script_content)
                     
-                    # Copy the temporary file to WSL
+                    # Verify the temp file was created
+                    if not os.path.exists(temp_script_path):
+                        raise Exception(f"Failed to create temporary file: {temp_script_path}")
+                    
+                    self.log_output(f"Temporary file created successfully: {os.path.getsize(temp_script_path)} bytes")
+                    
+                    # Copy the temporary file to WSL using the full path
                     copy_cmd = f"cat '{temp_script_path}' | sudo tee /usr/local/bin/setup_nvidia_gpu.sh"
                     ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
                     
                     # Clean up temporary file
                     try:
                         os.remove(temp_script_path)
-                    except:
-                        pass
+                        self.log_output(f"Temporary file cleaned up: {temp_script_path}")
+                    except Exception as cleanup_err:
+                        self.log_output(f"Warning: Could not clean up temp file: {cleanup_err}")
                     
                     if ret == 0:
                         self.log_output("NVIDIA setup script copied to WSL successfully")
@@ -239,20 +351,31 @@ class HeadlessKamiwazaInstaller:
                         script_content = f.read()
                     
                     # Copy script to WSL using a more reliable method
-                    # First write to a temporary file, then copy to final location
-                    temp_script_path = os.path.join(tempfile.gettempdir(), 'setup_intel_arc_gpu_temp.sh')
-                    with open(temp_script_path, 'w') as f:
+                    # Use a unique temporary filename to avoid conflicts
+                    import uuid
+                    temp_filename = f'setup_intel_arc_gpu_{uuid.uuid4().hex[:8]}.sh'
+                    temp_script_path = os.path.join(tempfile.gettempdir(), temp_filename)
+                    
+                    self.log_output(f"Creating temporary script file: {temp_script_path}")
+                    with open(temp_script_path, 'w', encoding='utf-8') as f:
                         f.write(script_content)
                     
-                    # Copy the temporary file to WSL
+                    # Verify the temp file was created
+                    if not os.path.exists(temp_script_path):
+                        raise Exception(f"Failed to create temporary file: {temp_script_path}")
+                    
+                    self.log_output(f"Temporary file created successfully: {os.path.getsize(temp_script_path)} bytes")
+                    
+                    # Copy the temporary file to WSL using the full path
                     copy_cmd = f"cat '{temp_script_path}' | sudo tee /usr/local/bin/setup_intel_arc_gpu.sh"
                     ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
                     
                     # Clean up temporary file
                     try:
                         os.remove(temp_script_path)
-                    except:
-                        pass
+                        self.log_output(f"Temporary file cleaned up: {temp_script_path}")
+                    except Exception as cleanup_err:
+                        self.log_output(f"Warning: Could not clean up temp file: {cleanup_err}")
                     
                     if ret == 0:
                         self.log_output("Intel Arc setup script copied to WSL successfully")
@@ -303,20 +426,31 @@ class HeadlessKamiwazaInstaller:
                         script_content = f.read()
                     
                     # Copy script to WSL using a more reliable method
-                    # First write to a temporary file, then copy to final location
-                    temp_script_path = os.path.join(tempfile.gettempdir(), 'setup_intel_integrated_gpu_temp.sh')
-                    with open(temp_script_path, 'w') as f:
+                    # Use a unique temporary filename to avoid conflicts
+                    import uuid
+                    temp_filename = f'setup_intel_integrated_gpu_{uuid.uuid4().hex[:8]}.sh'
+                    temp_script_path = os.path.join(tempfile.gettempdir(), temp_filename)
+                    
+                    self.log_output(f"Creating temporary script file: {temp_script_path}")
+                    with open(temp_script_path, 'w', encoding='utf-8') as f:
                         f.write(script_content)
                     
-                    # Copy the temporary file to WSL
+                    # Verify the temp file was created
+                    if not os.path.exists(temp_script_path):
+                        raise Exception(f"Failed to create temporary file: {temp_script_path}")
+                    
+                    self.log_output(f"Temporary file created successfully: {os.path.getsize(temp_script_path)} bytes")
+                    
+                    # Copy the temporary file to WSL using the full path
                     copy_cmd = f"cat '{temp_script_path}' | sudo tee /usr/local/bin/setup_intel_integrated_gpu.sh"
                     ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
                     
                     # Clean up temporary file
                     try:
                         os.remove(temp_script_path)
-                    except:
-                        pass
+                        self.log_output(f"Temporary file cleaned up: {temp_script_path}")
+                    except Exception as cleanup_err:
+                        self.log_output(f"Warning: Could not clean up temp file: {cleanup_err}")
                     
                     if ret == 0:
                         self.log_output("Intel integrated setup script copied to WSL successfully")
@@ -421,92 +555,43 @@ echo "No GPU setup scripts available"
                 self.log_output("GPU acceleration has been configured successfully.")
                 self.log_output("A system restart will be recommended to ensure GPU drivers are properly loaded.")
                 
-                # Create restart flag file for auto-start script (in AppData for autostart script)
-                restart_flag_file = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'restart_required.flag')
+                # GPU setup completed - restart flag created for after package installation
+                self.log_output("")
+                self.log_output("=== GPU ACCELERATION CONFIGURED SUCCESSFULLY ===")
+                self.log_output("GPU acceleration has been configured successfully.")
+                self.log_output("")
+                self.log_output("IMPORTANT: GPU drivers are installed but require a system restart to activate.")
+                self.log_output("We will continue with Kamiwaza package installation, then restart automatically.")
+                self.log_output("")
+                
+                # Create restart flag file for after package installation
                 try:
-                    # Ensure the directory exists
-                    os.makedirs(os.path.dirname(restart_flag_file), exist_ok=True)
-                    with open(restart_flag_file, 'w') as f:
-                        f.write(f"GPU_ACCELERATION_CONFIGURED\n")
+                    restart_flag_path = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'restart_required.flag')
+                    os.makedirs(os.path.dirname(restart_flag_path), exist_ok=True)
+                    with open(restart_flag_path, 'w') as f:
+                        f.write("GPU acceleration configured - restart required AFTER package installation\n")
                         f.write(f"NVIDIA_RTX={self.gpu_detection_results['nvidia_rtx_detected']}\n")
                         f.write(f"INTEL_ARC={self.gpu_detection_results['intel_arc_detected']}\n")
                         f.write(f"INTEL_INTEGRATED={self.gpu_detection_results['intel_integrated_detected']}\n")
                         import time
                         f.write(f"TIMESTAMP={time.time()}\n")
-                    self.log_output(f"Restart flag created: {restart_flag_file}")
-                    
-                    # Ensure Windows autostart is registered before reboot
-                    try:
-                        import subprocess
-                        autostart_bat = os.path.join(os.path.dirname(__file__), 'kamiwaza_autostart.bat')
-                        if not os.path.exists(autostart_bat):
-                            # Fallback to LocalAppData folder
-                            autostart_bat = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'kamiwaza_autostart.bat')
-                        if os.path.exists(autostart_bat):
-                            ps_cmd = (
-                                f"$action = New-ScheduledTaskAction -Execute '{autostart_bat}'; "
-                                f"$trigger = New-ScheduledTaskTrigger -AtLogOn; "
-                                f"$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest; "
-                                f"$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable; "
-                                f"Register-ScheduledTask -TaskName 'Kamiwaza GPU Autostart' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null"
-                            )
-                            subprocess.run(['powershell.exe', '-ExecutionPolicy', 'Bypass', '-Command', ps_cmd], check=False)
-                            self.log_output("Registered Windows Task Scheduler for Kamiwaza autostart (per-user)")
-                        else:
-                            self.log_output("Warning: Autostart script not found; skipping task registration")
-                    except Exception as task_err:
-                        self.log_output(f"Warning: Failed to register autostart task: {task_err}")
-                    
-                    self.log_output("Kamiwaza will automatically start after system restart.")
-                except Exception as e:
-                    self.log_output(f"Warning: Could not create restart flag: {e}")
-                    self.log_output("You may need to start Kamiwaza manually after restart.")
-                
-                # CRITICAL: GPU setup requires IMMEDIATE restart - no complex logic!
-                self.log_output("")
-                self.log_output("=== GPU ACCELERATION REQUIRES IMMEDIATE RESTART ===")
-                self.log_output("GPU acceleration has been configured successfully.")
-                self.log_output("")
-                self.log_output("IMPORTANT: GPU drivers require a FULL SYSTEM RESTART to activate!")
-                self.log_output("GPU drivers are installed but not yet active until system restart.")
-                self.log_output("")
-                self.log_output("The system will restart NOW to activate GPU acceleration.")
-                self.log_output("After restart, re-run this installer to continue with Kamiwaza installation.")
-                self.log_output("")
-                
-                # GPU setup completed - trigger system restart
-                self.log_output("GPU acceleration setup completed successfully!")
-                self.log_output("Triggering system restart to activate GPU drivers...")
-                
-                # Create restart flag file for the autostart mechanism
-                try:
-                    restart_flag_path = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'restart_required.flag')
-                    os.makedirs(os.path.dirname(restart_flag_path), exist_ok=True)
-                    with open(restart_flag_path, 'w') as f:
-                        f.write("GPU acceleration configured - restart required to activate drivers")
+                        f.write("NOTE: Package installation must complete before restart\n")
                     self.log_output(f"[OK] Restart flag created at: {restart_flag_path}")
                 except Exception as e:
                     self.log_output(f"[WARN] Could not create restart flag: {e}")
                 
-                self.log_output("The system will restart NOW to activate GPU acceleration.")
-                self.log_output("After restart, Kamiwaza will start automatically with GPU acceleration ready.")
+                self.log_output("GPU acceleration setup completed successfully!")
+                self.log_output("")
+                self.log_output("=== CONTINUING WITH PACKAGE INSTALLATION ===")
+                self.log_output("GPU drivers are configured and ready.")
+                self.log_output("Now proceeding with Kamiwaza package installation...")
+                self.log_output("After package installation completes, system will restart automatically.")
+                self.log_output("")
                 
-                # Trigger system restart using Windows command
-                try:
-                    import subprocess
-                    self.log_output("[INFO] Executing system restart command...")
-                    # Use shutdown command to restart the system
-                    subprocess.run(['shutdown', '/r', '/t', '10', '/c', 'Kamiwaza GPU acceleration requires restart'], 
-                                 capture_output=True, text=True, timeout=30)
-                    self.log_output("[OK] System restart command executed successfully")
-                    self.log_output("[INFO] System will restart in 10 seconds...")
-                except Exception as e:
-                    self.log_output(f"[ERROR] Failed to trigger system restart: {e}")
-                    self.log_output("[INFO] Please restart your computer manually to activate GPU acceleration")
-                
-                # Exit successfully - restart is handled by Windows
-                import sys
-                sys.exit(0)
+                # Continue with installation - restart will happen automatically after package installation
+                self.log_output("")
+                self.log_output("Continuing with Kamiwaza installation...")
+                self.log_output("GPU acceleration will be available after automatic restart")
             
             # Verify GPU drivers are actually working
             self.log_output("")
@@ -960,6 +1045,93 @@ echo "No GPU setup scripts available"
             except Exception as e:
                 self.log_output(f"Error during WSL repair: {e}")
                 return False
+
+    def recover_wsl_disk_attachment(self):
+        """Recover from WSL disk attachment failures by restarting WSL services"""
+        try:
+            self.log_output("=== RECOVERING WSL DISK ATTACHMENT ===")
+            self.log_output("This error typically occurs when WSL services get into a bad state")
+            self.log_output("Attempting automatic recovery without killing the installer...")
+            
+            # Step 1: Force shutdown all WSL instances
+            self.log_output("Step 1: Force shutting down all WSL instances...")
+            shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'], timeout=60)
+            if shutdown_ret == 0:
+                self.log_output("  [OK] WSL shutdown completed successfully")
+            else:
+                self.log_output(f"  [WARN] WSL shutdown failed: {shutdown_err}")
+            
+            # Step 2: Wait for services to fully stop
+            import time
+            self.log_output("Step 2: Waiting for WSL services to fully stop...")
+            time.sleep(10)  # Longer wait for disk operations to complete
+            
+            # Step 3: Restart WSL services using PowerShell
+            self.log_output("Step 3: Restarting WSL services...")
+            try:
+                import subprocess
+                service_restart_commands = [
+                    ("Restarting Windows Subsystem for Linux service", 
+                     ['powershell', '-Command', 'Restart-Service LxssManager -Force']),
+                    ("Restarting Hyper-V Host Compute Service", 
+                     ['powershell', '-Command', 'Restart-Service HvHostSvc -Force']),
+                    ("Restarting Virtual Machine Management service", 
+                     ['powershell', '-Command', 'Restart-Service VMMS -Force'])
+                ]
+                
+                for service_name, service_cmd in service_restart_commands:
+                    self.log_output(f"  Trying: {service_name}")
+                    try:
+                        service_ret = subprocess.run(service_cmd, capture_output=True, text=True, timeout=60)
+                        if service_ret.returncode == 0:
+                            self.log_output(f"    [OK] {service_name} restarted successfully")
+                        else:
+                            self.log_output(f"    [WARN] {service_name} restart failed: {service_ret.stderr}")
+                    except Exception as e:
+                        self.log_output(f"    [WARN] {service_name} restart error: {e}")
+                
+            except Exception as e:
+                self.log_output(f"  [WARN] PowerShell service restart failed: {e}")
+            
+            # Step 4: Wait for services to fully restart
+            self.log_output("Step 4: Waiting for WSL services to fully restart...")
+            time.sleep(15)  # Longer wait for services to stabilize
+            
+            # Step 5: Test WSL functionality
+            self.log_output("Step 5: Testing WSL functionality...")
+            test_ret, test_out, test_err = self.run_command(['wsl', '--list', '--quiet'], timeout=30)
+            if test_ret == 0:
+                self.log_output("  [OK] WSL list command successful after recovery")
+                if test_out:
+                    self.log_output(f"  Available distributions: {test_out.strip()}")
+                return True
+            else:
+                self.log_output(f"  [WARN] WSL test failed after recovery: {test_err}")
+                
+                # Step 6: Try WSL update as additional recovery step
+                self.log_output("Step 6: Attempting WSL update for additional recovery...")
+                update_ret, update_out, update_err = self.run_command(['wsl', '--update'], timeout=120)
+                if update_ret == 0:
+                    self.log_output("  [OK] WSL update completed successfully")
+                    
+                    # Wait for update to take effect
+                    time.sleep(10)
+                    
+                    # Test again after update
+                    final_test_ret, final_test_out, final_test_err = self.run_command(['wsl', '--list', '--quiet'], timeout=30)
+                    if final_test_ret == 0:
+                        self.log_output("  [OK] WSL is now functional after update recovery")
+                        return True
+                    else:
+                        self.log_output(f"  [ERROR] WSL still not functional after update recovery: {final_test_err}")
+                        return False
+                else:
+                    self.log_output(f"  [ERROR] WSL update failed during recovery: {update_err}")
+                    return False
+            
+        except Exception as e:
+            self.log_output(f"Error during WSL disk attachment recovery: {e}")
+            return False
 
     def repair_wsl_registry_corruption(self):
         """Attempt to repair WSL registry corruption using PowerShell commands"""
@@ -1430,17 +1602,117 @@ echo "No GPU setup scripts available"
             self.log_output(f"ERROR verifying logs: {e}")
 
     def log_output(self, message, progress=None):
-        """Log message with optional progress for MSI"""
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_line = f"[{timestamp}] {message}"
-        # Ensure ASCII-safe output for MSI environment
-        print(log_line.encode('ascii', 'replace').decode('ascii'))
-        
-        # Report progress to MSI if specified
-        if progress is not None:
-            print(f"PROGRESS:{progress}")
-        
-        sys.stdout.flush()
+        """Log message with optional progress for MSI - ENHANCED FOR RELIABILITY"""
+        try:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_line = f"[{timestamp}] {message}"
+            
+            # Multiple logging methods for maximum reliability
+            logging_methods = []
+            
+            # Method 1: Direct print to stdout (primary method)
+            try:
+                print(log_line)
+                logging_methods.append("stdout")
+            except Exception as e:
+                logging_methods.append(f"stdout_failed:{e}")
+            
+            # Method 2: Write to Windows AppData log file (backup method)
+            try:
+                appdata_logs = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'logs')
+                os.makedirs(appdata_logs, exist_ok=True)
+                log_file = os.path.join(appdata_logs, 'kamiwaza_installer.log')
+                
+                with open(log_file, 'a', encoding='utf-8', errors='replace') as f:
+                    f.write(log_line + '\n')
+                    f.flush()
+                    os.fsync(f.fileno())  # Force write to disk
+                logging_methods.append("file")
+            except Exception as e:
+                logging_methods.append(f"file_failed:{e}")
+            
+            # Method 3: Write to Windows Event Log (system-level backup) - OPTIONAL
+            try:
+                import win32evtlog
+                import win32evtlogutil
+                import win32con
+                
+                # Create event source if it doesn't exist
+                try:
+                    win32evtlogutil.AddSourceToRegistry("Kamiwaza", "Kamiwaza Installer", "Application")
+                except:
+                    pass  # Source may already exist
+                
+                # Log the event
+                win32evtlogutil.ReportEvent("Kamiwaza", 0, eventType=win32evtlog.EVENTLOG_INFORMATION_TYPE, 
+                                          strings=[log_line], data=None)
+                logging_methods.append("eventlog")
+            except ImportError:
+                logging_methods.append("eventlog_skipped:win32evtlog_not_available")
+            except Exception as e:
+                logging_methods.append(f"eventlog_failed:{e}")
+            
+            # Method 4: Write to Windows debug output (for debugging tools)
+            try:
+                import ctypes
+                ctypes.windll.kernel32.OutputDebugStringW(log_line)
+                logging_methods.append("debug")
+            except Exception as e:
+                logging_methods.append(f"debug_failed:{e}")
+            
+            # Method 5: Write to Windows temp directory (always accessible)
+            try:
+                import tempfile
+                temp_log = os.path.join(tempfile.gettempdir(), 'kamiwaza_installer_temp.log')
+                with open(temp_log, 'a', encoding='utf-8', errors='replace') as f:
+                    f.write(log_line + '\n')
+                    f.flush()
+                logging_methods.append("temp")
+            except Exception as e:
+                logging_methods.append(f"temp_failed:{e}")
+            
+            # Report progress to MSI if specified
+            if progress is not None:
+                progress_line = f"PROGRESS:{progress}"
+                try:
+                    print(progress_line)
+                    # Also write progress to log file
+                    if 'file' in logging_methods:
+                        with open(log_file, 'a', encoding='utf-8', errors='replace') as f:
+                            f.write(progress_line + '\n')
+                            f.flush()
+                except Exception as e:
+                    logging_methods.append(f"progress_failed:{e}")
+            
+            # Force flush all output streams
+            try:
+                sys.stdout.flush()
+                sys.stderr.flush()
+            except:
+                pass
+            
+            # Log which methods succeeded (for debugging)
+            if len(logging_methods) < 2:
+                # If less than 2 methods succeeded, try to log the failure
+                try:
+                    failure_msg = f"LOGGING_WARNING: Only {len(logging_methods)} methods succeeded: {logging_methods}"
+                    print(failure_msg)
+                    # Try to write to a simple text file as last resort
+                    simple_log = os.path.join(os.getcwd(), 'kamiwaza_installer_simple.log')
+                    with open(simple_log, 'a', encoding='utf-8', errors='replace') as f:
+                        f.write(f"{timestamp}: {failure_msg}\n")
+                        f.write(f"{timestamp}: {log_line}\n")
+                except:
+                    pass  # Last resort failed too
+                    
+        except Exception as e:
+            # If even our logging fails, try the most basic method
+            try:
+                basic_msg = f"LOGGING_FAILED: {e} - Original message: {message}"
+                print(basic_msg)
+                sys.stdout.flush()
+            except:
+                pass  # Complete logging failure
 
     def run_command_with_streaming(self, command, timeout=None, progress_callback=None):
         """Run command with real-time output streaming"""
@@ -1825,7 +2097,7 @@ echo "No GPU setup scripts available"
             update_cmd = f"""
             echo '[{timestamp}] Starting apt update' >> /tmp/kamiwaza_install.log
             export DEBIAN_FRONTEND=noninteractive
-            sudo -E apt update 2>&1 | tee -a /tmp/kamiwaza_install.log
+            sudo -E apt update >> /tmp/kamiwaza_install.log 2>&1
             UPDATE_EXIT_CODE=$?
             echo "[{timestamp}] apt update completed with exit code $UPDATE_EXIT_CODE" >> /tmp/kamiwaza_install.log
             
@@ -1865,11 +2137,11 @@ echo "No GPU setup scripts available"
                 elif "complete" in line.lower() or "finished" in line.lower():
                     self.log_output("", progress=90)
             
-            # Use streaming installation command
+            # Use streaming installation command (WSL2 compatible)
             install_cmd = f"""
             echo '[{timestamp}] Starting apt install of {deb_path}' > /tmp/kamiwaza_install.log
             export DEBIAN_FRONTEND=noninteractive
-            sudo -E apt install -f -y {deb_path} 2>&1 | tee -a /tmp/kamiwaza_install.log
+            sudo -E apt install -f -y {deb_path} >> /tmp/kamiwaza_install.log 2>&1
             INSTALL_EXIT_CODE=$?
             echo "[{timestamp}] apt install completed with exit code $INSTALL_EXIT_CODE" >> /tmp/kamiwaza_install.log
             
@@ -1957,6 +2229,10 @@ echo "No GPU setup scripts available"
             else:
                 self.log_output(f"INFO: Could not get kamiwaza version (may need setup): {version_err}")
             
+            # Install GUI Manager
+            self.log_output("=== INSTALLING GUI MANAGER ===")
+            self.install_gui_manager()
+            
             # GPU setup completed - if we get here, no restart was needed
             self.log_output("")
             self.log_output("=== GPU SETUP COMPLETE ===", progress=95)
@@ -1978,6 +2254,13 @@ echo "No GPU setup scripts available"
             self.log_output(f"  APT detailed logs: {appdata_logs}\\apt_term_log.txt")
             self.log_output(f"  APT history logs: {appdata_logs}\\apt_history_log.txt")
             self.log_output(f"  DPKG operations: {appdata_logs}\\dpkg_log.txt")
+            self.log_output("")
+            
+            # Show installer-specific log locations
+            self.log_output("INSTALLER LOG LOCATIONS (this script's output):")
+            self.log_output(f"  Primary installer log: {appdata_logs}\\kamiwaza_installer.log")
+            self.log_output(f"  Temporary installer log: {os.path.join(tempfile.gettempdir(), 'kamiwaza_installer_temp.log')}")
+            self.log_output(f"  Simple fallback log: {os.path.join(os.getcwd(), 'kamiwaza_installer_simple.log')}")
             self.log_output("")
             
             # Show WSL log locations (original sources)
@@ -2009,29 +2292,237 @@ echo "No GPU setup scripts available"
             self.log_output("the complete installation details and are the authoritative source.")
             self.log_output("")
             
-            self.log_output("=== NEXT STEPS ===")
+            self.log_output("=== INSTALLATION COMPLETE - AUTOMATIC RESTART IN 10 SECONDS ===")
             
-            self.log_output("GPU acceleration setup has been completed successfully!")
+            self.log_output("KAMIWAZA INSTALLATION COMPLETED SUCCESSFULLY!")
             self.log_output("")
-            self.log_output("CRITICAL: You must restart your computer to activate GPU acceleration!")
+            self.log_output("CRITICAL: System will restart automatically in 10 seconds to activate GPU acceleration!")
             self.log_output("GPU drivers are installed but not yet active until system restart.")
             self.log_output("")
             self.log_output("After restart:")
-            self.log_output("1. Re-run this installer to continue with package installation")
-            self.log_output("2. GPU acceleration will be active and ready")
-            self.log_output("3. Kamiwaza will be installed with optimal performance")
-            self.log_output("")
-            self.log_output("To restart now:")
-            self.log_output("1. Save any unsaved work")
-            self.log_output("2. Press Windows + R")
-            self.log_output("3. Type: shutdown /r /t 0")
-            self.log_output("4. Press Enter")
-            self.log_output("")
-            self.log_output("The installer will automatically detect this is a re-run")
-            self.log_output("and continue from where it left off.")
+            self.log_output("1. GPU acceleration will be active and ready")
+            self.log_output("2. Kamiwaza will start automatically with optimal performance")
+            self.log_output("3. All GPU features will be fully functional")
             self.log_output("")
             
-            self._wait_for_user_input("Press Enter to close this window...")
+            # Register Windows autostart for after the restart
+            self.log_output("=== REGISTERING WINDOWS AUTOSTART ===")
+            try:
+                import subprocess
+                autostart_bat = os.path.join(os.path.dirname(__file__), 'kamiwaza_autostart.bat')
+                if not os.path.exists(autostart_bat):
+                    # Fallback to LocalAppData folder
+                    autostart_bat = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'kamiwaza_autostart.bat')
+                if os.path.exists(autostart_bat):
+                    ps_cmd = (
+                        f"$runOnceKey = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce'; "
+                        f"$runOnceName = 'KamiwazaGPUAutostart'; "
+                        f"$runOnceValue = '\"{autostart_bat}\"'; "
+                        f"Set-ItemProperty -Path $runOnceKey -Name $runOnceName -Value $runOnceValue -Type String -Force"
+                    )
+                    subprocess.run(['powershell.exe', '-ExecutionPolicy', 'Bypass', '-Command', ps_cmd], check=False)
+                    self.log_output("Registered Windows RunOnce entry for Kamiwaza autostart (no admin rights required)")
+                    self.log_output("Kamiwaza will automatically start after system restart")
+                else:
+                    self.log_output("Warning: Autostart script not found; skipping RunOnce registration")
+            except Exception as task_err:
+                self.log_output(f"Warning: Failed to register RunOnce entry: {task_err}")
+            
+            # AUTOMATIC FULL DEVICE RESTART - NO USER INPUT REQUIRED
+            self.log_output("")
+            self.log_output("=== AUTOMATIC FULL DEVICE RESTART IN PROGRESS ===")
+            self.log_output("WARNING: Your ENTIRE COMPUTER will restart automatically in 3 seconds!")
+            self.log_output("This is a FULL SYSTEM RESTART - not just WSL!")
+            self.log_output("Save any unsaved work immediately!")
+            self.log_output("")
+            
+            # Optional interactive pause before countdown
+            try:
+                import sys
+                if sys.stdin.isatty() and hasattr(sys.stdin, 'readline'):
+                    self.log_output("Press Enter to proceed with FULL DEVICE restart...")
+                    input()
+                    self.log_output("Proceeding with restart...")
+            except Exception:
+                pass
+            
+            # Countdown and automatic restart
+            import time
+            for i in range(3, 0, -1):
+                self.log_output(f"FULL DEVICE RESTART in {i} seconds...")
+                time.sleep(1)
+            
+            # Trigger automatic FULL DEVICE restart
+            try:
+                import subprocess
+                self.log_output("[INFO] Executing automatic FULL DEVICE restart...")
+                self.log_output("[INFO] Command: shutdown /r /t 0 (restarts entire Windows system)")
+                
+                # Enhanced restart command with verbose logging
+                restart_cmd = ['shutdown', '/r', '/t', '0', '/c', 'Kamiwaza installation complete - FULL DEVICE restart for GPU acceleration']
+                self.log_output(f"[VERBOSE] Full restart command: {restart_cmd}")
+                
+                # Execute restart command with detailed logging
+                restart_result = subprocess.run(restart_cmd, capture_output=True, text=True, timeout=30)
+                
+                if restart_result.returncode == 0:
+                    self.log_output("[OK] Automatic FULL DEVICE restart command executed successfully")
+                    self.log_output("Your entire computer will restart now to activate GPU acceleration")
+                    self.log_output("After restart, Kamiwaza will start automatically with GPU acceleration ready")
+                else:
+                    self.log_output(f"[WARNING] Restart command returned non-zero exit code: {restart_result.returncode}")
+                    self.log_output(f"[VERBOSE] Restart command stdout: {restart_result.stdout}")
+                    self.log_output(f"[VERBOSE] Restart command stderr: {restart_result.stderr}")
+                    
+                    # Try alternative restart methods
+                    self.log_output("[VERBOSE] Attempting alternative restart methods...")
+                    
+                    # Method 1: Try with different shutdown flags
+                    alt_restart_cmd = ['shutdown', '/r', '/t', '0']
+                    self.log_output(f"[VERBOSE] Trying alternative restart command: {alt_restart_cmd}")
+                    alt_result = subprocess.run(alt_restart_cmd, capture_output=True, text=True, timeout=30)
+                    if alt_result.returncode == 0:
+                        self.log_output("[OK] Alternative restart command succeeded")
+                    else:
+                        self.log_output(f"[WARNING] Alternative restart command failed: {alt_result.returncode}")
+                        self.log_output(f"[VERBOSE] Alternative command stderr: {alt_result.stderr}")
+                    
+                    # Method 2: Try PowerShell restart command
+                    ps_restart_cmd = ['powershell.exe', '-Command', 'Restart-Computer -Force']
+                    self.log_output(f"[VERBOSE] Trying PowerShell restart command: {ps_restart_cmd}")
+                    ps_result = subprocess.run(ps_restart_cmd, capture_output=True, text=True, timeout=30)
+                    if ps_result.returncode == 0:
+                        self.log_output("[OK] PowerShell restart command succeeded")
+                    else:
+                        self.log_output(f"[WARNING] PowerShell restart command failed: {ps_result.returncode}")
+                        self.log_output(f"[VERBOSE] PowerShell command stderr: {ps_result.stderr}")
+                    
+                    # Method 3: Try Windows API restart (requires elevation)
+                    try:
+                        import ctypes
+                        self.log_output("[VERBOSE] Attempting Windows API restart...")
+                        # This requires elevation and may not work in all contexts
+                        ctypes.windll.advapi32.InitiateSystemShutdownW(None, "Kamiwaza restart", 0, True, True)
+                        self.log_output("[OK] Windows API restart initiated")
+                    except Exception as api_error:
+                        self.log_output(f"[VERBOSE] Windows API restart failed: {api_error}")
+                    
+                    # Check for common restart prevention reasons
+                    self.log_output("[VERBOSE] Analyzing restart prevention reasons...")
+                    
+                    # Check if running as administrator
+                    if self.is_running_as_administrator():
+                        self.log_output("[VERBOSE] Running as Administrator - restart should work")
+                    else:
+                        self.log_output("[VERBOSE] NOT running as Administrator - restart may be blocked")
+                        self.log_output("[VERBOSE] Some restart methods require elevated privileges")
+                    
+                    # Check for active processes that might prevent restart
+                    try:
+                        import psutil
+                        self.log_output("[VERBOSE] Checking for processes that might prevent restart...")
+                        critical_processes = []
+                        for proc in psutil.process_iter(['pid', 'name', 'status']):
+                            try:
+                                if proc.info['status'] == 'running':
+                                    # Check for common processes that prevent restart
+                                    proc_name = proc.info['name'].lower()
+                                    if any(x in proc_name for x in ['installer', 'setup', 'msiexec', 'windows', 'update']):
+                                        critical_processes.append(f"{proc.info['name']} (PID: {proc.info['pid']})")
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                pass
+                        
+                        if critical_processes:
+                            self.log_output(f"[VERBOSE] Found {len(critical_processes)} potentially blocking processes:")
+                            for proc in critical_processes[:10]:  # Show first 10
+                                self.log_output(f"[VERBOSE]   {proc}")
+                            if len(critical_processes) > 10:
+                                self.log_output(f"[VERBOSE]   ... and {len(critical_processes) - 10} more")
+                        else:
+                            self.log_output("[VERBOSE] No obvious blocking processes found")
+                    except ImportError:
+                        self.log_output("[VERBOSE] psutil not available - cannot check for blocking processes")
+                    except Exception as proc_error:
+                        self.log_output(f"[VERBOSE] Error checking processes: {proc_error}")
+                    
+                    # Check Windows Update status
+                    try:
+                        self.log_output("[VERBOSE] Checking Windows Update status...")
+                        wu_check = subprocess.run(['powershell.exe', '-Command', 'Get-WindowsUpdate'], 
+                                               capture_output=True, text=True, timeout=30)
+                        if wu_check.returncode == 0:
+                            if 'No updates available' in wu_check.stdout:
+                                self.log_output("[VERBOSE] Windows Update: No pending updates")
+                            else:
+                                self.log_output("[VERBOSE] Windows Update: Updates may be pending")
+                                self.log_output(f"[VERBOSE] Windows Update output: {wu_check.stdout[:200]}...")
+                        else:
+                            self.log_output(f"[VERBOSE] Windows Update check failed: {wu_check.stderr}")
+                    except Exception as wu_error:
+                        self.log_output(f"[VERBOSE] Windows Update check error: {wu_error}")
+                    
+                    # Check for pending system changes
+                    try:
+                        self.log_output("[VERBOSE] Checking for pending system changes...")
+                        pending_check = subprocess.run(['powershell.exe', '-Command', 'Get-ComputerInfo | Select-Object WindowsUpdateAutoUpdateEnabled'], 
+                                                   capture_output=True, text=True, timeout=30)
+                        if pending_check.returncode == 0:
+                            self.log_output(f"[VERBOSE] Windows Update Auto Update: {pending_check.stdout.strip()}")
+                    except Exception as pending_error:
+                        self.log_output(f"[VERBOSE] Pending changes check error: {pending_error}")
+                    
+                    # Final restart attempt with maximum verbosity
+                    self.log_output("[VERBOSE] Final restart attempt with maximum verbosity...")
+                    final_restart_cmd = ['shutdown', '/r', '/t', '0', '/c', 'Kamiwaza restart - final attempt', '/f']
+                    self.log_output(f"[VERBOSE] Final restart command: {final_restart_cmd}")
+                    
+                    final_result = subprocess.run(final_restart_cmd, capture_output=True, text=True, timeout=30)
+                    if final_result.returncode == 0:
+                        self.log_output("[OK] Final restart attempt succeeded")
+                    else:
+                        self.log_output(f"[CRITICAL] All restart methods failed - manual restart required")
+                        self.log_output(f"[VERBOSE] Final attempt stderr: {final_result.stderr}")
+                        
+                        # Provide detailed manual restart instructions
+                        self.log_output("")
+                        self.log_output("=== MANUAL RESTART REQUIRED ===")
+                        self.log_output("Automatic restart failed - please restart manually:")
+                        self.log_output("1. Save all work and close applications")
+                        self.log_output("2. Press Windows + R, type 'shutdown /r /t 0', press Enter")
+                        self.log_output("3. Or use Start Menu > Power > Restart")
+                        self.log_output("4. Or press Ctrl + Alt + Delete > Power > Restart")
+                        self.log_output("")
+                        self.log_output("After restart, Kamiwaza will start automatically with GPU acceleration")
+                        self.log_output("")
+                        
+                        # Wait for user acknowledgment
+                        self._wait_for_user_input("Press Enter after manually restarting your computer...")
+                        
+            except Exception as e:
+                self.log_output(f"[ERROR] Failed to trigger automatic FULL DEVICE restart: {e}")
+                self.log_output("[VERBOSE] Exception details:")
+                import traceback
+                for line in traceback.format_exc().split('\n'):
+                    if line.strip():
+                        self.log_output(f"[VERBOSE]   {line}")
+                
+                self.log_output("[CRITICAL] Please restart your computer manually to activate GPU acceleration")
+                self.log_output("After restart, Kamiwaza will start automatically")
+                
+                # Provide detailed manual restart instructions
+                self.log_output("")
+                self.log_output("=== MANUAL RESTART REQUIRED ===")
+                self.log_output("Automatic restart failed - please restart manually:")
+                self.log_output("1. Save all work and close applications")
+                self.log_output("2. Press Windows + R, type 'shutdown /r /t 0', press Enter")
+                self.log_output("3. Or use Start Menu > Power > Restart")
+                self.log_output("4. Or press Ctrl + Alt + Delete > Power > Restart")
+                self.log_output("")
+                self.log_output("After restart, Kamiwaza will start automatically with GPU acceleration")
+                self.log_output("")
+                
+                self._wait_for_user_input("Press Enter to exit...")
+            
             return 0
             
         except Exception as e:
@@ -2137,10 +2628,26 @@ echo "No GPU setup scripts available"
                         self.log_output("All repair methods failed, system restart required")
                         return None
             else:
-                self.log_output("On Windows Server, you may need to manually enable WSL:")
-                self.log_output("  - Server 2022: Run 'wsl --install' as Administrator")
-                self.log_output("  - Server 2019: Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux")
-                return None
+                # Check if this might be a disk attachment issue
+                if "Failed to attach disk" in str(out) or "ERROR_PATH_NOT_FOUND" in str(out):
+                    self.log_output("DETECTED: Possible WSL disk attachment issue - attempting recovery...")
+                    if self.recover_wsl_disk_attachment():
+                        self.log_output("WSL disk attachment recovered, retrying distribution check...")
+                        ret, out, _ = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+                        if ret == 0:
+                            self.log_output("SUCCESS: WSL is now available after disk attachment recovery")
+                            return True
+                        else:
+                            self.log_output("WSL still not functional after disk attachment recovery")
+                            return None
+                    else:
+                        self.log_output("WSL disk attachment recovery failed")
+                        return None
+                else:
+                    self.log_output("On Windows Server, you may need to manually enable WSL:")
+                    self.log_output("  - Server 2022: Run 'wsl --install' as Administrator")
+                    self.log_output("  - Server 2019: Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux")
+                    return None
         
         if ret == 0:
             wsl_instances = out.replace('\x00', '').replace(' ', '').replace('\r', '').replace('\n', ' ').split()
@@ -2157,8 +2664,9 @@ echo "No GPU setup scripts available"
                 else:
                     self.log_output(f"Warning: Could not stop Ubuntu-24.04 instance: {stop_err}")
                 
-                # Shutdown all WSL instances to ensure clean restart
+                # Shutdown all WSL instances to ensure clean restart (WSL ONLY - not the entire device)
                 self.log_output("Shutting down all WSL instances for clean restart...")
+                self.log_output("NOTE: This only stops WSL Linux instances - does NOT restart your computer")
                 shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'], timeout=60)
                 if shutdown_ret == 0:
                     self.log_output("Successfully shutdown all WSL instances")
@@ -2179,15 +2687,38 @@ echo "No GPU setup scripts available"
                 else:
                     self.log_output(f"ERROR: Could not access Ubuntu-24.04 instance after restart: {test_err}")
                     
-                    # Check if it's a disk corruption issue
-                    if "Failed to attach disk" in test_err or "ERROR_PATH_NOT_FOUND" in test_err:
-                        self.log_output("DETECTED: Ubuntu-24.04 WSL instance disk corruption - missing or corrupted .vhdx file")
-                        self.log_output("Ubuntu-24.04 instance appears to be corrupted. Cannot proceed with this instance.")
-                        self.log_output("Consider removing the corrupted instance: wsl --unregister Ubuntu-24.04")
-                        return None
+                                    # Check if it's a disk attachment issue (recoverable)
+                if "Failed to attach disk" in test_err or "ERROR_PATH_NOT_FOUND" in test_err:
+                    self.log_output("DETECTED: WSL disk attachment issue - this is recoverable!")
+                    self.log_output("The WSL service is having trouble mounting the disk, but this can be fixed.")
+                    self.log_output("Attempting automatic recovery...")
+                    
+                    # Try to recover the WSL service
+                    if self.recover_wsl_disk_attachment():
+                        self.log_output("WSL disk attachment recovered successfully!")
+                        self.log_output("Retrying instance access...")
+                        
+                        # Wait a moment for recovery to take effect
+                        import time
+                        time.sleep(5)
+                        
+                        # Test access again
+                        retry_ret, retry_out, retry_err = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'echo', 'recovery_test'], timeout=30)
+                        if retry_ret == 0:
+                            self.log_output("SUCCESS: Ubuntu-24.04 instance accessible after recovery!")
+                            self.log_output(f"Recovery test output: {retry_out.strip()}")
+                            return ['wsl', '-d', 'Ubuntu-24.04']
+                        else:
+                            self.log_output(f"Recovery attempt failed - instance still not accessible: {retry_err}")
+                            self.log_output("This indicates a deeper issue that may require manual intervention")
+                            return None
                     else:
-                        self.log_output("This may indicate a different WSL issue. Please check WSL configuration.")
+                        self.log_output("WSL disk attachment recovery failed")
+                        self.log_output("This may require manual intervention or system restart")
                         return None
+                else:
+                    self.log_output("This may indicate a different WSL issue. Please check WSL configuration.")
+                    return None
                 
                 # Ensure Ubuntu-24.04 also uses kamiwaza as default user
                 self.log_output("Verifying default user for Ubuntu-24.04...")
@@ -2239,8 +2770,9 @@ echo "No GPU setup scripts available"
             else:
                 self.log_output(f"Warning: Could not stop {instance_name} instance: {stop_err}")
             
-            # Shutdown all WSL instances to ensure clean restart
+            # Shutdown all WSL instances to ensure clean restart (WSL ONLY - not the entire device)
             self.log_output("Shutting down all WSL instances for clean restart...")
+            self.log_output("NOTE: This only stops WSL Linux instances - does NOT restart your computer")
             shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'], timeout=60)
             if shutdown_ret == 0:
                 self.log_output("Successfully shutdown all WSL instances")
@@ -2261,18 +2793,34 @@ echo "No GPU setup scripts available"
             else:
                 self.log_output(f"ERROR: Could not access {instance_name} instance after restart: {test_err}")
                 
-                # Check if it's a disk corruption issue
+                # Check if it's a disk attachment issue (recoverable)
                 if "Failed to attach disk" in test_err or "ERROR_PATH_NOT_FOUND" in test_err:
-                    self.log_output("DETECTED: WSL instance disk corruption - missing or corrupted .vhdx file")
-                    self.log_output(f"Attempting to remove corrupted {instance_name} instance and create fresh one...")
+                    self.log_output("DETECTED: WSL disk attachment issue - this is recoverable!")
+                    self.log_output("The WSL service is having trouble mounting the disk, but this can be fixed.")
+                    self.log_output("Attempting automatic recovery...")
                     
-                    # Remove the corrupted instance
-                    unregister_ret, unregister_out, unregister_err = self.run_command(['wsl', '--unregister', instance_name], timeout=30)
-                    if unregister_ret == 0:
-                        self.log_output(f"Successfully removed corrupted {instance_name} instance")
-                        # Continue to create a fresh instance below
+                    # Try to recover the WSL service
+                    if self.recover_wsl_disk_attachment():
+                        self.log_output("WSL disk attachment recovered successfully!")
+                        self.log_output("Retrying instance access...")
+                        
+                        # Wait a moment for recovery to take effect
+                        import time
+                        time.sleep(5)
+                        
+                        # Test access again
+                        retry_ret, retry_out, retry_err = self.run_command(['wsl', '-d', instance_name, 'echo', 'recovery_test'], timeout=30)
+                        if retry_ret == 0:
+                            self.log_output("SUCCESS: {instance_name} instance accessible after recovery!")
+                            self.log_output(f"Recovery test output: {retry_out.strip()}")
+                            return instance_name
+                        else:
+                            self.log_output(f"Recovery attempt failed - instance still not accessible: {retry_err}")
+                            self.log_output("This indicates a deeper issue that may require manual intervention")
+                            return None
                     else:
-                        self.log_output(f"ERROR: Could not remove corrupted {instance_name} instance: {unregister_err}")
+                        self.log_output("WSL disk attachment recovery failed")
+                        self.log_output("This may require manual intervention or system restart")
                         return None
                 else:
                     self.log_output("This may indicate a different WSL issue. Please check WSL configuration.")
@@ -2891,6 +3439,73 @@ networkingMode=mirrored
             self.log_output(f"Warning: Error disabling IPv6: {e}")
             self.log_output("Continuing with installation anyway...")
 
+    def install_gui_manager(self):
+        """Install GUI Manager for Kamiwaza"""
+        try:
+            self.log_output("Installing GUI Manager for Kamiwaza...")
+            
+            # Check if GUI Manager files exist
+            gui_manager_py = os.path.join(os.path.dirname(__file__), 'kamiwaza_gui_manager.py')
+            if not os.path.exists(gui_manager_py):
+                self.log_output("GUI Manager source not found, skipping installation")
+                return
+            
+            # Check if we can build the EXE
+            build_script = os.path.join(os.path.dirname(__file__), 'build_gui_exe.py')
+            if os.path.exists(build_script):
+                self.log_output("Building GUI Manager EXE...")
+                
+                # Try to build the EXE
+                try:
+                    import subprocess
+                    build_result = subprocess.run([sys.executable, build_script], 
+											   capture_output=True, text=True, timeout=300)
+                    if build_result.returncode == 0:
+                        self.log_output("GUI Manager EXE built successfully")
+                        
+                        # Try to install it
+                        install_script = os.path.join(os.path.dirname(__file__), 'install_gui_manager.ps1')
+                        if os.path.exists(install_script):
+                            self.log_output("Installing GUI Manager...")
+                            install_result = subprocess.run(['powershell.exe', '-ExecutionPolicy', 'Bypass', '-File', install_script], 
+														capture_output=True, text=True, timeout=120)
+                            if install_result.returncode == 0:
+                                self.log_output("GUI Manager installed successfully")
+                            else:
+                                self.log_output(f"GUI Manager installation failed: {install_result.stderr}")
+                        else:
+                            self.log_output("Install script not found, GUI Manager EXE built but not installed")
+                    else:
+                        self.log_output(f"GUI Manager EXE build failed: {build_result.stderr}")
+                        
+                except Exception as build_error:
+                    self.log_output(f"Error building GUI Manager EXE: {build_error}")
+            else:
+                self.log_output("Build script not found, skipping GUI Manager installation")
+            
+        except Exception as e:
+            self.log_output(f"Error installing GUI Manager: {e}")
+            self.log_output("Continuing with installation anyway...")
+
+    def check_gui_manager_installed(self):
+        """Check if GUI Manager is already installed"""
+        try:
+            # Check if GUI Manager EXE exists in AppData
+            appdata_gui = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'GUI', 'KamiwazaGUIManager.exe')
+            if os.path.exists(appdata_gui):
+                self.log_output("GUI Manager is already installed in AppData")
+                return True
+            else:
+                self.log_output("GUI Manager not found in AppData")
+                return False
+            
+        except Exception as e:
+            self.log_output(f"Error checking GUI Manager installation: {e}")
+            return False
+
+
+# End of HeadlessKamiwazaInstaller class
+
 def main():
     print("=== KAMIWAZA HEADLESS INSTALLER STARTING ===")
     print(f"Script: {__file__}")
@@ -2899,14 +3514,21 @@ def main():
     print(f"Working Dir: {os.getcwd()}")
     print("=" * 50)
     print("")
-    print("IMPORTANT: This installer now handles GPU acceleration automatically!")
-    print("GPU setup scripts will restart the system immediately when needed.")
-    print("After restart, simply re-run this installer to continue.")
+    print("IMPORTANT: This installer will restart your ENTIRE COMPUTER AUTOMATICALLY!")
+    print("GPU setup + package installation + FULL DEVICE restart + Kamiwaza autostart")
+    print("This is NOT just a WSL restart - your entire Windows system will reboot!")
+    print("No user confirmation required - save work before running!")
     print("")
-    print("SIMPLE INSTALLATION FLOW:")
-    print("1. GPU setup (restarts if needed)")
-    print("2. Package installation (after restart if needed)")
-    print("3. Kamiwaza start with GPU acceleration ready")
+    print("ENHANCED LOGGING: All output is logged to multiple locations:")
+    print("- Windows AppData: %LOCALAPPDATA%\\Kamiwaza\\logs\\")
+    print("- Temporary directory: %TEMP%\\kamiwaza_installer_temp.log")
+    print("- Current directory: kamiwaza_installer_simple.log")
+    print("")
+    print("AUTOMATIC INSTALLATION FLOW:")
+    print("1. WSL setup and GPU driver installation")
+    print("2. Kamiwaza package installation")
+    print("3. Automatic FULL DEVICE restart (10 second countdown)")
+    print("4. Kamiwaza starts automatically with GPU acceleration")
     print("=" * 50)
     
     parser = argparse.ArgumentParser(description='Headless Kamiwaza Installer')

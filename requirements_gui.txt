@@ -1,0 +1,17 @@
+# Requirements for building Kamiwaza GUI Manager executable
+# These packages are needed for PyInstaller and the GUI
+
+# Core GUI dependencies
+tkinter  # Usually included with Python, but listed for clarity
+
+# Build dependencies
+pyinstaller>=5.0.0
+pyinstaller-hooks-contrib>=2022.0
+
+# Optional: for better executable optimization
+# upx  # UPX compression (optional, can reduce executable size)
+
+# Development dependencies (not needed for end users)
+# pytest  # For testing
+# black   # For code formatting
+# flake8  # For linting 

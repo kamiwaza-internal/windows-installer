@@ -107,7 +107,7 @@ class HeadlessKamiwazaInstaller:
             
             return False
         else:
-            self.log_output("✓ WSL is available")
+            self.log_output("[INFO] WSL is available")
             if out:
                 # Show WSL version info
                 for line in out.strip().split('\n')[:3]:  # First 3 lines
@@ -133,9 +133,9 @@ class HeadlessKamiwazaInstaller:
                     f.write(f"WSL Instance: {wsl_cmd[2] if len(wsl_cmd) > 2 else 'default'}\n")
                     f.write("=" * 60 + "\n\n")
                     f.write(out)
-                self.log_output(f"✓ Copied detailed APT logs to: {apt_term_log}")
+                self.log_output(f"[INFO] Copied detailed APT logs to: {apt_term_log}")
             else:
-                self.log_output(f"⚠ Could not copy APT terminal log: {err}")
+                self.log_output(f"[WARNING] Could not copy APT terminal log: {err}")
             
             # Copy APT history log
             apt_history_log = os.path.join(appdata_logs, 'apt_history_log.txt')
@@ -147,7 +147,7 @@ class HeadlessKamiwazaInstaller:
                     f.write(f"Installation Date: {timestamp}\n")
                     f.write("=" * 60 + "\n\n")
                     f.write(out)
-                self.log_output(f"✓ Copied APT history to: {apt_history_log}")
+                self.log_output(f"[INFO] Copied APT history to: {apt_history_log}")
             
             # Copy DPKG log (kamiwaza entries only)
             dpkg_log = os.path.join(appdata_logs, 'dpkg_log.txt')
@@ -159,7 +159,7 @@ class HeadlessKamiwazaInstaller:
                     f.write(f"Installation Date: {timestamp}\n")
                     f.write("=" * 60 + "\n\n")
                     f.write(out)
-                self.log_output(f"✓ Copied DPKG operations to: {dpkg_log}")
+                self.log_output(f"[INFO] Copied DPKG operations to: {dpkg_log}")
             
             # Create a master install log with key information
             install_log = os.path.join(appdata_logs, 'kamiwaza_install_logs.txt')
@@ -191,7 +191,7 @@ class HeadlessKamiwazaInstaller:
                 f.write(f"wsl -d {wsl_cmd[2] if len(wsl_cmd) > 2 else 'default'} -- kamiwaza status\n")
                 f.write(f"wsl -d {wsl_cmd[2] if len(wsl_cmd) > 2 else 'default'} -- kamiwaza logs\n")
             
-            self.log_output(f"✓ Created master log index: {install_log}")
+            self.log_output(f"[INFO] Created master log index: {install_log}")
             self.log_output(f"All logs copied to Windows directory: {appdata_logs}")
             
         except Exception as e:
@@ -204,7 +204,7 @@ class HeadlessKamiwazaInstaller:
             cmd = f"ls -la /var/log/apt/term.log"
             ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=15)
             if ret == 0:
-                self.log_output(f"✓ APT terminal log exists: {out.strip()}")
+                self.log_output(f"[INFO] APT terminal log exists: {out.strip()}")
                 
                 # Show last few lines
                 cmd = f"tail -10 /var/log/apt/term.log"
@@ -215,24 +215,24 @@ class HeadlessKamiwazaInstaller:
                         if line.strip():
                             self.log_output(f"  {line}")
             else:
-                self.log_output(f"⚠ APT terminal log not found: {err}")
+                self.log_output(f"[WARNING] APT terminal log not found: {err}")
             
             # Check APT history log
             cmd = f"ls -la /var/log/apt/history.log"
             ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=15)
             if ret == 0:
-                self.log_output(f"✓ APT history log exists: {out.strip()}")
+                self.log_output(f"[INFO] APT history log exists: {out.strip()}")
             else:
-                self.log_output(f"⚠ APT history log not found: {err}")
+                self.log_output(f"[WARNING] APT history log not found: {err}")
             
             # Check for kamiwaza in dpkg log
             cmd = f"grep -c kamiwaza /var/log/dpkg.log"
             ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=15)
             if ret == 0 and out.strip().isdigit():
                 count = int(out.strip())
-                self.log_output(f"✓ Found {count} kamiwaza entries in DPKG log")
+                self.log_output(f"[INFO] Found {count} kamiwaza entries in DPKG log")
             else:
-                self.log_output(f"⚠ No kamiwaza entries found in DPKG log")
+                self.log_output(f"[WARNING] No kamiwaza entries found in DPKG log")
             
         except Exception as e:
             self.log_output(f"ERROR verifying logs: {e}")
@@ -325,7 +325,7 @@ class HeadlessKamiwazaInstaller:
             
             # Show completion message
             elapsed = int((datetime.datetime.now() - start_time).total_seconds())
-            self.log_output(f"  ✓ Command completed in {elapsed} seconds")
+            self.log_output(f"  [INFO] Command completed in {elapsed} seconds")
             
             return return_code, full_output, ""
             
@@ -824,9 +824,9 @@ networkingMode=mirrored
                 current_user = user_out.strip()
                 self.log_output(f"WSL default user: {current_user}")
                 if current_user == 'ubuntu':
-                    self.log_output("✓ Confirmed: WSL instance uses ubuntu user")
+                    self.log_output("[INFO] Confirmed: WSL instance uses ubuntu user")
                 else:
-                    self.log_output(f"⚠ WARNING: WSL instance uses '{current_user}' instead of ubuntu")
+                    self.log_output(f"[WARNING] WARNING: WSL instance uses '{current_user}' instead of ubuntu")
             else:
                 self.log_output(f"WARNING: Could not verify WSL user: {user_err}")
             
@@ -834,9 +834,9 @@ networkingMode=mirrored
             if user_ret == 0 and user_out.strip() == 'ubuntu':
                 sudo_ret, sudo_out, sudo_err = self.run_command(wsl_cmd + ['sudo', '-n', 'whoami'], timeout=15)
                 if sudo_ret == 0 and sudo_out.strip() == 'root':
-                    self.log_output("✓ Confirmed: ubuntu user has passwordless sudo access")
+                    self.log_output("[INFO] Confirmed: ubuntu user has passwordless sudo access")
                 else:
-                    self.log_output(f"⚠ WARNING: ubuntu user sudo test failed: {sudo_err}")
+                    self.log_output(f"[WARNING] WARNING: ubuntu user sudo test failed: {sudo_err}")
             
             self.log_output("=== PHASE 1 COMPLETE ===\n")
             
@@ -921,7 +921,7 @@ networkingMode=mirrored
             update_cmd = f"""
             echo '[{timestamp}] Starting apt update' >> /tmp/kamiwaza_install.log
             export DEBIAN_FRONTEND=noninteractive
-            sudo -E apt update 2>&1 | tee -a /tmp/kamiwaza_install.log
+            sudo -E apt update >> /tmp/kamiwaza_install.log 2>&1
             UPDATE_EXIT_CODE=$?
             echo "[{timestamp}] apt update completed with exit code $UPDATE_EXIT_CODE" >> /tmp/kamiwaza_install.log
             
@@ -961,11 +961,11 @@ networkingMode=mirrored
                 elif "complete" in line.lower() or "finished" in line.lower():
                     self.log_output("", progress=90)
             
-            # Use streaming installation command
+            # Use streaming installation command (WSL2 compatible)
             install_cmd = f"""
             echo '[{timestamp}] Starting apt install of {deb_path}' > /tmp/kamiwaza_install.log
             export DEBIAN_FRONTEND=noninteractive
-            sudo -E apt install -f -y {deb_path} 2>&1 | tee -a /tmp/kamiwaza_install.log
+            sudo -E apt install -f -y {deb_path} >> /tmp/kamiwaza_install.log 2>&1
             INSTALL_EXIT_CODE=$?
             echo "[{timestamp}] apt install completed with exit code $INSTALL_EXIT_CODE" >> /tmp/kamiwaza_install.log
             
@@ -1074,9 +1074,9 @@ networkingMode=mirrored
             )
             
             if start_ret == 0:
-                self.log_output("✓ SUCCESS: Kamiwaza platform started successfully!")
+                self.log_output("[INFO] SUCCESS: Kamiwaza platform started successfully!")
             else:
-                self.log_output(f"⚠ WARNING: Kamiwaza platform failed to start automatically")
+                self.log_output(f"[WARNING] WARNING: Kamiwaza platform failed to start automatically")
                 self.log_output(f"Start command exit code: {start_ret}")
                 if start_err:
                     self.log_output(f"Start command error: {start_err}")
@@ -1090,7 +1090,7 @@ networkingMode=mirrored
                     timeout=60  # Keep a reasonable timeout for status check
                 )
                 if status_ret == 0 and status_out:
-                    self.log_output("✓ Kamiwaza platform status confirmed:")
+                    self.log_output("[INFO] Kamiwaza platform status confirmed:")
                     # Show the actual status output since it contains useful info like URLs
                     for line in status_out.strip().split('\n'):
                         if line.strip():
@@ -1145,7 +1145,7 @@ networkingMode=mirrored
             
             # Show different messages based on whether kamiwaza started successfully
             if start_ret == 0:
-                self.log_output("✓ Kamiwaza platform is now running!")
+                self.log_output("[INFO] Kamiwaza platform is now running!")
                 self.log_output("To check platform status:")
                 self.log_output(f"  wsl -d {wsl_instance} -- kamiwaza status")
                 self.log_output("")

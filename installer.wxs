@@ -37,6 +37,7 @@
         <Property Id="LICENSE_KEY" Secure="yes" />
         <Property Id="USAGE_REPORTING" Value="1" />
         <Property Id="INSTALL_MODE" Value="lite" />
+        <Property Id="LAUNCH_GUI" Value="0" />
         
         <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
         <WixVariable Id="WixUICostingPopupOptOut" Value="1" />
@@ -60,7 +61,7 @@
                         <File Id="DownloadScriptFile" Name="download_exe.ps1" Source="download_exe.ps1"/>
                         <File Id="HeadlessInstaller" Name="kamiwaza_headless_installer.py" Source="kamiwaza_headless_installer_build.py"/>
                         <File Id="KamiwazaBatchWrapper" Name="run_kamiwaza.bat" Source="run_kamiwaza.bat"/>
-                        <File Id="DebugTestBatch" Name="debug_test.bat" Source="debug_test.bat"/>
+
                         <File Id="WSLConfigScript" Name="configure_wsl_memory.ps1" Source="configure_wsl_memory.ps1"/>
                         <File Id="DebconfSetupScript" Name="setup_debconf.sh" Source="setup_debconf.sh"/>
                         <File Id="PasswordlessSudoScript" Name="setup_passwordless_sudo.sh" Source="setup_passwordless_sudo.sh"/>
@@ -72,8 +73,13 @@
                         <File Id="NvidiaSetupScript" Name="setup_nvidia_gpu.sh" Source="setup_nvidia_gpu.sh"/>
                         <File Id="IntelArcSetupScript" Name="setup_intel_arc_gpu.sh" Source="setup_intel_arc_gpu.sh"/>
                         <File Id="StartPlatformBatch" Name="start_platform.bat" Source="start_platform.bat"/>
+                        <File Id="KamiwazaStartBatch" Name="kamiwaza_start.bat" Source="kamiwaza_start.bat"/>
+                        <File Id="KamiwazaStopBatch" Name="kamiwaza_stop.bat" Source="kamiwaza_stop.bat"/>
                         <File Id="AutoStartBatch" Name="kamiwaza_autostart.bat" Source="kamiwaza_autostart.bat"/>
                         <File Id="CreateRunOnceBatch" Name="create_runonce.bat" Source="create_runonce.bat"/>
+                        <File Id="CreateAutostartRegistry" Name="create_autostart_registry.ps1" Source="create_autostart_registry.ps1"/>
+                        <File Id="KamiwazaGUIManager" Name="KamiwazaGUIManager.exe" Source="KamiwazaGUIManager.exe"/>
+                        <File Id="InstallGUIManager" Name="install_gui_manager.ps1" Source="install_gui_manager.ps1"/>
                         <RegistryValue Root="HKCU" Key="Software\Kamiwaza\Installer" Name="installed" Type="string" Value="1" KeyPath="yes"/>
                         <!-- Removes the entire Kamiwaza installation folder -->
                         <RemoveFolder Id="RemoveKamiwazaFolder" Directory="INSTALLFOLDER" On="uninstall"/>
@@ -113,8 +119,24 @@
                                  Icon="KamiwazaIcon"
                                  IconIndex="0" />
 
+                        <Shortcut Id="KamiwazaStartShortcut" 
+                                 Name="Kamiwaza Start" 
+                                 Description="Start Kamiwaza platform and show status (keeps CLI open)" 
+                                 Target="[INSTALLFOLDER]kamiwaza_start.bat"
+                                 WorkingDirectory="INSTALLFOLDER"
+                                 Icon="KamiwazaIcon"
+                                 IconIndex="0" />
+
+                        <Shortcut Id="KamiwazaStopShortcut" 
+                                 Name="Kamiwaza Stop" 
+                                 Description="Stop Kamiwaza platform and show status (keeps CLI open)" 
+                                 Target="[INSTALLFOLDER]kamiwaza_stop.bat"
+                                 WorkingDirectory="INSTALLFOLDER"
+                                 Icon="KamiwazaIcon"
+                                 IconIndex="0" />
+
                         <Shortcut Id="CleanupWSLShortcut" 
-                                 Name="Cleanup WSL (Uninstall)" 
+                                 Name="Uninstall Kamiwaza" 
                                  Description="Completely remove Kamiwaza WSL instances and data" 
                                  Target="powershell.exe" 
                                  Arguments="-ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]cleanup_wsl_kamiwaza.ps1&quot; -Force"
@@ -123,9 +145,26 @@
                                  IconIndex="0" />
 
                         <Shortcut Id="CleanupWSLBatchShortcut" 
-                                 Name="Cleanup WSL (Batch)" 
+                                 Name="Uninstall Kamiwaza (App + Data)" 
                                  Description="Completely remove Kamiwaza WSL instances and data (Batch version)" 
                                  Target="[INSTALLFOLDER]cleanup_installs.bat"
+                                 WorkingDirectory="INSTALLFOLDER"
+                                 Icon="KamiwazaIcon"
+                                 IconIndex="0" />
+
+                        <Shortcut Id="SetupAutostartShortcut" 
+                                 Name="Setup GPU Autostart" 
+                                 Description="Configure Kamiwaza to start automatically after system restart (for GPU acceleration)" 
+                                 Target="powershell.exe" 
+                                 Arguments="-ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]create_autostart_registry.ps1&quot;"
+                                 WorkingDirectory="INSTALLFOLDER"
+                                 Icon="KamiwazaIcon"
+                                 IconIndex="0" />
+
+                        <Shortcut Id="KamiwazaMonitorShortcut" 
+                                 Name="Kamiwaza Monitor" 
+                                 Description="Launch Kamiwaza Monitor - GUI Management Tool" 
+                                 Target="[INSTALLFOLDER]KamiwazaGUIManager.exe"
                                  WorkingDirectory="INSTALLFOLDER"
                                  Icon="KamiwazaIcon"
                                  IconIndex="0" />
@@ -218,24 +257,60 @@
             </Dialog>
 
             <!-- Custom Reboot Dialog -->
-            <Dialog Id="KamiwazaRebootDlg" Width="370" Height="200" Title="Kamiwaza Installation Complete">
+            <Dialog Id="KamiwazaRebootDlg" Width="370" Height="250" Title="Kamiwaza Installation Complete">
                 <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Installation Complete!" />
                 
-                <Control Id="Message" Type="Text" X="15" Y="35" Width="340" Height="60" NoPrefix="yes" Text="Kamiwaza has been installed successfully! 
+                <Control Id="Message" Type="Text" X="15" Y="35" Width="340" Height="80" NoPrefix="yes" Text="Kamiwaza has been installed successfully! 
 
 GPU acceleration has been configured and requires a system restart to activate properly.
 
+*** WARNING: This will restart your ENTIRE computer, not just WSL.
+   If you're working on a remote PC, please restart manually later.
+
 For optimal performance, please restart your computer now." />
                 
-                <Control Id="RestartNow" Type="PushButton" X="15" Y="120" Width="120" Height="17" Default="yes" Text="Restart Now">
+                <Control Id="RestartNow" Type="PushButton" X="15" Y="130" Width="120" Height="17" Default="yes" Text="Restart Now">
                     <Publish Event="Reboot" Value="now">1</Publish>
                 </Control>
                 
-                <Control Id="RestartLater" Type="PushButton" X="145" Y="120" Width="120" Height="17" Text="Restart Later">
+                <Control Id="RestartLater" Type="PushButton" X="145" Y="130" Width="120" Height="17" Text="Restart Later">
                     <Publish Event="NewDialog" Value="ExitDialog">1</Publish>
                 </Control>
                 
-                <Control Id="Cancel" Type="PushButton" X="275" Y="120" Width="80" Height="17" Cancel="yes" Text="Cancel">
+                <Control Id="Cancel" Type="PushButton" X="275" Y="130" Width="80" Height="17" Cancel="yes" Text="Cancel">
+                    <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
+                </Control>
+            </Dialog>
+
+            <!-- Custom Exit Dialog with GUI Launch Option -->
+            <Dialog Id="KamiwazaExitDlg" Width="370" Height="300" Title="Kamiwaza Setup Complete!">
+                <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Setup Complete!" />
+                
+                <Control Id="Message" Type="Text" X="15" Y="35" Width="340" Height="80" NoPrefix="yes" Text="Kamiwaza has been installed successfully! 
+
+The Kamiwaza installation will continue in a separate 'Kamiwaza Installer' window when you click Finish.
+
+IMPORTANT: GPU acceleration has been configured but requires a MANUAL system restart to activate.
+
+After installation completes:
+• Access your deployment at https://localhost (or the URL shown in the installer output)
+• For troubleshooting, run: wsl -d kamiwaza
+• Use Start Menu shortcuts to manage your Kamiwaza platform
+• To access Kamiwaza WSL instance directly: wsl -d kamiwaza
+• GPU autostart has been configured using RunOnce registry (no admin rights required)
+• Kamiwaza Monitor GUI has been installed for easy management" />
+                
+                <!-- GUI Launch Checkbox -->
+                <Control Id="LaunchGUICheck" Type="CheckBox" X="15" Y="125" Width="340" Height="17" Property="LAUNCH_GUI" CheckBoxValue="1" Text="Launch Kamiwaza Diagnostic GUI when ready" />
+                
+                <Control Id="GUIHelp" Type="Text" X="15" Y="145" Width="340" Height="24" NoPrefix="yes" Text="The Diagnostic GUI will be installed by the Python installer. If checked, it will launch automatically once installation completes." />
+                
+                <!-- Navigation buttons -->
+                <Control Id="Finish" Type="PushButton" X="236" Y="253" Width="56" Height="17" Default="yes" Text="&amp;Finish">
+                    <Publish Event="EndDialog" Value="Return">1</Publish>
+                </Control>
+                
+                <Control Id="Cancel" Type="PushButton" X="304" Y="253" Width="56" Height="17" Cancel="yes" Text="Cancel">
                     <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
                 </Control>
             </Dialog>
@@ -244,36 +319,39 @@ For optimal performance, please restart your computer now." />
             <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="KamiwazaConfigDlg" Order="2">LicenseAccepted = "1"</Publish>
             <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="KamiwazaConfigDlg">1</Publish>
             
-            <!-- Navigate to reboot dialog after installation -->
-            <Publish Dialog="ExitDialog" Control="Finish" Event="NewDialog" Value="KamiwazaRebootDlg">1</Publish>
+            <!-- Navigate to custom exit dialog after installation -->
+            <Publish Dialog="ExitDialog" Control="Finish" Event="NewDialog" Value="KamiwazaExitDlg">1</Publish>
             
             <!-- Customize the exit dialog title and message -->
             <Property Id="WIXUI_EXITDIALOGTITLE" Value="Kamiwaza Setup Complete!" />
             <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Setup is complete! The Kamiwaza installation will continue in a separate 'Kamiwaza Installer' window when you click Finish.
 
-IMPORTANT: The installer will automatically restart your computer if GPU acceleration is configured.
+IMPORTANT: GPU acceleration has been configured but requires a MANUAL system restart to activate.
 
 After installation completes:
 • Access your deployment at https://localhost (or the URL shown in the installer output)
 • For troubleshooting, run: wsl -d kamiwaza
 • Use Start Menu shortcuts to manage your Kamiwaza platform
 • To access Kamiwaza WSL instance directly: wsl -d kamiwaza
+• GPU autostart has been configured using RunOnce registry (no admin rights required)
 
-Note: GPU acceleration requires a system restart to activate properly." />
+*** RESTART REQUIRED: You will be prompted to restart your computer after clicking Finish.
+   If you're working on a remote PC, please restart manually later." />
             
-            <!-- Force reboot prompt after installation -->
-            <Property Id="REBOOT" Value="Force" />
-            <Property Id="REBOOTPROMPT" Value="Display" />
+            <!-- Require user confirmation for reboot - no automatic restarts -->
+            <Property Id="REBOOT" Value="ReallySuppress" />
+            <Property Id="REBOOTPROMPT" Value="Suppress" />
         </UI>
 
-        <!-- Custom Actions -->
-        <CustomAction Id="DebugTest" 
-                      FileKey="DebugTestBatch"
-                      ExeCommand="debug_test_from_msi"
-                      Execute="deferred" 
+        <!-- Safety check to prevent automatic restarts -->
+        <CustomAction Id="CheckRemotePC"
+                      ExeCommand='powershell.exe -Command "try { $isRemote = (Get-WmiObject -Class Win32_ComputerSystem).PrimaryOwnerName -ne $env:USERNAME; if ($isRemote) { Write-Host \"[WARNING]  REMOTE PC DETECTED: Please restart manually after installation completes.\" -ForegroundColor Yellow; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show(\"[WARNING]  REMOTE PC DETECTED!`n`nThis appears to be a remote computer. Please restart manually after installation completes to avoid disconnection.`n`nClick OK to continue installation.\", \"Kamiwaza Remote PC Warning\", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning) } } catch { Write-Host \"Could not determine if remote PC - proceeding with caution\" }"'
+                      Directory="TARGETDIR"
+                      Execute="deferred"
                       Impersonate="yes"
                       Return="ignore" />
                       
+        <!-- Custom Actions -->
         <CustomAction Id="DetectGPUCmd"
                       FileKey="GPUDetectionCMDScript"
                       ExeCommand=""
@@ -329,16 +407,81 @@ Note: GPU acceleration requires a system restart to activate properly." />
                       Impersonate="no"
                       Return="ignore" />
 
+        <!-- Setup Autostart Registry Entry (alternative to Task Scheduler) -->
+        <CustomAction Id="SetupAutostartRegistry"
+                      ExeCommand='powershell.exe -ExecutionPolicy Bypass -File "[INSTALLFOLDER]create_autostart_registry.ps1"'
+                      Directory="TARGETDIR"
+                      Execute="deferred"
+                      Impersonate="yes"
+                      Return="ignore" />
+
+        <!-- Install Kamiwaza GUI Manager to AppData and Start Menu -->
+        <CustomAction Id="InstallGUIManager"
+                      ExeCommand='powershell.exe -ExecutionPolicy Bypass -File "[INSTALLFOLDER]install_gui_manager.ps1"'
+                      Directory="TARGETDIR"
+                      Execute="deferred"
+                      Impersonate="yes"
+                      Return="ignore" />
+
+        <!-- Launch Kamiwaza Diagnostic GUI if requested -->
+        <CustomAction Id="LaunchDiagnosticGUI"
+                      ExeCommand='powershell.exe -Command "try { 
+    $guiPath = \"$env:LOCALAPPDATA\Kamiwaza\GUI\KamiwazaGUIManager.exe\"; 
+    $sourcePath = \"[INSTALLFOLDER]kamiwaza_gui_manager.py\";
+    
+    Write-Host \"=== KAMIWAZA DIAGNOSTIC GUI STATUS ===\";
+    Write-Host \"Checking for Kamiwaza Diagnostic GUI...\";
+    
+    if (Test-Path $guiPath) { 
+        Write-Host \"[OK] GUI found and ready to launch\";
+        Write-Host \"Launching Kamiwaza Diagnostic GUI...\";
+        Start-Process $guiPath;
+        Write-Host \"[OK] Launched Kamiwaza Diagnostic GUI successfully\";
+    } else { 
+        Write-Host \"[INFO] GUI not found at: $guiPath\";
+        Write-Host \"This is expected - the GUI Manager is installed by the Python installer phase\";
+        Write-Host \"\";
+        Write-Host \"The Python installer will:\";
+        Write-Host \"1. Build the GUI Manager EXE\";
+        Write-Host \"2. Install it to %LOCALAPPDATA%\\Kamiwaza\\GUI\\\";
+        Write-Host \"3. Create Start Menu shortcuts\";
+        Write-Host \"\";
+        
+        # Check if source files exist
+        if (Test-Path $sourcePath) {
+            Write-Host \"[OK] Source files found - GUI Manager will be installed\";
+            Write-Host \"You can launch it later from: Start Menu > Kamiwaza > Kamiwaza GUI Manager\";
+        } else {
+            Write-Host \"[WARN] Source files not found - GUI Manager may not be included in this build\";
+        }
+        
+        Write-Host \"\";
+        Write-Host \"To access the GUI Manager after installation:\";
+        Write-Host \"• Start Menu: Start > Kamiwaza > Kamiwaza GUI Manager\";
+        Write-Host \"• Direct path: %LOCALAPPDATA%\\Kamiwaza\\GUI\\KamiwazaGUIManager.exe\";
+    } 
+} catch { 
+    Write-Host \"Error checking GUI: $_\";
+    Write-Host \"You can manually launch the GUI Manager from the Start Menu later\";
+}"'
+                      Directory="TARGETDIR"
+                      Execute="immediate"
+                      Impersonate="yes"
+                      Return="ignore" />
+
         <!-- Auto-launch is now always enabled -->
 
         <!-- Install Execute Sequence - automatically run Kamiwaza installation -->
         <InstallExecuteSequence>
             <Custom Action="ReservePorts" After="InstallFiles">NOT Installed AND NOT REMOVE</Custom>
-            <Custom Action="DebugTest" After="ReservePorts">NOT Installed AND NOT REMOVE</Custom>
-            <Custom Action="DetectGPUCmd" After="DebugTest">NOT Installed AND NOT REMOVE</Custom>
+            <Custom Action="CheckRemotePC" After="ReservePorts">NOT Installed AND NOT REMOVE</Custom>
+            <Custom Action="DetectGPUCmd" After="CheckRemotePC">NOT Installed AND NOT REMOVE</Custom>
             <Custom Action="RunKamiwazaInstaller" After="DetectGPUCmd">NOT Installed AND NOT REMOVE</Custom>
             <Custom Action="DetectGPU" After="RunKamiwazaInstaller">NOT Installed AND NOT REMOVE</Custom>
-            <Custom Action="SetRunOnceEntry" After="DetectGPU">NOT Installed AND NOT REMOVE</Custom>
+            <Custom Action="SetupAutostartRegistry" After="DetectGPU">NOT Installed AND NOT REMOVE</Custom>
+            <Custom Action="InstallGUIManager" After="SetupAutostartRegistry">NOT Installed AND NOT REMOVE</Custom>
+            <Custom Action="SetRunOnceEntry" After="InstallGUIManager">NOT Installed AND NOT REMOVE</Custom>
+            <Custom Action="LaunchDiagnosticGUI" After="SetRunOnceEntry">NOT Installed AND NOT REMOVE AND LAUNCH_GUI = "1"</Custom>
             <Custom Action="ComprehensiveCleanup" Before="RemoveFiles">Installed AND REMOVE</Custom>
             <Custom Action="ReleasePorts" After="ComprehensiveCleanup">Installed AND REMOVE</Custom>
             

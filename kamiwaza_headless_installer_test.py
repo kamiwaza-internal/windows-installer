@@ -1141,7 +1141,7 @@ networkingMode=mirrored
             update_cmd = f"""
             echo '[{timestamp}] Starting apt update' >> /tmp/kamiwaza_install.log
             export DEBIAN_FRONTEND=noninteractive
-            sudo -E apt update 2>&1 | tee -a /tmp/kamiwaza_install.log
+            sudo -E apt update >> /tmp/kamiwaza_install.log 2>&1
             UPDATE_EXIT_CODE=$?
             echo "[{timestamp}] apt update completed with exit code $UPDATE_EXIT_CODE" >> /tmp/kamiwaza_install.log
             
@@ -1181,11 +1181,11 @@ networkingMode=mirrored
                 elif "complete" in line.lower() or "finished" in line.lower():
                     self.log_output("", progress=90)
             
-            # Use streaming installation command
+            # Use streaming installation command (WSL2 compatible)
             install_cmd = f"""
             echo '[{timestamp}] Starting apt install of {deb_path}' > /tmp/kamiwaza_install.log
             export DEBIAN_FRONTEND=noninteractive
-            sudo -E apt install -f -y {deb_path} 2>&1 | tee -a /tmp/kamiwaza_install.log
+            sudo -E apt install -f -y {deb_path} >> /tmp/kamiwaza_install.log 2>&1
             INSTALL_EXIT_CODE=$?
             echo "[{timestamp}] apt install completed with exit code $INSTALL_EXIT_CODE" >> /tmp/kamiwaza_install.log
             

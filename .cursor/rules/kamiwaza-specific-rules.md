@@ -122,7 +122,7 @@ This is a **Windows MSI installer** for Kamiwaza, a WSL-based platform with GPU 
 - Skipping integration testing
 - Not testing on clean systems
 
-## ✅ Project-Specific "Always Do" Rules
+## [SUCCESS] Project-Specific "Always Do" Rules
 
 ### Always Do These in This Project
 - **ALWAYS test** WiX compilation after changes

@@ -43,10 +43,10 @@ def demonstrate_changes():
     print()
     
     print("TESTING:")
-    print("✓ Created test scripts: test_wsl_reboot.py, test_reboot_focused.py")
-    print("✓ Verified WSL shutdown and restart functionality")
-    print("✓ Tested error handling for corrupted instances")
-    print("✓ All changes integrated into main installer")
+    print("[INFO] Created test scripts: test_wsl_reboot.py, test_reboot_focused.py")
+    print("[INFO] Verified WSL shutdown and restart functionality")
+    print("[INFO] Tested error handling for corrupted instances")
+    print("[INFO] All changes integrated into main installer")
     print()
     
     print("USAGE:")

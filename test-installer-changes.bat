@@ -106,12 +106,12 @@ echo Test Summary
 echo ===============================================
 echo.
 echo Changes implemented:
-echo [✓] Memory dropdown selector (4GB-64GB options)
-echo [✓] Exit dialog with localhost and troubleshooting instructions
-echo [✓] WSL config with 75% RAM swap and 75% CPU cores calculation
-echo [✓] GPU detection for NVIDIA GeForce RTX and Intel Arc
-echo [✓] Placeholder GPU setup scripts created
-echo [✓] GPU detection integrated into MSI installer
+echo [[INFO]] Memory dropdown selector (4GB-64GB options)
+echo [[INFO]] Exit dialog with localhost and troubleshooting instructions
+echo [[INFO]] WSL config with 75% RAM swap and 75% CPU cores calculation
+echo [[INFO]] GPU detection for NVIDIA GeForce RTX and Intel Arc
+echo [[INFO]] Placeholder GPU setup scripts created
+echo [[INFO]] GPU detection integrated into MSI installer
 echo.
 echo Files modified/created:
 echo - installer.wxs (UI changes, GPU detection)

@@ -91,7 +91,7 @@
 - Assuming admin privileges are available
 - Not testing on clean systems
 
-## ✅ What ALWAYS to Do
+## [SUCCESS] What ALWAYS to Do
 
 ### Always Do These Things
 - **ALWAYS test** your changes thoroughly

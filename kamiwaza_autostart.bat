@@ -56,6 +56,15 @@ if exist "%FLAG_FILE%" (
     echo [OK] Restart flag removed
 )
 
+REM Also remove the RunOnce registry entry to prevent repeated auto-starts
+echo [INFO] Removing RunOnce registry entry to prevent repeated auto-starts...
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "KamiwazaGPUAutostart" /f >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo [OK] RunOnce entry removed
+) else (
+    echo [INFO] RunOnce entry already removed or not found
+)
+
 echo.
 echo ===============================================
 echo Starting Kamiwaza Platform

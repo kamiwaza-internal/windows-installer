@@ -140,17 +140,56 @@ try {
                 }
                 Start-Sleep -Seconds 3
                 
+                # IMPORTANT: Remove kamiwaza package BEFORE unregistering the instance
+                Write-Host "Removing Kamiwaza package from WSL instance: $cleanInstance" -ForegroundColor Yellow
+                Write-Verbose "Running: wsl -d $cleanInstance sudo apt remove --purge -y kamiwaza"
+                
                 # Try to remove kamiwaza package if instance is still accessible
-                Write-Verbose "Attempting to remove kamiwaza package from $cleanInstance"
                 $removeResult = & wsl -d $cleanInstance sudo apt remove --purge -y kamiwaza 2>&1
                 if ($LASTEXITCODE -eq 0) {
                     Write-Host "Successfully removed kamiwaza package from $cleanInstance" -ForegroundColor Green
                 } else {
-                    Write-Verbose "Could not remove kamiwaza package from $cleanInstance (may not be installed or instance not accessible) - $removeResult"
+                    Write-Host "Warning: Could not remove kamiwaza package from $cleanInstance (may not be installed or instance not accessible)" -ForegroundColor Yellow
+                    Write-Verbose "Remove command output: $removeResult"
+                    
+                    # Try alternative package removal methods
+                    Write-Verbose "Trying alternative package removal methods..."
+                    
+                    # Try with dpkg directly
+                    $dpkgResult = & wsl -d $cleanInstance sudo dpkg --remove --force-all kamiwaza 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "Successfully removed kamiwaza package using dpkg from $cleanInstance" -ForegroundColor Green
+                    } else {
+                        Write-Verbose "dpkg removal also failed: $dpkgResult"
+                        
+                        # Try to clean up any remaining files manually
+                        Write-Verbose "Attempting manual cleanup of kamiwaza files..."
+                        $manualCleanupResult = & wsl -d $cleanInstance sudo find /usr -name "*kamiwaza*" -delete 2>&1
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Host "Manually cleaned up some kamiwaza files from $cleanInstance" -ForegroundColor Green
+                        } else {
+                            Write-Verbose "Manual cleanup failed: $manualCleanupResult"
+                        }
+                    }
                 }
+                
+                # Also try to remove any remaining kamiwaza-related packages
+                Write-Verbose "Checking for other kamiwaza-related packages..."
+                $relatedPackages = & wsl -d $cleanInstance dpkg -l | Select-String "kamiwaza" 2>$null
+                if ($relatedPackages) {
+                    Write-Host "Found additional kamiwaza-related packages, attempting removal..." -ForegroundColor Yellow
+                    foreach ($package in $relatedPackages) {
+                        $pkgName = ($package -split "\s+")[1]
+                        if ($pkgName -and $pkgName -like "*kamiwaza*") {
+                            Write-Verbose "Removing related package: $pkgName"
+                            & wsl -d $cleanInstance sudo apt remove --purge -y $pkgName 2>$null
+                        }
+                    }
+                }
+                
                 Start-Sleep -Seconds 2
                 
-                # Unregister the instance completely
+                # Now unregister the instance completely
                 Write-Verbose "Unregistering WSL instance: $cleanInstance"
                 $unregisterResult = & wsl --unregister $cleanInstance 2>&1
                 if ($LASTEXITCODE -eq 0) {
@@ -158,7 +197,7 @@ try {
                 } else {
                     Write-Host "Warning: Could not unregister $cleanInstance - $unregisterResult" -ForegroundColor Yellow
                     
-                    # Try alternative unregister method (note: --force is not a valid option for --unregister)
+                    # Try alternative unregister method
                     Write-Verbose "Trying alternative unregister method..."
                     $altUnregisterResult = & wsl --unregister $cleanInstance 2>&1
                     if ($LASTEXITCODE -eq 0) {
@@ -328,6 +367,78 @@ try {
         Write-Verbose "Kamiwaza AppData directory not found: $kamiwazaAppDataFull"
     }
     
+    # Clean up registry entries
+    Write-Host "Cleaning up registry entries..." -ForegroundColor Yellow
+    try {
+        $registryKeys = @(
+            "HKCU:\Software\Kamiwaza",
+            "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce"
+        )
+        
+        foreach ($regKey in $registryKeys) {
+            if (Test-Path $regKey) {
+                Write-Host "Checking registry key: $regKey" -ForegroundColor Yellow
+                
+                # Remove Kamiwaza-specific RunOnce entries
+                if ($regKey -like "*RunOnce*") {
+                    try {
+                        $runOnceEntries = Get-ItemProperty -Path $regKey -ErrorAction SilentlyContinue | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -like "*Kamiwaza*" }
+                        if ($runOnceEntries) {
+                            foreach ($entry in $runOnceEntries) {
+                                Write-Host "Removing RunOnce entry: $($entry.Name)" -ForegroundColor Yellow
+                                Remove-ItemProperty -Path $regKey -Name $entry.Name -ErrorAction SilentlyContinue
+                            }
+                        }
+                    } catch {
+                        Write-Verbose "Could not check RunOnce entries: $($_.Exception.Message)"
+                    }
+                }
+                
+                # Remove entire Kamiwaza registry key if it exists
+                if ($regKey -like "*Kamiwaza*") {
+                    Write-Host "Removing registry key: $regKey" -ForegroundColor Yellow
+                    Remove-Item -Path $regKey -Recurse -Force -ErrorAction SilentlyContinue
+                    Write-Host "Successfully removed registry key: $regKey" -ForegroundColor Green
+                }
+            }
+        }
+    } catch {
+        Write-Host "Warning: Could not clean up registry entries: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+    
+    # Clean up Start Menu shortcuts
+    Write-Host "Cleaning up Start Menu shortcuts..." -ForegroundColor Yellow
+    try {
+        $startMenuPath = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Kamiwaza"
+        if (Test-Path $startMenuPath) {
+            Write-Host "Removing Start Menu shortcuts: $startMenuPath" -ForegroundColor Yellow
+            Remove-Item -Path $startMenuPath -Recurse -Force -ErrorAction Stop
+            Write-Host "Successfully removed Start Menu shortcuts" -ForegroundColor Green
+        } else {
+            Write-Verbose "Start Menu shortcuts directory not found: $startMenuPath"
+        }
+    } catch {
+        Write-Host "Warning: Could not remove Start Menu shortcuts: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+    
+    # Clean up Desktop shortcuts if they exist
+    Write-Host "Cleaning up Desktop shortcuts..." -ForegroundColor Yellow
+    try {
+        $desktopPath = [Environment]::GetFolderPath("Desktop")
+        $kamiwazaShortcuts = Get-ChildItem -Path $desktopPath -Filter "*Kamiwaza*" -ErrorAction SilentlyContinue
+        if ($kamiwazaShortcuts) {
+            foreach ($shortcut in $kamiwazaShortcuts) {
+                Write-Host "Removing Desktop shortcut: $($shortcut.Name)" -ForegroundColor Yellow
+                Remove-Item -Path $shortcut.FullName -Force -ErrorAction SilentlyContinue
+            }
+            Write-Host "Successfully removed Desktop shortcuts" -ForegroundColor Green
+        } else {
+            Write-Verbose "No Kamiwaza Desktop shortcuts found"
+        }
+    } catch {
+        Write-Host "Warning: Could not remove Desktop shortcuts: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+    
     Write-Host "WSL cleanup completed successfully!" -ForegroundColor Green
     
 } catch { 
@@ -335,4 +446,4 @@ try {
     Write-Host "Continuing with cleanup..." -ForegroundColor Yellow
 }
 
-Write-Host "=== CLEANUP COMPLETE ===" -ForegroundColor Cyan 
+Write-Host "=== CLEANUP COMPLETE ===" -ForegroundColor Cyan

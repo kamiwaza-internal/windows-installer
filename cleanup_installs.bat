@@ -9,6 +9,7 @@ echo   - WSL instances (kamiwaza, Ubuntu-24.04)
 echo   - WSL data directories
 echo   - Configuration files
 echo   - Log files
+echo   - AppData directories
 echo.
 echo WARNING: This action cannot be undone!
 echo.
@@ -28,8 +29,66 @@ echo.
 REM Run the PowerShell cleanup script
 powershell.exe -ExecutionPolicy Bypass -File "%~dp0cleanup_wsl_kamiwaza.ps1" -Force
 
-@REM Unregister kamiwaza ubuntu-24.04 instance (ignore errors)
-wsl --unregister kamiwaza 2>nul
+REM Clean up AppData directories
+echo Cleaning up AppData directories...
+if exist "%LOCALAPPDATA%\Kamiwaza" (
+    echo Removing Kamiwaza AppData directory...
+    rmdir /s /q "%LOCALAPPDATA%\Kamiwaza" 2>nul
+    if exist "%LOCALAPPDATA%\Kamiwaza" (
+        echo Warning: Could not remove Kamiwaza AppData directory
+    ) else (
+        echo Kamiwaza AppData directory removed successfully.
+    )
+) else (
+    echo No Kamiwaza AppData directory found.
+)
+
+REM Clean up WSL data directory if it still exists
+if exist "%LOCALAPPDATA%\WSL\kamiwaza" (
+    echo Removing WSL data directory...
+    rmdir /s /q "%LOCALAPPDATA%\WSL\kamiwaza" 2>nul
+    if exist "%LOCALAPPDATA%\WSL\kamiwaza" (
+        echo Warning: Could not remove WSL data directory
+    ) else (
+        echo WSL data directory removed successfully.
+    )
+) else (
+    echo No WSL data directory found.
+)
+
+@REM Clean up Start Menu shortcuts
+echo Cleaning up Start Menu shortcuts...
+if exist "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Kamiwaza" (
+    rmdir /s /q "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Kamiwaza" 2>nul
+    echo Start Menu shortcuts removed.
+) else (
+    echo No Start Menu shortcuts found.
+)
+
+@REM Clean up Desktop shortcuts
+echo Cleaning up Desktop shortcuts...
+for %%f in ("%USERPROFILE%\Desktop\*Kamiwaza*") do (
+    del "%%f" 2>nul
+    echo Removed Desktop shortcut: %%f
+)
+
+@REM Clean up registry entries
+echo Cleaning up registry entries...
+reg delete "HKCU\Software\Kamiwaza" /f 2>nul
+if errorlevel 1 (
+    echo No Kamiwaza registry keys found.
+) else (
+    echo Kamiwaza registry keys removed.
+)
+
+@REM Clean up RunOnce entries
+echo Cleaning up RunOnce entries...
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "KamiwazaGPUAutostart" /f 2>nul
+if errorlevel 1 (
+    echo No Kamiwaza RunOnce entries found.
+) else (
+    echo Kamiwaza RunOnce entries removed.
+)
 
 echo.
 echo Cleanup completed!
