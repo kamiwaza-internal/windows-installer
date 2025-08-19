@@ -256,32 +256,6 @@
                 </Control>
             </Dialog>
 
-            <!-- Custom Reboot Dialog -->
-            <Dialog Id="KamiwazaRebootDlg" Width="370" Height="250" Title="Kamiwaza Installation Complete">
-                <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Installation Complete!" />
-                
-                <Control Id="Message" Type="Text" X="15" Y="35" Width="340" Height="80" NoPrefix="yes" Text="Kamiwaza has been installed successfully! 
-
-GPU acceleration has been configured and requires a system restart to activate properly.
-
-*** WARNING: This will restart your ENTIRE computer, not just WSL.
-   If you're working on a remote PC, please restart manually later.
-
-For optimal performance, please restart your computer now." />
-                
-                <Control Id="RestartNow" Type="PushButton" X="15" Y="130" Width="120" Height="17" Default="yes" Text="Restart Now">
-                    <Publish Event="Reboot" Value="now">1</Publish>
-                </Control>
-                
-                <Control Id="RestartLater" Type="PushButton" X="145" Y="130" Width="120" Height="17" Text="Restart Later">
-                    <Publish Event="NewDialog" Value="ExitDialog">1</Publish>
-                </Control>
-                
-                <Control Id="Cancel" Type="PushButton" X="275" Y="130" Width="80" Height="17" Cancel="yes" Text="Cancel">
-                    <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
-                </Control>
-            </Dialog>
-
             <!-- Custom Exit Dialog with GUI Launch Option -->
             <Dialog Id="KamiwazaExitDlg" Width="370" Height="300" Title="Kamiwaza Setup Complete!">
                 <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Setup Complete!" />
@@ -290,7 +264,7 @@ For optimal performance, please restart your computer now." />
 
 The Kamiwaza installation will continue in a separate 'Kamiwaza Installer' window when you click Finish.
 
-IMPORTANT: GPU acceleration has been configured but requires a MANUAL system restart to activate.
+IMPORTANT: GPU acceleration has been configured but requires ONE MANUAL system restart to activate after the complete installation.
 
 After installation completes:
 • Access your deployment at https://localhost (or the URL shown in the installer output)
@@ -298,7 +272,9 @@ After installation completes:
 • Use Start Menu shortcuts to manage your Kamiwaza platform
 • To access Kamiwaza WSL instance directly: wsl -d kamiwaza
 • GPU autostart has been configured using RunOnce registry (no admin rights required)
-• Kamiwaza Monitor GUI has been installed for easy management" />
+• Kamiwaza Monitor GUI has been installed for easy management
+
+*** SINGLE RESTART REQUIRED: After the Python installer completes, restart your computer ONCE to activate GPU acceleration." />
                 
                 <!-- GUI Launch Checkbox -->
                 <Control Id="LaunchGUICheck" Type="CheckBox" X="15" Y="125" Width="340" Height="17" Property="LAUNCH_GUI" CheckBoxValue="1" Text="Launch Kamiwaza Diagnostic GUI when ready" />
@@ -326,7 +302,7 @@ After installation completes:
             <Property Id="WIXUI_EXITDIALOGTITLE" Value="Kamiwaza Setup Complete!" />
             <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Setup is complete! The Kamiwaza installation will continue in a separate 'Kamiwaza Installer' window when you click Finish.
 
-IMPORTANT: GPU acceleration has been configured but requires a MANUAL system restart to activate.
+IMPORTANT: GPU acceleration has been configured but requires ONE MANUAL system restart to activate after the complete installation.
 
 After installation completes:
 • Access your deployment at https://localhost (or the URL shown in the installer output)
@@ -335,8 +311,8 @@ After installation completes:
 • To access Kamiwaza WSL instance directly: wsl -d kamiwaza
 • GPU autostart has been configured using RunOnce registry (no admin rights required)
 
-*** RESTART REQUIRED: You will be prompted to restart your computer after clicking Finish.
-   If you're working on a remote PC, please restart manually later." />
+*** SINGLE RESTART REQUIRED: After the Python installer completes, restart your computer ONCE to activate GPU acceleration.
+   If you're working on a remote PC, please restart manually after installation completes." />
             
             <!-- Require user confirmation for reboot - no automatic restarts -->
             <Property Id="REBOOT" Value="ReallySuppress" />
@@ -388,7 +364,7 @@ After installation completes:
 
         <!-- Comprehensive Cleanup Action for Uninstall - Complete removal of all Kamiwaza traces -->
         <CustomAction Id="ComprehensiveCleanup"
-                      ExeCommand='powershell.exe -ExecutionPolicy Bypass -File "[INSTALLFOLDER]cleanup_installs.ps1" -Force'
+                      ExeCommand='"[INSTALLFOLDER]cleanup_installs.bat"'
                       Directory="TARGETDIR"
                       Execute="immediate"
                       Impersonate="yes"
@@ -485,7 +461,7 @@ After installation completes:
             <Custom Action="ComprehensiveCleanup" Before="RemoveFiles">Installed AND REMOVE</Custom>
             <Custom Action="ReleasePorts" After="ComprehensiveCleanup">Installed AND REMOVE</Custom>
             
-            <!-- Note: Reboot is handled by the custom dialog flow -->
+            <!-- Note: Reboot is handled by user after complete installation -->
         </InstallExecuteSequence>
 
 

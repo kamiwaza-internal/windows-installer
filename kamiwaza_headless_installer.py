@@ -291,8 +291,13 @@ class HeadlessKamiwazaInstaller:
                     
                     self.log_output(f"Temporary file created successfully: {os.path.getsize(temp_script_path)} bytes")
                     
-                    # Copy the temporary file to WSL using the full path
-                    copy_cmd = f"cat '{temp_script_path}' | sudo tee /usr/local/bin/setup_nvidia_gpu.sh"
+                    # Copy the temporary file to WSL using a more reliable method
+                    # Read the file content and pipe it directly to avoid path issues
+                    with open(temp_script_path, 'r', encoding='utf-8') as f:
+                        script_content_escaped = f.read().replace("'", "'\"'\"'")
+                    
+                    # Use echo with proper escaping to avoid path issues
+                    copy_cmd = f"echo '{script_content_escaped}' | sudo tee /usr/local/bin/setup_nvidia_gpu.sh"
                     ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
                     
                     # Clean up temporary file
@@ -310,26 +315,42 @@ class HeadlessKamiwazaInstaller:
                         if ret == 0:
                             self.log_output("NVIDIA setup script made executable")
                             
-                            # Fix line endings (remove CRLF if present)
-                            ret, out, err = self.run_command(wsl_cmd + ['sudo', 'dos2unix', '/usr/local/bin/setup_nvidia_gpu.sh'], timeout=15)
+                            # Fix line endings (remove CRLF if present) - use sed instead of dos2unix
+                            ret, out, err = self.run_command(wsl_cmd + ['sudo', 'sed', '-i', 's/\\r$//', '/usr/local/bin/setup_nvidia_gpu.sh'], timeout=15)
                             if ret == 0:
                                 self.log_output("NVIDIA setup script line endings fixed")
                             else:
                                 self.log_output(f"Warning: Could not fix line endings: {err}")
                             
-                            # Execute the script as kamiwaza user
+                            # Execute the script as kamiwaza user with verbose output
                             self.log_output("Running NVIDIA GPU setup script as kamiwaza user...")
-                            ret, out, err = self.run_command(wsl_cmd + ['sudo', '-u', 'kamiwaza', '/usr/local/bin/setup_nvidia_gpu.sh'], timeout=300)
+                            self.log_output("Note: Using streaming execution for real-time output...")
+                            
+                            # Use streaming execution to get real-time output from the GPU setup script
+                            ret, out, err = self.run_command_with_streaming(
+                                wsl_cmd + ['sudo', '-u', 'kamiwaza', '/usr/local/bin/setup_nvidia_gpu.sh'], 
+                                timeout=300
+                            )
+                            
                             if ret == 0:
                                 self.log_output("NVIDIA GPU setup completed successfully")
                                 if out:
-                                    self.log_output(f"Setup output: {out}")
+                                    self.log_output("Final setup output summary:")
+                                    # Show last 20 lines of output to avoid overwhelming logs
+                                    output_lines = out.strip().split('\n')
+                                    for line in output_lines[-20:]:
+                                        if line.strip():
+                                            self.log_output(f"  SETUP: {line}")
                             else:
                                 self.log_output(f"NVIDIA GPU setup failed with exit code {ret}")
                                 if err:
                                     self.log_output(f"Setup error: {err}")
                                 if out:
-                                    self.log_output(f"Setup output: {out}")
+                                    self.log_output("Setup output (last 20 lines):")
+                                    output_lines = out.strip().split('\n')
+                                    for line in output_lines[-20:]:
+                                        if line.strip():
+                                            self.log_output(f"  SETUP: {line}")
                         else:
                             self.log_output(f"Failed to make NVIDIA script executable: {err}")
                     else:
@@ -366,8 +387,13 @@ class HeadlessKamiwazaInstaller:
                     
                     self.log_output(f"Temporary file created successfully: {os.path.getsize(temp_script_path)} bytes")
                     
-                    # Copy the temporary file to WSL using the full path
-                    copy_cmd = f"cat '{temp_script_path}' | sudo tee /usr/local/bin/setup_intel_arc_gpu.sh"
+                    # Copy the temporary file to WSL using a more reliable method
+                    # Read the file content and pipe it directly to avoid path issues
+                    with open(temp_script_path, 'r', encoding='utf-8') as f:
+                        script_content_escaped = f.read().replace("'", "'\"'\"'")
+                    
+                    # Use echo with proper escaping to avoid path issues
+                    copy_cmd = f"echo '{script_content_escaped}' | sudo tee /usr/local/bin/setup_intel_arc_gpu.sh"
                     ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
                     
                     # Clean up temporary file
@@ -385,26 +411,42 @@ class HeadlessKamiwazaInstaller:
                         if ret == 0:
                             self.log_output("Intel Arc setup script made executable")
                             
-                            # Fix line endings (remove CRLF if present)
-                            ret, out, err = self.run_command(wsl_cmd + ['sudo', 'dos2unix', '/usr/local/bin/setup_intel_arc_gpu.sh'], timeout=15)
+                            # Fix line endings (remove CRLF if present) - use sed instead of dos2unix
+                            ret, out, err = self.run_command(wsl_cmd + ['sudo', 'sed', '-i', 's/\\r$//', '/usr/local/bin/setup_intel_arc_gpu.sh'], timeout=15)
                             if ret == 0:
                                 self.log_output("Intel Arc setup script line endings fixed")
                             else:
                                 self.log_output(f"Warning: Could not fix line endings: {err}")
                             
-                            # Execute the script as kamiwaza user
+                            # Execute the script as kamiwaza user with verbose output
                             self.log_output("Running Intel Arc GPU setup script as kamiwaza user...")
-                            ret, out, err = self.run_command(wsl_cmd + ['sudo', '-u', 'kamiwaza', '/usr/local/bin/setup_intel_arc_gpu.sh'], timeout=300)
+                            self.log_output("Note: Using streaming execution for real-time output...")
+                            
+                            # Use streaming execution to get real-time output from the GPU setup script
+                            ret, out, err = self.run_command_with_streaming(
+                                wsl_cmd + ['sudo', '-u', 'kamiwaza', '/usr/local/bin/setup_intel_arc_gpu.sh'], 
+                                timeout=300
+                            )
+                            
                             if ret == 0:
                                 self.log_output("Intel Arc GPU setup completed successfully")
                                 if out:
-                                    self.log_output(f"Setup output: {out}")
+                                    self.log_output("Final setup output summary:")
+                                    # Show last 20 lines of output to avoid overwhelming logs
+                                    output_lines = out.strip().split('\n')
+                                    for line in output_lines[-20:]:
+                                        if line.strip():
+                                            self.log_output(f"  SETUP: {line}")
                             else:
                                 self.log_output(f"Intel Arc GPU setup failed with exit code {ret}")
                                 if err:
                                     self.log_output(f"Setup error: {err}")
                                 if out:
-                                    self.log_output(f"Setup output: {out}")
+                                    self.log_output("Setup output (last 20 lines):")
+                                    output_lines = out.strip().split('\n')
+                                    for line in output_lines[-20:]:
+                                        if line.strip():
+                                            self.log_output(f"  SETUP: {line}")
                         else:
                             self.log_output(f"Failed to make Intel Arc script executable: {err}")
                     else:
@@ -441,8 +483,13 @@ class HeadlessKamiwazaInstaller:
                     
                     self.log_output(f"Temporary file created successfully: {os.path.getsize(temp_script_path)} bytes")
                     
-                    # Copy the temporary file to WSL using the full path
-                    copy_cmd = f"cat '{temp_script_path}' | sudo tee /usr/local/bin/setup_intel_integrated_gpu.sh"
+                    # Copy the temporary file to WSL using a more reliable method
+                    # Read the file content and pipe it directly to avoid path issues
+                    with open(temp_script_path, 'r', encoding='utf-8') as f:
+                        script_content_escaped = f.read().replace("'", "'\"'\"'")
+                    
+                    # Use echo with proper escaping to avoid path issues
+                    copy_cmd = f"echo '{script_content_escaped}' | sudo tee /usr/local/bin/setup_intel_integrated_gpu.sh"
                     ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
                     
                     # Clean up temporary file
@@ -460,26 +507,42 @@ class HeadlessKamiwazaInstaller:
                         if ret == 0:
                             self.log_output("Intel integrated setup script made executable")
                             
-                            # Fix line endings (remove CRLF if present)
-                            ret, out, err = self.run_command(wsl_cmd + ['sudo', 'dos2unix', '/usr/local/bin/setup_intel_integrated_gpu.sh'], timeout=15)
+                            # Fix line endings (remove CRLF if present) - use sed instead of dos2unix
+                            ret, out, err = self.run_command(wsl_cmd + ['sudo', 'sed', '-i', 's/\\r$//', '/usr/local/bin/setup_intel_integrated_gpu.sh'], timeout=15)
                             if ret == 0:
                                 self.log_output("Intel integrated setup script line endings fixed")
                             else:
                                 self.log_output(f"Warning: Could not fix line endings: {err}")
                             
-                            # Execute the script as kamiwaza user
+                            # Execute the script as kamiwaza user with verbose output
                             self.log_output("Running Intel integrated graphics setup script as kamiwaza user...")
-                            ret, out, err = self.run_command(wsl_cmd + ['sudo', '-u', 'kamiwaza', '/usr/local/bin/setup_intel_integrated_gpu.sh'], timeout=300)
+                            self.log_output("Note: Using streaming execution for real-time output...")
+                            
+                            # Use streaming execution to get real-time output from the GPU setup script
+                            ret, out, err = self.run_command_with_streaming(
+                                wsl_cmd + ['sudo', '-u', 'kamiwaza', '/usr/local/bin/setup_intel_integrated_gpu.sh'], 
+                                timeout=300
+                            )
+                            
                             if ret == 0:
                                 self.log_output("Intel integrated graphics setup completed successfully")
                                 if out:
-                                    self.log_output(f"Setup output: {out}")
+                                    self.log_output("Final setup output summary:")
+                                    # Show last 20 lines of output to avoid overwhelming logs
+                                    output_lines = out.strip().split('\n')
+                                    for line in output_lines[-20:]:
+                                        if line.strip():
+                                            self.log_output(f"  SETUP: {line}")
                             else:
                                 self.log_output(f"Intel integrated graphics setup failed with exit code {ret}")
                                 if err:
                                     self.log_output(f"Setup error: {err}")
                                 if out:
-                                    self.log_output(f"Setup output: {out}")
+                                    self.log_output("Setup output (last 20 lines):")
+                                    output_lines = out.strip().split('\n')
+                                    for line in output_lines[-20:]:
+                                        if line.strip():
+                                            self.log_output(f"  SETUP: {line}")
                         else:
                             self.log_output(f"Failed to make Intel integrated script executable: {err}")
                     else:
@@ -1242,7 +1305,6 @@ echo "No GPU setup scripts available"
     def is_headless_mode(self):
         """Check if the installer is running in headless/non-interactive mode"""
         try:
-            import sys
             # Check if stdin is available and interactive
             if not sys.stdin.isatty():
                 return True
@@ -2228,20 +2290,17 @@ echo "No GPU setup scripts available"
                 self.log_output(f"SUCCESS: Kamiwaza version: {version_out.strip()}")
             else:
                 self.log_output(f"INFO: Could not get kamiwaza version (may need setup): {version_err}")
-            
-            # Install GUI Manager
-            self.log_output("=== INSTALLING GUI MANAGER ===")
-            self.install_gui_manager()
-            
-            # GPU setup completed - if we get here, no restart was needed
+                        
+            # GPU setup completed - restart will happen after package installation
             self.log_output("")
             self.log_output("=== GPU SETUP COMPLETE ===", progress=95)
             self.log_output("GPU drivers have been installed and configured successfully.")
             self.log_output("")
-            self.log_output("Note: If GPU acceleration was configured, the system should have restarted automatically.")
-            self.log_output("If no restart occurred, GPU acceleration may not have been configured.")
+            self.log_output("IMPORTANT: GPU drivers are installed but NOT yet active")
+            self.log_output("The system will restart ONCE after package installation completes")
+            self.log_output("After restart, both GPU acceleration AND Kamiwaza will be ready")
             self.log_output("")
-            self.log_output("Continuing with Kamiwaza installation...")
+            self.log_output("Continuing with Kamiwaza package installation...")
             
             self.log_output("")
             self.log_output("=== LOG ACCESS INFORMATION ===")
@@ -2292,17 +2351,18 @@ echo "No GPU setup scripts available"
             self.log_output("the complete installation details and are the authoritative source.")
             self.log_output("")
             
-            self.log_output("=== INSTALLATION COMPLETE - AUTOMATIC RESTART IN 10 SECONDS ===")
+            self.log_output("=== INSTALLATION COMPLETE - SINGLE RESTART IN 10 SECONDS ===")
             
             self.log_output("KAMIWAZA INSTALLATION COMPLETED SUCCESSFULLY!")
             self.log_output("")
-            self.log_output("CRITICAL: System will restart automatically in 10 seconds to activate GPU acceleration!")
-            self.log_output("GPU drivers are installed but not yet active until system restart.")
+            self.log_output("CRITICAL: System will restart automatically in 10 seconds to activate BOTH GPU acceleration AND Kamiwaza!")
+            self.log_output("This is the SINGLE restart needed for the complete installation.")
             self.log_output("")
             self.log_output("After restart:")
             self.log_output("1. GPU acceleration will be active and ready")
             self.log_output("2. Kamiwaza will start automatically with optimal performance")
             self.log_output("3. All GPU features will be fully functional")
+            self.log_output("4. Package installation will be complete and active")
             self.log_output("")
             
             # Register Windows autostart for after the restart
@@ -2338,7 +2398,6 @@ echo "No GPU setup scripts available"
             
             # Optional interactive pause before countdown
             try:
-                import sys
                 if sys.stdin.isatty() and hasattr(sys.stdin, 'readline'):
                     self.log_output("Press Enter to proceed with FULL DEVICE restart...")
                     input()
@@ -3439,54 +3498,6 @@ networkingMode=mirrored
             self.log_output(f"Warning: Error disabling IPv6: {e}")
             self.log_output("Continuing with installation anyway...")
 
-    def install_gui_manager(self):
-        """Install GUI Manager for Kamiwaza"""
-        try:
-            self.log_output("Installing GUI Manager for Kamiwaza...")
-            
-            # Check if GUI Manager files exist
-            gui_manager_py = os.path.join(os.path.dirname(__file__), 'kamiwaza_gui_manager.py')
-            if not os.path.exists(gui_manager_py):
-                self.log_output("GUI Manager source not found, skipping installation")
-                return
-            
-            # Check if we can build the EXE
-            build_script = os.path.join(os.path.dirname(__file__), 'build_gui_exe.py')
-            if os.path.exists(build_script):
-                self.log_output("Building GUI Manager EXE...")
-                
-                # Try to build the EXE
-                try:
-                    import subprocess
-                    build_result = subprocess.run([sys.executable, build_script], 
-											   capture_output=True, text=True, timeout=300)
-                    if build_result.returncode == 0:
-                        self.log_output("GUI Manager EXE built successfully")
-                        
-                        # Try to install it
-                        install_script = os.path.join(os.path.dirname(__file__), 'install_gui_manager.ps1')
-                        if os.path.exists(install_script):
-                            self.log_output("Installing GUI Manager...")
-                            install_result = subprocess.run(['powershell.exe', '-ExecutionPolicy', 'Bypass', '-File', install_script], 
-														capture_output=True, text=True, timeout=120)
-                            if install_result.returncode == 0:
-                                self.log_output("GUI Manager installed successfully")
-                            else:
-                                self.log_output(f"GUI Manager installation failed: {install_result.stderr}")
-                        else:
-                            self.log_output("Install script not found, GUI Manager EXE built but not installed")
-                    else:
-                        self.log_output(f"GUI Manager EXE build failed: {build_result.stderr}")
-                        
-                except Exception as build_error:
-                    self.log_output(f"Error building GUI Manager EXE: {build_error}")
-            else:
-                self.log_output("Build script not found, skipping GUI Manager installation")
-            
-        except Exception as e:
-            self.log_output(f"Error installing GUI Manager: {e}")
-            self.log_output("Continuing with installation anyway...")
-
     def check_gui_manager_installed(self):
         """Check if GUI Manager is already installed"""
         try:
@@ -3526,9 +3537,9 @@ def main():
     print("")
     print("AUTOMATIC INSTALLATION FLOW:")
     print("1. WSL setup and GPU driver installation")
-    print("2. Kamiwaza package installation")
-    print("3. Automatic FULL DEVICE restart (10 second countdown)")
-    print("4. Kamiwaza starts automatically with GPU acceleration")
+    print("2. Kamiwaza package installation (sudo apt install)")
+    print("3. SINGLE automatic FULL DEVICE restart (10 second countdown)")
+    print("4. Kamiwaza starts automatically with GPU acceleration ready")
     print("=" * 50)
     
     parser = argparse.ArgumentParser(description='Headless Kamiwaza Installer')

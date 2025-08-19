@@ -90,6 +90,31 @@ if errorlevel 1 (
     echo Kamiwaza RunOnce entries removed.
 )
 
+@REM Unregister WSL instance named "kamiwaza" if it exists
+echo Checking for WSL instance "kamiwaza"...
+wsl -l -q | findstr /i "^kamiwaza$" >nul
+if %errorlevel%==0 (
+    echo Unregistering WSL instance "kamiwaza"...
+    wsl --unregister kamiwaza
+    if %errorlevel%==0 (
+        echo WSL instance "kamiwaza" unregistered successfully.
+    ) else (
+        echo Warning: Failed to unregister WSL instance "kamiwaza".
+    )
+) else (
+    echo No WSL instance named "kamiwaza" found.
+)
+
+
+echo.
+echo Ensuring WSL is properly shut down...
+wsl --shutdown 2>nul
+if errorlevel 1 (
+    echo Warning: Could not shut down WSL cleanly
+) else (
+    echo WSL shut down successfully.
+)
+
 echo.
 echo Cleanup completed!
 echo.

@@ -1,4 +1,7 @@
 #!/bin/bash
+# Prevent interactive prompts during package installation
+export DEBIAN_FRONTEND=noninteractive
+
 # Intel Integrated Graphics Setup Script for WSL2 Ubuntu 24.04
 # Supports Intel UHD, HD Graphics, and Iris GPUs
 # Runs as kamiwaza user with passwordless sudo access
@@ -197,81 +200,33 @@ final_instructions() {
     echo "3. Media processing acceleration"
     echo
     
-    # Request system reboot
-    request_reboot
+    # GPU setup completed - NO RESTART YET
+    log "GPU setup completed successfully!"
+    log "IMPORTANT: GPU drivers are installed but NOT yet active"
+    log "The installer will continue with package installation, then restart ONCE to activate everything"
+    log "After the single restart, both GPU acceleration AND Kamiwaza will be ready"
     
     echo
-    log "Next Steps:"
-    echo "  1. Restart WSL2 session for group changes: 'wsl --shutdown' then restart"
-    echo "  2. Verify installation: 'vainfo' and 'clinfo'"
-    echo "  3. Test hardware acceleration in Kamiwaza"
-    echo
-    log "Verification Commands:"
-    echo "  - vainfo                    # Check VAAPI support"
-    echo "  - clinfo                    # Check OpenCL support" 
-    echo "  - lspci | grep -i intel     # Check PCI devices"
+    log "=== Intel Integrated Graphics Setup Complete ==="
+    log "Next steps:"
+    log "1. Installer will continue with Kamiwaza package installation"
+    log "2. After package installation completes, system will restart ONCE"
+    log "3. After restart, GPU acceleration will be active AND Kamiwaza will start automatically"
+    log "4. Verify GPU support with: vainfo"
+    log "5. Test OpenCL with: clinfo"
+    log "6. Check PCI devices: lspci | grep -i intel"
     echo
     log "Note: Performance will be limited compared to discrete GPUs"
     echo
     log "Troubleshooting:"
-    echo "  - If no GPU detected, ensure Windows Intel drivers are up to date"
-    echo "  - For WSL2 issues, try: 'wsl --update'"
-    echo "  - Check WSL2 GPU support is enabled in Windows"
+    log "  - If no GPU detected, ensure Windows Intel drivers are up to date"
+    log "  - For WSL2 issues, try: 'wsl --update'"
+    log "  - Check WSL2 GPU support is enabled in Windows"
     echo
 }
 
-# Function to request and execute system reboot
-request_reboot() {
-    header "System Reboot Required"
-    echo
-    warn "IMPORTANT: GPU acceleration requires a FULL SYSTEM REBOOT!"
-    log "Please reboot your entire Windows system (not just WSL2) to activate GPU support."
-    echo
-    log "The Intel integrated graphics drivers have been installed, but they need a full system restart"
-    log "to properly initialize and become available to WSL2."
-    echo
-    
-    # Always show reboot instructions first
-    show_reboot_instructions
-    echo
-    
-    # Automated mode - just show instructions
-    log "Automated installation mode - reboot instructions will be shown"
-    log "Please restart your computer manually to complete GPU setup"
-    show_reboot_instructions
-    return 0
-}
-
-# Function to show reboot instructions
-show_reboot_instructions() {
-    header "Manual Reboot Instructions"
-    echo
-    log "To complete Intel integrated graphics setup, please restart your computer:"
-    echo
-    echo -e "${BLUE}Method 1: Windows Start Menu${NC}"
-    echo "  1. Click the Windows Start button"
-    echo "  2. Click the Power button (power icon)"
-    echo "  3. Select 'Restart'"
-    echo
-    echo -e "${BLUE}Method 2: Windows Settings${NC}"
-    echo "  1. Press Windows + I to open Settings"
-    echo "  2. Go to System > Recovery"
-    echo "  3. Click 'Restart now' under Advanced startup"
-    echo
-    echo -e "${BLUE}Method 3: Command Prompt (as Administrator)${NC}"
-    echo "  1. Press Windows + X and select 'Windows Terminal (Admin)'"
-    echo "  2. Type: shutdown /r /t 0"
-    echo "  3. Press Enter"
-    echo
-    echo -e "${BLUE}Method 4: PowerShell (as Administrator)${NC}"
-    echo "  1. Press Windows + X and select 'Windows PowerShell (Admin)'"
-    echo "  2. Type: Restart-Computer -Force"
-    echo "  3. Press Enter"
-    echo
-    warn "IMPORTANT: After restart, wait for Windows to fully boot before starting WSL2"
-    log "GPU acceleration will be available once the system has fully restarted."
-    echo
-}
+# GPU setup completed - restart will be handled by main installer
+log "GPU setup completed - restart will be handled by main installer after package installation"
 
 # Function to verify installation and show debugging info
 verify_installation() {

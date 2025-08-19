@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Prevent interactive prompts during package installation
+export DEBIAN_FRONTEND=noninteractive
+
 # Intel GPU OpenCL Support Setup for WSL2 Ubuntu 24.04
 # Designed for Intel Arc 140V GPU and similar Intel GPUs
 # Runs as kamiwaza user with passwordless sudo access
@@ -56,11 +59,18 @@ check_wsl2() {
     kernel_version=$(uname -r | cut -d- -f1)
     major=$(echo "$kernel_version" | cut -d. -f1)
     minor=$(echo "$kernel_version" | cut -d. -f2)
-    if [ "$major" -lt 5 ] || { [ "$major" -eq 5 ] && [ "$minor" -lt 15 ]; }; then
-        warn "WSL2 kernel version is ${major}.${minor}. Recommended: 5.15+. Consider updating WSL2."
-        warn "Continuing anyway for debugging purposes..."
+    
+    # Validate that we got numeric values
+    if [[ "$major" =~ ^[0-9]+$ ]] && [[ "$minor" =~ ^[0-9]+$ ]]; then
+        if [ "$major" -lt 5 ] || { [ "$major" -eq 5 ] && [ "$minor" -lt 15 ]; }; then
+            warn "WSL2 kernel version is ${major}.${minor}. Recommended: 5.15+. Consider updating WSL2."
+            warn "Continuing anyway for debugging purposes..."
+        else
+            log "WSL2 kernel version: ${major}.${minor} [OK]"
+        fi
     else
-        log "WSL2 kernel version: ${major}.${minor} [OK]"
+        warn "Could not determine kernel version from: $(uname -r)"
+        warn "Continuing anyway for debugging purposes..."
     fi
 }
 
@@ -71,6 +81,16 @@ check_ubuntu_version() {
         warn "Continuing with installation for debugging purposes..."
     else
         log "Ubuntu 24.04 (Noble) detected [OK]"
+    fi
+}
+
+# Check if user has sudo access
+check_sudo() {
+    if sudo -n true 2>/dev/null; then
+        log "Passwordless sudo access confirmed [OK]"
+    else
+        warn "Passwordless sudo access not available - some operations may fail"
+        warn "Continuing anyway for debugging purposes..."
     fi
 }
 
@@ -176,6 +196,7 @@ check_prerequisites() {
     check_user
     check_wsl2
     check_ubuntu_version
+    check_sudo
     
     log "Prerequisites verified. Ensure you have:"
     log "1. Latest Windows 11 and WSL2"
@@ -207,9 +228,9 @@ main() {
     # 1. Update system
     log "1. Updating system packages..."
     if sudo apt update && sudo apt upgrade -y; then
-        log "  [OK] System update completed"
+        log "System update completed successfully"
     else
-        warn "  [WARN] System update had issues - continuing anyway"
+        warn "System update had issues - continuing anyway"
         installation_success=false
     fi
     
@@ -218,14 +239,14 @@ main() {
     sudo apt-get purge -y intel-opencl-icd 2>/dev/null || true
     sudo apt-get autoremove -y
     sudo apt-get clean
-    log "  [OK] Cleanup completed"
+    log "Cleanup completed successfully"
     
     # 3. Install OpenCL loader and tools
     log "3. Installing OpenCL loader and tools..."
     if sudo apt-get update && sudo apt-get install -y ocl-icd-libopencl1 ocl-icd-opencl-dev opencl-headers clinfo; then
-        log "  [OK] OpenCL loader and tools installed"
+        log "OpenCL loader and tools installed successfully"
     else
-        error "  [ERROR] Failed to install OpenCL loader and tools"
+        error "Failed to install OpenCL loader and tools"
         installation_success=false
     fi
     
@@ -235,76 +256,76 @@ main() {
        sudo add-apt-repository -y ppa:kobuk-team/intel-graphics && \
        sudo apt-get update && \
        sudo apt-get install -y libze-intel-gpu1 libze1 intel-opencl-icd; then
-        log "  [OK] Intel Graphics PPA and OpenCL runtime installed"
+        log "Intel Graphics PPA and OpenCL runtime installed successfully"
     else
-        error "  [ERROR] Failed to install Intel Graphics PPA and OpenCL runtime"
+        error "Failed to install Intel Graphics PPA and OpenCL runtime"
         installation_success=false
     fi
     
     # 5. Install Intel oneAPI for SYCL Support (Recommended for Best Performance)
     log "5. Installing Intel oneAPI for SYCL support..."
     if sudo apt-get install -y wget gpg; then
-        log "  [OK] Prerequisites for oneAPI installation"
+        log "Prerequisites for oneAPI installation installed successfully"
         
         # Add Intel's GPG key (using the exact command specified)
-        log "  [INFO] Adding Intel GPG key..."
+        log "Adding Intel GPG key..."
         if wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
            gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null; then
-            log "  [OK] Intel GPG key added to oneapi-archive-keyring.gpg"
+            log "Intel GPG key added to oneapi-archive-keyring.gpg successfully"
         else
-            warn "  [WARN] Failed to add Intel GPG key - continuing anyway"
+            warn "Failed to add Intel GPG key - continuing anyway"
             installation_success=false
         fi
         
         # Add the oneAPI repository (using the exact command specified)
-        log "  [INFO] Adding oneAPI repository..."
+        log "Adding oneAPI repository..."
         if echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | \
            sudo tee /etc/apt/sources.list.d/oneAPI.list; then
-            log "  [OK] oneAPI repository added"
+            log "oneAPI repository added successfully"
         else
-            warn "  [WARN] Failed to add oneAPI repository - continuing anyway"
+            warn "Failed to add oneAPI repository - continuing anyway"
             installation_success=false
         fi
         
         # Update package list (using the exact command specified)
-        log "  [INFO] Updating package list..."
+        log "Updating package list..."
         if sudo apt update; then
-            log "  [OK] Package list updated"
+            log "Package list updated successfully"
         else
-            warn "  [WARN] Failed to update package list - continuing anyway"
+            warn "Failed to update package list - continuing anyway"
             installation_success=false
         fi
         
         # Install Intel oneAPI Runtime OpenCL (using the exact command specified)
-        log "  [INFO] Installing Intel oneAPI Runtime OpenCL..."
-        if sudo apt install intel-oneapi-runtime-opencl; then
-            log "  [OK] Intel oneAPI Runtime OpenCL installed"
+        log "Installing Intel oneAPI Runtime OpenCL..."
+        if sudo apt install -y intel-oneapi-runtime-opencl; then
+            log "Intel oneAPI Runtime OpenCL installed successfully"
         else
-            warn "  [WARN] Intel oneAPI Runtime OpenCL installation had issues - continuing anyway"
+            warn "Intel oneAPI Runtime OpenCL installation had issues - continuing anyway"
             installation_success=false
         fi
         
         # Also install Intel oneAPI basekit for additional SYCL support
-        log "  [INFO] Installing Intel oneAPI basekit for additional SYCL support..."
+        log "Installing Intel oneAPI basekit for additional SYCL support..."
         if sudo apt install -y intel-basekit; then
-            log "  [OK] Intel oneAPI basekit installed"
+            log "Intel oneAPI basekit installed successfully"
         else
-            warn "  [WARN] Intel oneAPI basekit installation had issues - continuing anyway"
+            warn "Intel oneAPI basekit installation had issues - continuing anyway"
             installation_success=false
         fi
     else
-        warn "  [WARN] Failed to install oneAPI prerequisites - continuing anyway"
+        warn "Failed to install oneAPI prerequisites - continuing anyway"
         installation_success=false
     fi
     
     # 6. Configure permissions
     log "6. Configuring permissions..."
     if sudo usermod -a -G render $USER; then
-        log "  [OK] User added to render group"
+        log "User added to render group successfully"
         # Note: newgrp render won't work in this context, but the group change will take effect after restart
-        log "  [INFO] Group membership will take effect after restart or newgrp command"
+        log "Group membership will take effect after restart or newgrp command"
     else
-        warn "  [WARN] Failed to add user to render group - continuing anyway"
+        warn "Failed to add user to render group - continuing anyway"
     fi
     
     echo
@@ -321,65 +342,30 @@ main() {
     verify_installation
     echo
     
-    # Set up Windows autostart for Kamiwaza after reboot
-    log "Setting up Windows autostart for Kamiwaza..."
-    if command -v powershell.exe >/dev/null 2>&1; then
-        log "Creating restart flag file and setting up autostart..."
-        
-        # Create the restart flag file that Windows autostart script looks for
-        powershell.exe -Command "
-            \$flagDir = \"$env:LOCALAPPDATA\\Kamiwaza\"
-            if (!(Test-Path \$flagDir)) { New-Item -ItemType Directory -Path \$flagDir -Force | Out-Null }
-            \$flagFile = \"\$flagDir\\restart_required.flag\"
-            Set-Content -Path \$flagFile -Value \"GPU setup completed - Kamiwaza should start automatically after restart\"
-            Write-Host \"Restart flag created: \$flagFile\"
-            
-            # Set up RunOnce registry entry to run kamiwaza_autostart.bat after reboot (no admin rights required)
-            \$scriptPath = \"$PWD/kamiwaza_autostart.bat\"
-            if (Test-Path \$scriptPath) {
-                \$runOnceKey = \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce\"
-                \$runOnceName = \"KamiwazaGPUAutostart\"
-                \$runOnceValue = \"\\\"\$scriptPath\\\"\"
-                
-                try {
-                    Set-ItemProperty -Path \$runOnceKey -Name \$runOnceName -Value \$runOnceValue -Type String -Force
-                    Write-Host \"RunOnce entry created for Kamiwaza autostart (no admin rights required)\"
-                } catch {
-                    Write-Host \"Warning: Failed to create RunOnce entry - continuing with restart flag only\"
-                }
-            } else {
-                Write-Host \"Warning: kamiwaza_autostart.bat not found at \$scriptPath\"
-            }
-        "
-        
-        if [ $? -eq 0 ]; then
-            log "  [OK] Windows autostart configured for Kamiwaza"
-        else
-            warn "  [WARN] Windows autostart configuration had issues - continuing anyway"
-        fi
-    else
-        warn "  [WARN] PowerShell not available - cannot configure Windows autostart"
-        log "  [INFO] You will need to start Kamiwaza manually after restart"
-    fi
+    # Windows autostart will be configured by the main installer after package installation
+    log "Windows autostart will be configured by the main installer after package installation completes"
+    log "This ensures everything is properly sequenced: GPU setup -> Package install -> Restart -> Autostart"
     
     echo
-    log "IMPORTANT: After restart, Kamiwaza will start automatically with GPU acceleration!"
-    log "The autostart script will run and execute: wsl -d kamiwaza -- kamiwaza start"
+    log "IMPORTANT: GPU drivers are installed but will be activated after the single restart"
+    log "The installer will continue with package installation, then restart once to activate everything"
     echo
     
-    # MSI installer will handle the reboot - just inform user
+    # GPU setup completed - NO RESTART YET
     log "GPU setup completed successfully!"
-    log "The MSI installer will now prompt for a system restart to activate GPU drivers."
-    log "After restart, Kamiwaza will start automatically with GPU acceleration ready."
+    log "IMPORTANT: GPU drivers are installed but NOT yet active"
+    log "The installer will continue with package installation, then restart ONCE to activate everything"
+    log "After the single restart, both GPU acceleration AND Kamiwaza will be ready"
     
     echo
     log "=== Intel Arc GPU Setup Complete ==="
     log "Next steps:"
-    log "1. MSI installer will prompt for system restart"
-    log "2. After restart, Kamiwaza will start automatically with GPU acceleration"
-    log "3. Verify GPU support with: clinfo"
-    log "4. Test OpenCL with: python3 -c \"import pyopencl; print('OpenCL available')\""
-    log "5. Verify oneAPI installation: dpkg -l | grep oneapi"
+    log "1. Installer will continue with Kamiwaza package installation"
+    log "2. After package installation completes, system will restart ONCE"
+    log "3. After restart, GPU acceleration will be active AND Kamiwaza will start automatically"
+    log "4. Verify GPU support with: clinfo"
+    log "5. Test OpenCL with: python3 -c \"import pyopencl; print('OpenCL available')\""
+    log "6. Verify oneAPI installation: dpkg -l | grep oneapi"
     echo
     
     # Script completed successfully - exit cleanly

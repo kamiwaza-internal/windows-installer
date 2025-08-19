@@ -446,4 +446,17 @@ try {
     Write-Host "Continuing with cleanup..." -ForegroundColor Yellow
 }
 
+# Ensure WSL is properly shut down before completion
+Write-Host "Ensuring WSL is properly shut down..." -ForegroundColor Yellow
+try {
+    $shutdownResult = & wsl --shutdown 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "WSL shut down successfully" -ForegroundColor Green
+    } else {
+        Write-Host "Warning: Could not shut down WSL cleanly: $shutdownResult" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "Warning: Error during WSL shutdown: $($_.Exception.Message)" -ForegroundColor Yellow
+}
+
 Write-Host "=== CLEANUP COMPLETE ===" -ForegroundColor Cyan

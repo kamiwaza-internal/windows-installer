@@ -1,4 +1,7 @@
 #!/bin/bash
+# Prevent interactive prompts during package installation
+export DEBIAN_FRONTEND=noninteractive
+
 # Continue on errors instead of exiting
 # NVIDIA GPU Setup Script for WSL2 Ubuntu 24.04 (Noble)
 # Designed for NVIDIA GeForce RTX 30xx, 40xx, and 50xx series GPUs
@@ -348,58 +351,8 @@ check_prerequisites() {
     echo
 }
 
-# Function to request and execute system reboot
-request_reboot() {
-    header "System Reboot Required"
-    echo
-    warn "IMPORTANT: GPU acceleration requires a FULL SYSTEM REBOOT!"
-    log "Please reboot your entire Windows system (not just WSL2) to activate GPU support."
-    echo
-    log "The NVIDIA GPU drivers have been installed, but they need a full system restart"
-    log "to properly initialize and become available to WSL2."
-    echo
-    
-    # Always show reboot instructions first
-    show_reboot_instructions
-    echo
-    
-    # Automated mode - just show instructions
-    log "Automated installation mode - reboot instructions will be shown"
-    log "Please restart your computer manually to complete GPU setup"
-    show_reboot_instructions
-    return 0
-}
-
-# Function to show reboot instructions
-show_reboot_instructions() {
-    header "Manual Reboot Instructions"
-    echo
-    log "To complete NVIDIA GPU setup, please restart your computer:"
-    echo
-    echo -e "${BLUE}Method 1: Windows Start Menu${NC}"
-    echo "  1. Click the Windows Start button"
-    echo "  2. Click the Power button (power icon)"
-    echo "  3. Select 'Restart'"
-    echo
-    echo -e "${BLUE}Method 2: Windows Settings${NC}"
-    echo "  1. Press Windows + I to open Settings"
-    echo "  2. Go to System > Recovery"
-    echo "  3. Click 'Restart now' under Advanced startup"
-    echo
-    echo -e "${BLUE}Method 3: Command Prompt (as Administrator)${NC}"
-    echo "  1. Press Windows + X and select 'Windows Terminal (Admin)'"
-    echo "  2. Type: shutdown /r /t 0"
-    echo "  3. Press Enter"
-    echo
-    echo -e "${BLUE}Method 4: PowerShell (as Administrator)${NC}"
-    echo "  1. Press Windows + X and select 'Windows PowerShell (Admin)'"
-    echo "  2. Type: Restart-Computer -Force"
-    echo "  3. Press Enter"
-    echo
-    warn "IMPORTANT: After restart, wait for Windows to fully boot before starting WSL2"
-    log "GPU acceleration will be available once the system has fully restarted."
-    echo
-}
+# GPU setup completed - restart will be handled by main installer
+log "GPU setup completed - restart will be handled by main installer after package installation"
 
 # Function to verify installation and show debugging info
 verify_installation() {
@@ -487,7 +440,7 @@ main() {
     log "3. Installing CUDA repository and key..."
     if sudo apt-get install -y wget gpg && \
        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb && \
-       sudo dpkg -i cuda-keyring_1.1-1_all.deb && \
+       sudo dpkg -i --force-confdef cuda-keyring_1.1-1_all.deb && \
        sudo apt-get update; then
         log "  [OK] CUDA repository and key installed"
     else
@@ -528,15 +481,20 @@ main() {
     verify_installation
     echo
     
-    # Always request system reboot
-    request_reboot
+    # GPU setup completed - NO RESTART YET
+    log "GPU setup completed successfully!"
+    log "IMPORTANT: GPU drivers are installed but NOT yet active"
+    log "The installer will continue with package installation, then restart ONCE to activate everything"
+    log "After the single restart, both GPU acceleration AND Kamiwaza will be ready"
     
     echo
     log "=== NVIDIA GPU Setup Complete ==="
     log "Next steps:"
-    log "1. Restart your computer (if not done automatically)"
-    log "2. After restart, verify GPU support with: nvidia-smi"
-    log "3. Test CUDA with: nvcc --version"
+    log "1. Installer will continue with Kamiwaza package installation"
+    log "2. After package installation completes, system will restart ONCE"
+    log "3. After restart, GPU acceleration will be active AND Kamiwaza will start automatically"
+    log "4. Verify GPU support with: nvidia-smi"
+    log "5. Test CUDA with: nvcc --version"
     echo
     
     # Final user interaction - keep terminal open for debugging

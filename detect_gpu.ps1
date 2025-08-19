@@ -19,7 +19,53 @@ function Write-LogMessage {
     )
 }
 
+function Find-SetupScript {
+    param([string]$ScriptName)
+    
+    # Priority 1: Look in Kamiwaza installation directory
+    $appDataPath = Join-Path $env:LOCALAPPDATA "Kamiwaza\$ScriptName"
+    if (Test-Path $appDataPath) {
+        Write-LogMessage "Found $ScriptName in AppData: $appDataPath" "INFO"
+        return $appDataPath
+    }
+    
+    # Priority 2: Look in current script directory
+    $currentPath = Join-Path $PSScriptRoot $ScriptName
+    if (Test-Path $currentPath) {
+        Write-LogMessage "Found $ScriptName in current directory: $currentPath" "INFO"
+        return $currentPath
+    }
+    
+    # Priority 3: Look in parent directory (for development)
+    $parentPath = Join-Path (Split-Path $PSScriptRoot -Parent) $ScriptName
+    if (Test-Path $parentPath) {
+        Write-LogMessage "Found $ScriptName in parent directory: $parentPath" "INFO"
+        return $parentPath
+    }
+    
+    Write-LogMessage "Could not find $ScriptName in any expected location" "ERROR"
+    return $null
+}
+
 Write-LogMessage "Starting GPU detection for Kamiwaza..."
+Write-LogMessage "Current working directory: $(Get-Location)"
+Write-LogMessage "Script root directory: $PSScriptRoot"
+Write-LogMessage "AppData directory: $($env:LOCALAPPDATA)"
+Write-LogMessage "Kamiwaza installation directory: $($env:LOCALAPPDATA)\Kamiwaza"
+
+# Check if Kamiwaza directory exists and what's in it
+$kamiwazaDir = Join-Path $env:LOCALAPPDATA "Kamiwaza"
+if (Test-Path $kamiwazaDir) {
+    Write-LogMessage "Kamiwaza directory exists: $kamiwazaDir"
+    $files = Get-ChildItem $kamiwazaDir -Name | Where-Object { $_ -like "setup_*.sh" }
+    if ($files) {
+        Write-LogMessage "Found setup scripts: $($files -join ', ')"
+    } else {
+        Write-LogMessage "No setup scripts found in Kamiwaza directory"
+    }
+} else {
+    Write-LogMessage "Kamiwaza directory does not exist: $kamiwazaDir" "WARN"
+}
 
 # Get GPU information with enhanced detection
 try {
@@ -140,9 +186,9 @@ try {
         
         # Copy our maintained NVIDIA script into WSL and execute it
         try {
-            $scriptSrc = Join-Path $PSScriptRoot "setup_nvidia_gpu.sh"
-            if (-not (Test-Path $scriptSrc)) { 
-                throw "setup_nvidia_gpu.sh not found at $scriptSrc" 
+            $scriptSrc = Find-SetupScript "setup_nvidia_gpu.sh"
+            if (-not $scriptSrc) { 
+                throw "setup_nvidia_gpu.sh not found in any expected location" 
             }
             
             Write-LogMessage "Found NVIDIA setup script at: $scriptSrc"
@@ -173,9 +219,9 @@ try {
         
         # Copy our maintained Intel Arc script into WSL and execute it
         try {
-            $scriptSrc = Join-Path $PSScriptRoot "setup_intel_arc_gpu.sh"
-            if (-not (Test-Path $scriptSrc)) { 
-                throw "setup_intel_arc_gpu.sh not found at $scriptSrc" 
+            $scriptSrc = Find-SetupScript "setup_intel_arc_gpu.sh"
+            if (-not $scriptSrc) { 
+                throw "setup_intel_arc_gpu.sh not found in any expected location" 
             }
             
             Write-LogMessage "Found Intel Arc setup script at: $scriptSrc"
@@ -206,9 +252,9 @@ try {
         
         # Copy our maintained Intel Integrated script into WSL and execute it
         try {
-            $scriptSrc = Join-Path $PSScriptRoot "setup_intel_integrated_gpu.sh"
-            if (-not (Test-Path $scriptSrc)) { 
-                throw "setup_intel_integrated_gpu.sh not found at $scriptSrc" 
+            $scriptSrc = Find-SetupScript "setup_intel_integrated_gpu.sh"
+            if (-not $scriptSrc) { 
+                throw "setup_intel_integrated_gpu.sh not found in any expected location" 
             }
             
             Write-LogMessage "Found Intel Integrated setup script at: $scriptSrc"
@@ -341,8 +387,9 @@ echo "=== End GPU Status ==="
             Write-LogMessage "Created restart flag at $flagFile"
 
             # Use RunOnce registry entry instead of Task Scheduler (no admin rights required)
-            $scriptPath = Join-Path $PSScriptRoot 'kamiwaza_autostart.bat'
-            if (Test-Path $scriptPath) {
+            $scriptPath = Find-SetupScript "kamiwaza_autostart.bat"
+            
+            if ($scriptPath) {
                 $runOnceKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce"
                 $runOnceName = "KamiwazaGPUAutostart"
                 $runOnceValue = "`"$scriptPath`""

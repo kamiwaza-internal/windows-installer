@@ -44,6 +44,23 @@ class KamiwazaGUIManager:
         self.all_buttons = []
         self._busy_count = 0
         
+        # Helper function for finding scripts in the correct location
+        def find_script(script_name):
+            """Find a script in Kamiwaza installation directory or current directory"""
+            # Priority 1: Look in Kamiwaza installation directory
+            appdata_script = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', script_name)
+            if os.path.exists(appdata_script):
+                return appdata_script
+            
+            # Priority 2: Look in current script directory (fallback)
+            current_script = os.path.join(os.path.dirname(__file__), script_name)
+            if os.path.exists(current_script):
+                return current_script
+            
+            return None
+        
+        self.find_script = find_script
+        
         # Create the main interface
         self.create_widgets()
         
@@ -492,10 +509,11 @@ class KamiwazaGUIManager:
         def gpu_thread():
             self.log_output("Running GPU detection and status check...", level="INFO")
             
-            # Check if PowerShell script exists
-            ps_script = os.path.join(os.path.dirname(__file__), 'detect_gpu.ps1')
-            if os.path.exists(ps_script):
-                self.log_output("Found detect_gpu.ps1 script", level="INFO")
+            # Check if PowerShell script exists using helper function
+            ps_script = self.find_script('detect_gpu.ps1')
+            if ps_script:
+                self.log_output(f"Found detect_gpu.ps1 script at: {ps_script}", level="INFO")
+                self.log_output(f"Script directory: {os.path.dirname(ps_script)}", level="INFO")
                 
                 # Run PowerShell script
                 ps_cmd = ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-File', ps_script, 
@@ -573,9 +591,9 @@ class KamiwazaGUIManager:
             def clean_thread():
                 self.log_output("Cleaning WSL environment...", level="WARN")
                 
-                # Run cleanup PowerShell script
-                cleanup_script = os.path.join(os.path.dirname(__file__), 'cleanup_wsl_kamiwaza.ps1')
-                if os.path.exists(cleanup_script):
+                # Run cleanup PowerShell script using helper function
+                cleanup_script = self.find_script('cleanup_wsl_kamiwaza.ps1')
+                if cleanup_script:
                     ps_cmd = ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-File', cleanup_script, '-Force']
                     self.run_command(ps_cmd, "WSL cleanup script")
                 else:
