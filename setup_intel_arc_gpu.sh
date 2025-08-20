@@ -165,9 +165,9 @@ verify_installation() {
     echo
     log "Checking OpenCL runtime..."
     if command -v clinfo >/dev/null 2>&1; then
-        log "clinfo command found - testing OpenCL detection..."
-        echo "Running: clinfo | head -20"
-        clinfo | head -20
+        log "clinfo command found - listing OpenCL platforms and devices..."
+        echo "Running: clinfo --list"
+        clinfo --list
     else
         warn "clinfo command not found - OpenCL may not be properly installed"
     fi

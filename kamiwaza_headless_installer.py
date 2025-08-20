@@ -21,6 +21,7 @@ import sys
 import os
 import platform
 import datetime
+import time
 import argparse
 import yaml
 import shutil
@@ -288,23 +289,10 @@ class HeadlessKamiwazaInstaller:
             self.log_output(f"WSL script path: {wsl_script_path}")
 
             # Ensure the script is visible from WSL
-            ret, out, err = self.run_command(
-                wsl_cmd + ['bash', '-lc', f"test -f '{wsl_script_path}' && echo FOUND || echo MISSING"],
-                timeout=15
-            )
-            if ret != 0 or 'FOUND' not in (out or ''):
-                self.log_output(f"ERROR: Script not accessible in WSL at: {wsl_script_path}")
-                if err:
-                    self.log_output(f"Details: {err}")
-                return
-
-            # Normalize line endings and execute once as kamiwaza
-            self.log_output("Executing GPU setup script directly from AppData (no copy)...")
-            exec_cmd = f"sudo sed -i 's/\\r$//' '{wsl_script_path}' && sudo -u kamiwaza bash '{wsl_script_path}'"
             ret, out, err = self.run_command_with_streaming(
-                wsl_cmd + ['bash', '-lc', exec_cmd],
-                timeout=300
+                wsl_cmd + ['bash', '{wsl_script_path}']
             )
+
 
             if ret == 0:
                 self.log_output("GPU setup script completed successfully")
@@ -313,11 +301,8 @@ class HeadlessKamiwazaInstaller:
                 if err:
                     self.log_output(f"Setup error: {err}")
                 if out:
-                    self.log_output("Setup output (last 20 lines):")
-                    lines = out.strip().split('\n')
-                    for line in lines[-20:]:
-                        if line.strip():
-                            self.log_output(f"  SETUP: {line}")
+                    self.log_output("Setup output:")
+                    self.log_output(out)
 
             self.log_output("=== GPU DRIVER SETUP COMPLETE ===")
         except Exception as e:
@@ -815,6 +800,7 @@ class HeadlessKamiwazaInstaller:
             
             # Step 4: Wait for services to fully restart
             self.log_output("Step 4: Waiting for WSL services to fully restart...")
+            import time
             time.sleep(15)  # Longer wait for services to stabilize
             
             # Step 5: Test WSL functionality
@@ -833,7 +819,7 @@ class HeadlessKamiwazaInstaller:
                 update_ret, update_out, update_err = self.run_command(['wsl', '--update'], timeout=120)
                 if update_ret == 0:
                     self.log_output("  [OK] WSL update completed successfully")
-                    
+                    import time
                     # Wait for update to take effect
                     time.sleep(10)
                     
@@ -1944,7 +1930,7 @@ class HeadlessKamiwazaInstaller:
                 self.log_output(f"WARNING: kamiwaza command not found in PATH: {kamiwaza_err}")
             
             # Test kamiwaza version
-            version_ret, version_out, version_err = self.run_command(wsl_cmd + ['kamiwaza', '--version'], timeout=15)
+            version_ret, version_out, version_err = self.run_command(wsl_cmd + ['kamiwaza', 'version'], timeout=15)
             if version_ret == 0:
                 self.log_output(f"SUCCESS: Kamiwaza version: {version_out.strip()}")
             else:
@@ -2047,6 +2033,19 @@ class HeadlessKamiwazaInstaller:
             except Exception as task_err:
                 self.log_output(f"Warning: Failed to register RunOnce entry: {task_err}")
             
+            # Register a Scheduled Task to pre-warm WSL at user logon (reduces cold-start delay before RunOnce)
+            try:
+                # Trigger at user logon with a small delay; run with highest privileges, target kamiwaza distro
+                warm_cmd = (
+                    'schtasks /Create /TN "KamiwazaWSLPreWarm" '
+                    '/SC ONLOGON /DELAY 0000:05 /RL HIGHEST '
+                    '/TR "wsl -d kamiwaza -u root -e true" /F'
+                )
+                subprocess.run(warm_cmd, shell=True, check=False)
+                self.log_output("Registered Scheduled Task to pre-warm WSL at user logon")
+            except Exception as warm_err:
+                self.log_output(f"Warning: Failed to register WSL pre-warm task: {warm_err}")
+            
             # AUTOMATIC FULL DEVICE RESTART - NO USER INPUT REQUIRED
             self.log_output("")
             self.log_output("=== AUTOMATIC FULL DEVICE RESTART IN PROGRESS ===")
@@ -2074,6 +2073,7 @@ class HeadlessKamiwazaInstaller:
             
             # Wait a moment for WSL to fully shutdown
             self.log_output("Waiting for WSL to fully shutdown...")
+            import time
             time.sleep(2)
             
             self.log_output("WSL cleanup complete. Proceeding with device restart...")

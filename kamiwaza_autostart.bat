@@ -33,37 +33,16 @@ if not exist "%LOCALAPPDATA%\Kamiwaza" (
     exit /b 0
 )
 
-if not exist "%FLAG_FILE%" (
-    echo [DEBUG] Restart flag not found: %FLAG_FILE%
-    echo No restart flag found - auto-start not required
-    echo [INFO] This is normal if GPU acceleration was not configured
-    timeout /t 5 /nobreak >nul
-    exit /b 0
-)
-
-echo [INFO] Restart flag detected - starting Kamiwaza platform...
-echo [DEBUG] Flag file contents:
-type "%FLAG_FILE%"
 echo.
 echo [INFO] This window will remain open to show Kamiwaza status
 echo.
 
 REM Remove the restart flag to prevent repeated auto-starts
 del "%FLAG_FILE%" 2>nul
-if exist "%FLAG_FILE%" (
-    echo [WARN] Could not remove restart flag - may auto-start again
-) else (
-    echo [OK] Restart flag removed
-)
 
 REM Also remove the RunOnce registry entry to prevent repeated auto-starts
 echo [INFO] Removing RunOnce registry entry to prevent repeated auto-starts...
 reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "KamiwazaGPUAutostart" /f >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    echo [OK] RunOnce entry removed
-) else (
-    echo [INFO] RunOnce entry already removed or not found
-)
 
 echo.
 echo ===============================================

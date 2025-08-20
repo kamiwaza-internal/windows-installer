@@ -92,18 +92,13 @@ if errorlevel 1 (
 
 @REM Unregister WSL instance named "kamiwaza" if it exists
 echo Checking for WSL instance "kamiwaza"...
-wsl -l -q | findstr /i "^kamiwaza$" >nul
-if %errorlevel%==0 (
-    echo Unregistering WSL instance "kamiwaza"...
-    wsl --unregister kamiwaza
-    if %errorlevel%==0 (
-        echo WSL instance "kamiwaza" unregistered successfully.
-    ) else (
-        echo Warning: Failed to unregister WSL instance "kamiwaza".
-    )
+wsl --unregister kamiwaza 2>nul
+if errorlevel 1 (
+    echo Warning: Could not unregister WSL instance "kamiwaza" or it does not exist.
 ) else (
-    echo No WSL instance named "kamiwaza" found.
+    echo WSL instance "kamiwaza" unregistered successfully.
 )
+wsl --list --verbose
 
 
 echo.
