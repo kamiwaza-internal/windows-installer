@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 
 # Prevent interactive prompts during package installation
 export DEBIAN_FRONTEND=noninteractive
@@ -8,10 +9,7 @@ export DEBIAN_FRONTEND=noninteractive
 # Runs as kamiwaza user with passwordless sudo access
 # Updated for Intel's new installation process using official PPA
 
-echo "=== Intel Arc GPU Configuration ==="
-echo "Setting up Intel Arc GPU acceleration for Kamiwaza..."
-echo "Timestamp: $(date)"
-echo "Running as user: $(whoami)"
+
 
 # Colors for output
 RED='\033[0;31m'
@@ -19,6 +17,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
 
 # Logging function
 log() {
@@ -193,11 +192,13 @@ verify_installation() {
 # Prerequisites check
 check_prerequisites() {
     header "Checking Prerequisites"
+
+    # Call checks directly (functions are defined above)
     check_user
     check_wsl2
     check_ubuntu_version
     check_sudo
-    
+
     log "Prerequisites verified. Ensure you have:"
     log "1. Latest Windows 11 and WSL2"
     log "2. Updated Intel GPU drivers from Intel's official site"
@@ -321,6 +322,7 @@ main() {
     # 6. Configure permissions
     log "6. Configuring permissions..."
     if sudo usermod -a -G render $USER; then
+        newgrp render
         log "User added to render group successfully"
         # Note: newgrp render won't work in this context, but the group change will take effect after restart
         log "Group membership will take effect after restart or newgrp command"

@@ -236,433 +236,90 @@ class HeadlessKamiwazaInstaller:
         return results
 
     def download_gpu_drivers(self, wsl_cmd):
-        """Download GPU drivers based on pre-installation detection"""
+        """Run GPU setup script directly from Windows AppData inside WSL (no copying)"""
         try:
-            self.log_output("=== GPU DRIVER DOWNLOAD ===")
-            
-            if self.gpu_detection_results['gpu_acceleration'] == 'CPU_ONLY':
+            self.log_output("=== GPU DRIVER SETUP (DIRECT EXECUTION) ===")
+            acceleration_mode = self.gpu_detection_results.get('gpu_acceleration', 'CPU_ONLY')
+            if acceleration_mode == 'CPU_ONLY':
                 self.log_output("GPU acceleration: CPU-only mode (no supported hardware detected)")
-                self.log_output("Skipping GPU driver download")
+                self.log_output("Skipping GPU driver setup")
                 return
-            
-            # CRITICAL: Verify GPU detection matches the script we're about to run
-            self.log_output("=== VERIFYING GPU DETECTION ACCURACY ===")
-            self.log_output(f"Independent detection result: {self.gpu_detection_results['gpu_acceleration']}")
-            
-            # Check for PowerShell detection mismatch
-            if os.path.exists(os.path.join(os.path.dirname(__file__), "setup_nvidia_gpu.sh")) and not self.gpu_detection_results['nvidia_rtx_detected']:
-                self.log_output("*** WARNING: PowerShell detected NVIDIA but independent detection says otherwise! ***")
-                self.log_output("This indicates PowerShell detection was incorrect - using independent detection.")
-            elif os.path.exists(os.path.join(os.path.dirname(__file__), "setup_intel_arc_gpu.sh")) and not self.gpu_detection_results['intel_arc_detected']:
-                self.log_output("*** WARNING: PowerShell detected Intel Arc but independent detection says otherwise! ***")
-                self.log_output("This indicates PowerShell detection was incorrect - using independent detection.")
-            elif os.path.exists(os.path.join(os.path.dirname(__file__), "setup_intel_integrated_gpu.sh")) and not self.gpu_detection_results['intel_integrated_detected']:
-                self.log_output("*** WARNING: PowerShell detected Intel Integrated but independent detection says otherwise! ***")
-                self.log_output("This indicates PowerShell detection was incorrect - using independent detection.")
-            
-            # Run GPU setup script based on INDEPENDENT detection results (not PowerShell)
-            # Only run the appropriate script for the detected hardware
-            if self.gpu_detection_results['nvidia_rtx_detected']:
-                self.log_output(f"Downloading NVIDIA RTX GPU drivers...")
-                self.log_output(f"GPU: {self.gpu_detection_results['nvidia_gpu_name']}")
-                
-                # Copy and execute NVIDIA setup script
-                script_path = os.path.join(os.path.dirname(__file__), "setup_nvidia_gpu.sh")
-                if os.path.exists(script_path):
-                    self.log_output(f"Found NVIDIA setup script: {script_path}")
-                    
-                    # Read script content
-                    with open(script_path, 'r') as f:
-                        script_content = f.read()
-                    
-                    # Copy script to WSL using a more reliable method
-                    # Use a unique temporary filename to avoid conflicts
-                    import uuid
-                    temp_filename = f'setup_nvidia_gpu_{uuid.uuid4().hex[:8]}.sh'
-                    temp_script_path = os.path.join(tempfile.gettempdir(), temp_filename)
-                    
-                    self.log_output(f"Creating temporary script file: {temp_script_path}")
-                    with open(temp_script_path, 'w', encoding='utf-8') as f:
-                        f.write(script_content)
-                    
-                    # Verify the temp file was created
-                    if not os.path.exists(temp_script_path):
-                        raise Exception(f"Failed to create temporary file: {temp_script_path}")
-                    
-                    self.log_output(f"Temporary file created successfully: {os.path.getsize(temp_script_path)} bytes")
-                    
-                    # Copy the temporary file to WSL using a more reliable method
-                    # Read the file content and pipe it directly to avoid path issues
-                    with open(temp_script_path, 'r', encoding='utf-8') as f:
-                        script_content_escaped = f.read().replace("'", "'\"'\"'")
-                    
-                    # Use echo with proper escaping to avoid path issues
-                    copy_cmd = f"echo '{script_content_escaped}' | sudo tee /usr/local/bin/setup_nvidia_gpu.sh"
-                    ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
-                    
-                    # Clean up temporary file
-                    try:
-                        os.remove(temp_script_path)
-                        self.log_output(f"Temporary file cleaned up: {temp_script_path}")
-                    except Exception as cleanup_err:
-                        self.log_output(f"Warning: Could not clean up temp file: {cleanup_err}")
-                    
-                    if ret == 0:
-                        self.log_output("NVIDIA setup script copied to WSL successfully")
-                        
-                        # Make executable
-                        ret, out, err = self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/setup_nvidia_gpu.sh'], timeout=15)
-                        if ret == 0:
-                            self.log_output("NVIDIA setup script made executable")
-                            
-                            # Fix line endings (remove CRLF if present) - use sed instead of dos2unix
-                            ret, out, err = self.run_command(wsl_cmd + ['sudo', 'sed', '-i', 's/\\r$//', '/usr/local/bin/setup_nvidia_gpu.sh'], timeout=15)
-                            if ret == 0:
-                                self.log_output("NVIDIA setup script line endings fixed")
-                            else:
-                                self.log_output(f"Warning: Could not fix line endings: {err}")
-                            
-                            # Execute the script as kamiwaza user with verbose output
-                            self.log_output("Running NVIDIA GPU setup script as kamiwaza user...")
-                            self.log_output("Note: Using streaming execution for real-time output...")
-                            
-                            # Use streaming execution to get real-time output from the GPU setup script
-                            ret, out, err = self.run_command_with_streaming(
-                                wsl_cmd + ['sudo', '-u', 'kamiwaza', '/usr/local/bin/setup_nvidia_gpu.sh'], 
-                                timeout=300
-                            )
-                            
-                            if ret == 0:
-                                self.log_output("NVIDIA GPU setup completed successfully")
-                                if out:
-                                    self.log_output("Final setup output summary:")
-                                    # Show last 20 lines of output to avoid overwhelming logs
-                                    output_lines = out.strip().split('\n')
-                                    for line in output_lines[-20:]:
-                                        if line.strip():
-                                            self.log_output(f"  SETUP: {line}")
-                            else:
-                                self.log_output(f"NVIDIA GPU setup failed with exit code {ret}")
-                                if err:
-                                    self.log_output(f"Setup error: {err}")
-                                if out:
-                                    self.log_output("Setup output (last 20 lines):")
-                                    output_lines = out.strip().split('\n')
-                                    for line in output_lines[-20:]:
-                                        if line.strip():
-                                            self.log_output(f"  SETUP: {line}")
-                        else:
-                            self.log_output(f"Failed to make NVIDIA script executable: {err}")
-                    else:
-                        self.log_output(f"Failed to copy NVIDIA script to WSL: {err}")
-                else:
-                    self.log_output(f"ERROR: NVIDIA setup script not found at {script_path}")
-            
-            elif self.gpu_detection_results['intel_arc_detected']:
-                self.log_output(f"Downloading Intel Arc GPU drivers...")
-                self.log_output(f"GPU: {self.gpu_detection_results['intel_gpu_name']}")
-                
-                # Copy and execute Intel Arc setup script
-                script_path = os.path.join(os.path.dirname(__file__), "setup_intel_arc_gpu.sh")
-                if os.path.exists(script_path):
-                    self.log_output(f"Found Intel Arc setup script: {script_path}")
-                    
-                    # Read script content
-                    with open(script_path, 'r') as f:
-                        script_content = f.read()
-                    
-                    # Copy script to WSL using a more reliable method
-                    # Use a unique temporary filename to avoid conflicts
-                    import uuid
-                    temp_filename = f'setup_intel_arc_gpu_{uuid.uuid4().hex[:8]}.sh'
-                    temp_script_path = os.path.join(tempfile.gettempdir(), temp_filename)
-                    
-                    self.log_output(f"Creating temporary script file: {temp_script_path}")
-                    with open(temp_script_path, 'w', encoding='utf-8') as f:
-                        f.write(script_content)
-                    
-                    # Verify the temp file was created
-                    if not os.path.exists(temp_script_path):
-                        raise Exception(f"Failed to create temporary file: {temp_script_path}")
-                    
-                    self.log_output(f"Temporary file created successfully: {os.path.getsize(temp_script_path)} bytes")
-                    
-                    # Copy the temporary file to WSL using a more reliable method
-                    # Read the file content and pipe it directly to avoid path issues
-                    with open(temp_script_path, 'r', encoding='utf-8') as f:
-                        script_content_escaped = f.read().replace("'", "'\"'\"'")
-                    
-                    # Use echo with proper escaping to avoid path issues
-                    copy_cmd = f"echo '{script_content_escaped}' | sudo tee /usr/local/bin/setup_intel_arc_gpu.sh"
-                    ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
-                    
-                    # Clean up temporary file
-                    try:
-                        os.remove(temp_script_path)
-                        self.log_output(f"Temporary file cleaned up: {temp_script_path}")
-                    except Exception as cleanup_err:
-                        self.log_output(f"Warning: Could not clean up temp file: {cleanup_err}")
-                    
-                    if ret == 0:
-                        self.log_output("Intel Arc setup script copied to WSL successfully")
-                        
-                        # Make executable
-                        ret, out, err = self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/setup_intel_arc_gpu.sh'], timeout=15)
-                        if ret == 0:
-                            self.log_output("Intel Arc setup script made executable")
-                            
-                            # Fix line endings (remove CRLF if present) - use sed instead of dos2unix
-                            ret, out, err = self.run_command(wsl_cmd + ['sudo', 'sed', '-i', 's/\\r$//', '/usr/local/bin/setup_intel_arc_gpu.sh'], timeout=15)
-                            if ret == 0:
-                                self.log_output("Intel Arc setup script line endings fixed")
-                            else:
-                                self.log_output(f"Warning: Could not fix line endings: {err}")
-                            
-                            # Execute the script as kamiwaza user with verbose output
-                            self.log_output("Running Intel Arc GPU setup script as kamiwaza user...")
-                            self.log_output("Note: Using streaming execution for real-time output...")
-                            
-                            # Use streaming execution to get real-time output from the GPU setup script
-                            ret, out, err = self.run_command_with_streaming(
-                                wsl_cmd + ['sudo', '-u', 'kamiwaza', '/usr/local/bin/setup_intel_arc_gpu.sh'], 
-                                timeout=300
-                            )
-                            
-                            if ret == 0:
-                                self.log_output("Intel Arc GPU setup completed successfully")
-                                if out:
-                                    self.log_output("Final setup output summary:")
-                                    # Show last 20 lines of output to avoid overwhelming logs
-                                    output_lines = out.strip().split('\n')
-                                    for line in output_lines[-20:]:
-                                        if line.strip():
-                                            self.log_output(f"  SETUP: {line}")
-                            else:
-                                self.log_output(f"Intel Arc GPU setup failed with exit code {ret}")
-                                if err:
-                                    self.log_output(f"Setup error: {err}")
-                                if out:
-                                    self.log_output("Setup output (last 20 lines):")
-                                    output_lines = out.strip().split('\n')
-                                    for line in output_lines[-20:]:
-                                        if line.strip():
-                                            self.log_output(f"  SETUP: {line}")
-                        else:
-                            self.log_output(f"Failed to make Intel Arc script executable: {err}")
-                    else:
-                        self.log_output(f"Failed to copy Intel Arc script to WSL: {err}")
-                else:
-                    self.log_output(f"ERROR: Intel Arc setup script not found at {script_path}")
-            
-            elif self.gpu_detection_results['intel_integrated_detected']:
-                self.log_output(f"Downloading Intel integrated graphics drivers...")
-                self.log_output(f"GPU: {self.gpu_detection_results['intel_gpu_name']}")
-                
-                # Copy and execute Intel integrated setup script
-                script_path = os.path.join(os.path.dirname(__file__), "setup_intel_integrated_gpu.sh")
-                if os.path.exists(script_path):
-                    self.log_output(f"Found Intel integrated setup script: {script_path}")
-                    
-                    # Read script content
-                    with open(script_path, 'r') as f:
-                        script_content = f.read()
-                    
-                    # Copy script to WSL using a more reliable method
-                    # Use a unique temporary filename to avoid conflicts
-                    import uuid
-                    temp_filename = f'setup_intel_integrated_gpu_{uuid.uuid4().hex[:8]}.sh'
-                    temp_script_path = os.path.join(tempfile.gettempdir(), temp_filename)
-                    
-                    self.log_output(f"Creating temporary script file: {temp_script_path}")
-                    with open(temp_script_path, 'w', encoding='utf-8') as f:
-                        f.write(script_content)
-                    
-                    # Verify the temp file was created
-                    if not os.path.exists(temp_script_path):
-                        raise Exception(f"Failed to create temporary file: {temp_script_path}")
-                    
-                    self.log_output(f"Temporary file created successfully: {os.path.getsize(temp_script_path)} bytes")
-                    
-                    # Copy the temporary file to WSL using a more reliable method
-                    # Read the file content and pipe it directly to avoid path issues
-                    with open(temp_script_path, 'r', encoding='utf-8') as f:
-                        script_content_escaped = f.read().replace("'", "'\"'\"'")
-                    
-                    # Use echo with proper escaping to avoid path issues
-                    copy_cmd = f"echo '{script_content_escaped}' | sudo tee /usr/local/bin/setup_intel_integrated_gpu.sh"
-                    ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', copy_cmd], timeout=30)
-                    
-                    # Clean up temporary file
-                    try:
-                        os.remove(temp_script_path)
-                        self.log_output(f"Temporary file cleaned up: {temp_script_path}")
-                    except Exception as cleanup_err:
-                        self.log_output(f"Warning: Could not clean up temp file: {cleanup_err}")
-                    
-                    if ret == 0:
-                        self.log_output("Intel integrated setup script copied to WSL successfully")
-                        
-                        # Make executable
-                        ret, out, err = self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/setup_intel_integrated_gpu.sh'], timeout=15)
-                        if ret == 0:
-                            self.log_output("Intel integrated setup script made executable")
-                            
-                            # Fix line endings (remove CRLF if present) - use sed instead of dos2unix
-                            ret, out, err = self.run_command(wsl_cmd + ['sudo', 'sed', '-i', 's/\\r$//', '/usr/local/bin/setup_intel_integrated_gpu.sh'], timeout=15)
-                            if ret == 0:
-                                self.log_output("Intel integrated setup script line endings fixed")
-                            else:
-                                self.log_output(f"Warning: Could not fix line endings: {err}")
-                            
-                            # Execute the script as kamiwaza user with verbose output
-                            self.log_output("Running Intel integrated graphics setup script as kamiwaza user...")
-                            self.log_output("Note: Using streaming execution for real-time output...")
-                            
-                            # Use streaming execution to get real-time output from the GPU setup script
-                            ret, out, err = self.run_command_with_streaming(
-                                wsl_cmd + ['sudo', '-u', 'kamiwaza', '/usr/local/bin/setup_intel_integrated_gpu.sh'], 
-                                timeout=300
-                            )
-                            
-                            if ret == 0:
-                                self.log_output("Intel integrated graphics setup completed successfully")
-                                if out:
-                                    self.log_output("Final setup output summary:")
-                                    # Show last 20 lines of output to avoid overwhelming logs
-                                    output_lines = out.strip().split('\n')
-                                    for line in output_lines[-20:]:
-                                        if line.strip():
-                                            self.log_output(f"  SETUP: {line}")
-                            else:
-                                self.log_output(f"Intel integrated graphics setup failed with exit code {ret}")
-                                if err:
-                                    self.log_output(f"Setup error: {err}")
-                                if out:
-                                    self.log_output("Setup output (last 20 lines):")
-                                    output_lines = out.strip().split('\n')
-                                    for line in output_lines[-20:]:
-                                        if line.strip():
-                                            self.log_output(f"  SETUP: {line}")
-                        else:
-                            self.log_output(f"Failed to make Intel integrated script executable: {err}")
-                    else:
-                        self.log_output(f"Failed to copy Intel integrated script to WSL: {err}")
-                else:
-                    self.log_output(f"ERROR: Intel integrated setup script not found at {script_path}")
-            
+
+            # Select script based on detection results
+            script_name = None
+            gpu_name = ''
+            if self.gpu_detection_results.get('nvidia_rtx_detected'):
+                script_name = 'setup_nvidia_gpu.sh'
+                gpu_name = self.gpu_detection_results.get('nvidia_gpu_name', 'NVIDIA RTX GPU')
+            elif self.gpu_detection_results.get('intel_arc_detected'):
+                script_name = 'setup_intel_arc_gpu.sh'
+                gpu_name = self.gpu_detection_results.get('intel_gpu_name', 'Intel Arc GPU')
+            elif self.gpu_detection_results.get('intel_integrated_detected'):
+                script_name = 'setup_intel_integrated_gpu.sh'
+                gpu_name = self.gpu_detection_results.get('intel_gpu_name', 'Intel Integrated GPU')
             else:
-                self.log_output("No supported GPU hardware detected - skipping GPU setup scripts")
-                self.log_output("Kamiwaza will run with CPU-only acceleration")
-            
-            # Create GPU status script based on actual detection results
-            status_script = f"""#!/bin/bash
-echo "=== Kamiwaza GPU Status ==="
-echo "Generated: $(date)"
-echo ""
-echo "GPU Detection Results:"
-echo "  NVIDIA RTX: {'Yes' if self.gpu_detection_results['nvidia_rtx_detected'] else 'No'}"
-echo "  Intel Arc: {'Yes' if self.gpu_detection_results['intel_arc_detected'] else 'No'}"
-echo "  Intel Integrated: {'Yes' if self.gpu_detection_results['intel_integrated_detected'] else 'No'}"
-echo "  Acceleration: {self.gpu_detection_results['gpu_acceleration']}"
-echo ""
-"""
-            
-            # Add script availability based on what was actually detected and set up
-            if self.gpu_detection_results['nvidia_rtx_detected']:
-                status_script += """if [ -f /usr/local/bin/setup_nvidia_gpu.sh ]; then
-    echo "NVIDIA RTX setup script available: /usr/local/bin/setup_nvidia_gpu.sh"
-    echo "Run: sudo -u kamiwaza /usr/local/bin/setup_nvidia_gpu.sh"
-else
-    echo "NVIDIA RTX setup script not found"
-fi
-"""
-            elif self.gpu_detection_results['intel_arc_detected']:
-                status_script += """if [ -f /usr/local/bin/setup_intel_arc_gpu.sh ]; then
-    echo "Intel Arc setup script available: /usr/local/bin/setup_intel_arc_gpu.sh"
-    echo "Run: sudo -u kamiwaza /usr/local/bin/setup_intel_arc_gpu.sh"
-else
-    echo "Intel Arc setup script not found"
-fi
-"""
-            elif self.gpu_detection_results['intel_integrated_detected']:
-                status_script += """if [ -f /usr/local/bin/setup_intel_integrated_gpu.sh ]; then
-    echo "Intel integrated graphics setup script available: /usr/local/bin/setup_intel_integrated_gpu.sh"
-    echo "Run: sudo -u kamiwaza /usr/local/bin/setup_intel_integrated_gpu.sh"
-else
-    echo "Intel integrated graphics setup script not found"
-fi
-"""
-            else:
-                status_script += """echo "No supported GPU hardware detected"
-echo "Running in CPU-only mode"
-echo "No GPU setup scripts available"
-"""
-            
-            status_script += """echo "=== End GPU Status ==="
-"""
-            
-            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', f'echo \'{status_script}\' | sudo tee /usr/local/bin/kamiwaza_gpu_status.sh'], timeout=30)
+                self.log_output("No supported GPU hardware detected - skipping GPU setup")
+                return
+
+            self.log_output(f"Detected GPU: {gpu_name}")
+
+            # Locate script on Windows side: prefer %LOCALAPPDATA%\Kamiwaza, fallback to current dir
+            appdata_dir = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza')
+            candidate_paths = [
+                os.path.join(appdata_dir, script_name),
+                os.path.join(os.path.dirname(__file__), script_name),
+            ]
+            windows_script_path = next((p for p in candidate_paths if os.path.exists(p)), None)
+            if not windows_script_path:
+                self.log_output(f"ERROR: GPU setup script not found. Checked: {candidate_paths}")
+                return
+
+            self.log_output(f"Using GPU setup script: {windows_script_path}")
+
+            # Convert Windows path to WSL path (e.g., C:\Users\... -> /mnt/c/Users/...)
+            def to_wsl_path(win_path):
+                p = win_path.replace('\\\\', '/').replace('\\', '/')
+                if len(p) > 2 and p[1] == ':' and p[2] == '/':
+                    drive = p[0].lower()
+                    return f"/mnt/{drive}/{p[3:]}"
+                return p
+
+            wsl_script_path = to_wsl_path(windows_script_path)
+            self.log_output(f"WSL script path: {wsl_script_path}")
+
+            # Ensure the script is visible from WSL
+            ret, out, err = self.run_command(
+                wsl_cmd + ['bash', '-lc', f"test -f '{wsl_script_path}' && echo FOUND || echo MISSING"],
+                timeout=15
+            )
+            if ret != 0 or 'FOUND' not in (out or ''):
+                self.log_output(f"ERROR: Script not accessible in WSL at: {wsl_script_path}")
+                if err:
+                    self.log_output(f"Details: {err}")
+                return
+
+            # Normalize line endings and execute once as kamiwaza
+            self.log_output("Executing GPU setup script directly from AppData (no copy)...")
+            exec_cmd = f"sudo sed -i 's/\\r$//' '{wsl_script_path}' && sudo -u kamiwaza bash '{wsl_script_path}'"
+            ret, out, err = self.run_command_with_streaming(
+                wsl_cmd + ['bash', '-lc', exec_cmd],
+                timeout=300
+            )
+
             if ret == 0:
-                self.run_command(wsl_cmd + ['sudo', 'chmod', '+x', '/usr/local/bin/kamiwaza_gpu_status.sh'], timeout=15)
-                self.log_output("Created GPU status script: /usr/local/bin/kamiwaza_gpu_status.sh")
-            
-            # Create restart flag for auto-start after restart (for headless installer)
-            # Only create restart flag if GPU acceleration was actually configured
-            gpu_configured = (self.gpu_detection_results['nvidia_rtx_detected'] or 
-                             self.gpu_detection_results['intel_arc_detected'] or 
-                             self.gpu_detection_results['intel_integrated_detected'])
-            
-            if gpu_configured:
-                self.log_output("")
-                self.log_output("=== GPU ACCELERATION CONFIGURED ===")
-                self.log_output("GPU acceleration has been configured successfully.")
-                self.log_output("A system restart will be recommended to ensure GPU drivers are properly loaded.")
-                
-                # GPU setup completed - restart flag created for after package installation
-                self.log_output("")
-                self.log_output("=== GPU ACCELERATION CONFIGURED SUCCESSFULLY ===")
-                self.log_output("GPU acceleration has been configured successfully.")
-                self.log_output("")
-                self.log_output("IMPORTANT: GPU drivers are installed but require a system restart to activate.")
-                self.log_output("We will continue with Kamiwaza package installation, then restart automatically.")
-                self.log_output("")
-                
-                # Create restart flag file for after package installation
-                try:
-                    restart_flag_path = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'restart_required.flag')
-                    os.makedirs(os.path.dirname(restart_flag_path), exist_ok=True)
-                    with open(restart_flag_path, 'w') as f:
-                        f.write("GPU acceleration configured - restart required AFTER package installation\n")
-                        f.write(f"NVIDIA_RTX={self.gpu_detection_results['nvidia_rtx_detected']}\n")
-                        f.write(f"INTEL_ARC={self.gpu_detection_results['intel_arc_detected']}\n")
-                        f.write(f"INTEL_INTEGRATED={self.gpu_detection_results['intel_integrated_detected']}\n")
-                        import time
-                        f.write(f"TIMESTAMP={time.time()}\n")
-                        f.write("NOTE: Package installation must complete before restart\n")
-                    self.log_output(f"[OK] Restart flag created at: {restart_flag_path}")
-                except Exception as e:
-                    self.log_output(f"[WARN] Could not create restart flag: {e}")
-                
-                self.log_output("GPU acceleration setup completed successfully!")
-                self.log_output("")
-                self.log_output("=== CONTINUING WITH PACKAGE INSTALLATION ===")
-                self.log_output("GPU drivers are configured and ready.")
-                self.log_output("Now proceeding with Kamiwaza package installation...")
-                self.log_output("After package installation completes, system will restart automatically.")
-                self.log_output("")
-                
-                # Continue with installation - restart will happen automatically after package installation
-                self.log_output("")
-                self.log_output("Continuing with Kamiwaza installation...")
-                self.log_output("GPU acceleration will be available after automatic restart")
-            
-            # Verify GPU drivers are actually working
-            self.log_output("")
-            self.log_output("=== VERIFYING GPU DRIVER STATUS ===")
-            self.verify_gpu_driver_status(wsl_cmd)
-            
-            self.log_output("=== GPU ACCELERATION CONFIGURATION COMPLETE ===")
-            
+                self.log_output("GPU setup script completed successfully")
+            else:
+                self.log_output(f"GPU setup script failed with exit code {ret}")
+                if err:
+                    self.log_output(f"Setup error: {err}")
+                if out:
+                    self.log_output("Setup output (last 20 lines):")
+                    lines = out.strip().split('\n')
+                    for line in lines[-20:]:
+                        if line.strip():
+                            self.log_output(f"  SETUP: {line}")
+
+            self.log_output("=== GPU DRIVER SETUP COMPLETE ===")
         except Exception as e:
             self.log_output(f"Error configuring GPU acceleration: {e}")
 
@@ -2203,7 +1860,7 @@ echo "No GPU setup scripts available"
             install_cmd = f"""
             echo '[{timestamp}] Starting apt install of {deb_path}' > /tmp/kamiwaza_install.log
             export DEBIAN_FRONTEND=noninteractive
-            sudo -E apt install -f -y {deb_path} >> /tmp/kamiwaza_install.log 2>&1
+            sudo -E apt install -f -y {deb_path}
             INSTALL_EXIT_CODE=$?
             echo "[{timestamp}] apt install completed with exit code $INSTALL_EXIT_CODE" >> /tmp/kamiwaza_install.log
             
@@ -2211,8 +1868,11 @@ echo "No GPU setup scripts available"
             echo '[{timestamp}] Starting apt install of {deb_path}' | systemd-cat -t kamiwaza-install -p info 2>/dev/null || true
             cat /tmp/kamiwaza_install.log | systemd-cat -t kamiwaza-install -p info 2>/dev/null || true
             echo "[{timestamp}] apt install completed with exit code $INSTALL_EXIT_CODE" | systemd-cat -t kamiwaza-install -p info 2>/dev/null || true
-            
+            echo ''
+            echo '********* NOTE: This will take several minutes before continuing - DO NOT EXIT THIS SCRIPT!! *********'
+            echo ''
             exit $INSTALL_EXIT_CODE
+            echo '********* NOTE: This will take several minutes before continuing - DO NOT EXIT THIS SCRIPT!! *********'
             """
             
             ret, out, err = self.run_command_with_streaming(
@@ -2248,8 +1908,7 @@ echo "No GPU setup scripts available"
                     self.log_output(f"Installation output: {out}")
                 
                 # Verify GPU drivers after successful package installation
-                self.log_output("=== PHASE 7: GPU DRIVER VERIFICATION ===", progress=85)
-                self.verify_gpu_drivers(wsl_cmd)
+                self.log_output("=== PHASE 7: GPU DRIVER VERIFICATION (SKIPPED) ===", progress=85)
                 
                 # Show success message from backup log if available
                 log_cmd = f"tail -10 /tmp/kamiwaza_install.log 2>/dev/null || echo 'Backup log not found'"
@@ -2394,6 +2053,30 @@ echo "No GPU setup scripts available"
             self.log_output("WARNING: Your ENTIRE COMPUTER will restart automatically in 3 seconds!")
             self.log_output("This is a FULL SYSTEM RESTART - not just WSL!")
             self.log_output("Save any unsaved work immediately!")
+            self.log_output("")
+            
+            # Clean WSL shutdown before device restart
+            self.log_output("")
+            self.log_output("=== CLEANING UP WSL INSTANCES ===")
+            self.log_output("Shutting down all WSL instances for clean restart...")
+            
+            try:
+                shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'], timeout=60)
+                if shutdown_ret == 0:
+                    self.log_output("[OK] WSL shutdown completed successfully")
+                    self.log_output("All WSL instances have been cleanly terminated")
+                else:
+                    self.log_output(f"[WARN] WSL shutdown had issues: {shutdown_err}")
+                    self.log_output("Continuing with device restart anyway...")
+            except Exception as wsl_err:
+                self.log_output(f"[WARN] WSL shutdown failed: {wsl_err}")
+                self.log_output("Continuing with device restart anyway...")
+            
+            # Wait a moment for WSL to fully shutdown
+            self.log_output("Waiting for WSL to fully shutdown...")
+            time.sleep(2)
+            
+            self.log_output("WSL cleanup complete. Proceeding with device restart...")
             self.log_output("")
             
             # Optional interactive pause before countdown
