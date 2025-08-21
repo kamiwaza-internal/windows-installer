@@ -21,6 +21,7 @@ import threading
 import json
 import datetime
 from pathlib import Path
+import webbrowser
 
 class KamiwazaGUIManager:
     def __init__(self, root):
@@ -126,12 +127,20 @@ class KamiwazaGUIManager:
         btn_status = ttk.Button(quick_frame, text="Kamiwaza Status", command=self.check_kamiwaza_status)
         btn_status.grid(row=0, column=2, padx=6, pady=6, sticky=(tk.W, tk.E))
         self.all_buttons.append(btn_status)
+        btn_go_ui = ttk.Button(quick_frame, text="Go to UI", command=self.go_to_ui)
+        btn_go_ui.grid(row=0, column=4, padx=6, pady=6, sticky=(tk.W, tk.E))
+        self.all_buttons.append(btn_go_ui)
+        
+        btn_go_api = ttk.Button(quick_frame, text="Go to API", command=self.go_to_api)
+        btn_go_api.grid(row=0, column=5, padx=6, pady=6, sticky=(tk.W, tk.E))
+        self.all_buttons.append(btn_go_api)
         
         btn_logs = ttk.Button(quick_frame, text="View Logs", command=self.view_kamiwaza_logs)
         btn_logs.grid(row=0, column=3, padx=6, pady=6, sticky=(tk.W, tk.E))
         self.all_buttons.append(btn_logs)
         
-        for i in range(4):
+        
+        for i in range(6):
             quick_frame.columnconfigure(i, weight=1)
         
         # GPU & WSL
@@ -666,6 +675,25 @@ class KamiwazaGUIManager:
                 self.log_output("Kamiwaza AppData folder not found", level="WARN")
         except Exception as e:
             self.log_output(f"Error opening AppData folder: {e}", level="ERROR")
+
+    # === WEB NAVIGATION FUNCTIONS ===
+    def go_to_ui(self):
+        """Open the Kamiwaza UI in the default browser"""
+        try:
+            self.log_output("Opening UI: https://localhost/", level="INFO")
+            webbrowser.open('https://localhost/', new=2)
+            self.log_output("UI opened in default browser", level="SUCCESS")
+        except Exception as e:
+            self.log_output(f"Failed to open UI: {e}", level="ERROR")
+
+    def go_to_api(self):
+        """Open the Kamiwaza API docs in the default browser"""
+        try:
+            self.log_output("Opening API docs: http://localhost:7777/api/docs", level="INFO")
+            webbrowser.open('http://localhost:7777/api/docs', new=2)
+            self.log_output("API docs opened in default browser", level="SUCCESS")
+        except Exception as e:
+            self.log_output(f"Failed to open API docs: {e}", level="ERROR")
 
     # === OUTPUT MANAGEMENT FUNCTIONS ===
     

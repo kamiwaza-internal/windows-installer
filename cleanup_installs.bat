@@ -92,7 +92,7 @@ if errorlevel 1 (
 
 @REM Unregister WSL instance named "kamiwaza" if it exists
 echo Checking for WSL instance "kamiwaza"...
-wsl --unregister kamiwaza 2>nul
+wsl --unregister kamiwaza
 if errorlevel 1 (
     echo Warning: Could not unregister WSL instance "kamiwaza" or it does not exist.
 ) else (

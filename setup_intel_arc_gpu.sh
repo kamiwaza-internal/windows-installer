@@ -322,7 +322,7 @@ main() {
     # 6. Configure permissions
     log "6. Configuring permissions..."
     if sudo usermod -a -G render $USER; then
-        newgrp render
+        # newgrp render
         log "User added to render group successfully"
         # Note: newgrp render won't work in this context, but the group change will take effect after restart
         log "Group membership will take effect after restart or newgrp command"

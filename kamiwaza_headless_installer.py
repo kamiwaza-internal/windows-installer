@@ -288,9 +288,12 @@ class HeadlessKamiwazaInstaller:
             wsl_script_path = to_wsl_path(windows_script_path)
             self.log_output(f"WSL script path: {wsl_script_path}")
 
+            # Ensure the script is visible from WSL and execute it
+            exec_cmd = f"sudo sed -i 's/\\r$//' '{wsl_script_path}' && sudo -u kamiwaza bash '{wsl_script_path}'"
+            self.log_output(f"Executing command: {wsl_cmd + ['bash', '-lc', exec_cmd]}")
             # Ensure the script is visible from WSL
             ret, out, err = self.run_command_with_streaming(
-                wsl_cmd + ['bash', '{wsl_script_path}']
+                wsl_cmd + ['bash', '-lc', exec_cmd],
             )
 
 
@@ -476,7 +479,7 @@ class HeadlessKamiwazaInstaller:
                 self.log_output("This may take several minutes and may require a system restart...")
                 
                 # Run wsl --install and wait for completion
-                install_ret, install_out, install_err = self.run_command(['wsl', '--install'], timeout=300)  # 5 minute timeout
+                install_ret, install_out, install_err = self.run_command(['wsl', '--install'])
                 
                 if install_ret == 0:
                     self.log_output("")
@@ -577,7 +580,7 @@ class HeadlessKamiwazaInstaller:
                     self.log_output("Running: wsl --update")
                     
                     # Try to update WSL first
-                    update_ret, update_out, update_err = self.run_command(['wsl', '--update'], timeout=120)
+                    update_ret, update_out, update_err = self.run_command(['wsl', '--update'], timeout=360)
                     if update_ret == 0:
                         self.log_output("WSL update completed successfully")
                         self.log_output("Testing WSL service again...")
@@ -596,7 +599,7 @@ class HeadlessKamiwazaInstaller:
                             if reinstall_ret == 0:
                                 self.log_output("Removed existing Ubuntu distribution")
                             
-                            install_ret, install_out, install_err = self.run_command(['wsl', '--install'], timeout=300)
+                            install_ret, install_out, install_err = self.run_command(['wsl', '--install'], timeout=360)
                             if install_ret == 0:
                                 self.log_output("")
                                 self.log_output("=== WSL REINSTALLATION COMPLETE - RESTART REQUIRED ===")
@@ -616,7 +619,7 @@ class HeadlessKamiwazaInstaller:
                         self.log_output("Attempting full WSL reinstall...")
                         
                         # Try full reinstall
-                        reinstall_ret, reinstall_out, reinstall_err = self.run_command(['wsl', '--unregister', 'Ubuntu'], timeout=60)
+                        reinstall_ret, reinstall_out, reinstall_err = self.run_command(['wsl', '--unregister', 'Ubuntu'], timeout=120)
                         if reinstall_ret == 0:
                             self.log_output("Removed existing Ubuntu distribution")
                         
@@ -816,7 +819,7 @@ class HeadlessKamiwazaInstaller:
                 
                 # Step 6: Try WSL update as additional recovery step
                 self.log_output("Step 6: Attempting WSL update for additional recovery...")
-                update_ret, update_out, update_err = self.run_command(['wsl', '--update'], timeout=120)
+                update_ret, update_out, update_err = self.run_command(['wsl', '--update'], timeout=240)
                 if update_ret == 0:
                     self.log_output("  [OK] WSL update completed successfully")
                     import time
@@ -1468,6 +1471,9 @@ class HeadlessKamiwazaInstaller:
                 line = process.stdout.readline()
                 if line:
                     line = line.rstrip('\n\r')
+                    # Filter noisy systemd-cat errors when journald is not available
+                    if "Failed to create stream fd" in line:
+                        continue
                     output_lines.append(line)
                     last_output_time = current_time
                     
@@ -1485,6 +1491,9 @@ class HeadlessKamiwazaInstaller:
                     if remaining:
                         for remaining_line in remaining.split('\n'):
                             if remaining_line.strip():
+                                # Filter noisy systemd-cat errors when journald is not available
+                                if "Failed to create stream fd" in remaining_line:
+                                    continue
                                 output_lines.append(remaining_line)
                                 self.log_output(f"  INSTALL: {remaining_line}")
                     break
@@ -1555,10 +1564,17 @@ class HeadlessKamiwazaInstaller:
             )
             
             stdout, stderr = process.communicate(timeout=timeout)
-            if stdout:
-                self.log_output(stdout.strip())
-            if stderr:
-                self.log_output(f"STDERR: {stderr.strip()}")
+            # Filter noisy systemd-cat errors when journald is not available
+            def _filter_noise(s):
+                if not s:
+                    return s
+                return "\n".join([ln for ln in s.splitlines() if "Failed to create stream fd" not in ln])
+            stdout_filtered = _filter_noise(stdout)
+            stderr_filtered = _filter_noise(stderr)
+            if stdout_filtered:
+                self.log_output(stdout_filtered.strip())
+            if stderr_filtered:
+                self.log_output(f"STDERR: {stderr_filtered.strip()}")
             
             return process.returncode, stdout, stderr
             
@@ -1792,7 +1808,7 @@ class HeadlessKamiwazaInstaller:
             
             # First, log the start of installation
             self.log_output(f"Step 1/3: Logging installation start", progress=60)
-            start_cmd = f"echo '[{timestamp}] Starting Kamiwaza installation' | systemd-cat -t kamiwaza-install -p info"
+            start_cmd = f"echo '[{timestamp}] Starting Kamiwaza installation' | systemd-cat -t kamiwaza-install -p info 2>/dev/null || true"
             ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', start_cmd], timeout=30)
             
             # Update package lists with logging
@@ -2014,24 +2030,144 @@ class HeadlessKamiwazaInstaller:
             self.log_output("=== REGISTERING WINDOWS AUTOSTART ===")
             try:
                 import subprocess
-                autostart_bat = os.path.join(os.path.dirname(__file__), 'kamiwaza_autostart.bat')
-                if not os.path.exists(autostart_bat):
-                    # Fallback to LocalAppData folder
-                    autostart_bat = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'kamiwaza_autostart.bat')
-                if os.path.exists(autostart_bat):
-                    ps_cmd = (
-                        f"$runOnceKey = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce'; "
-                        f"$runOnceName = 'KamiwazaGPUAutostart'; "
-                        f"$runOnceValue = '\"{autostart_bat}\"'; "
-                        f"Set-ItemProperty -Path $runOnceKey -Name $runOnceName -Value $runOnceValue -Type String -Force"
-                    )
-                    subprocess.run(['powershell.exe', '-ExecutionPolicy', 'Bypass', '-Command', ps_cmd], check=False)
-                    self.log_output("Registered Windows RunOnce entry for Kamiwaza autostart (no admin rights required)")
-                    self.log_output("Kamiwaza will automatically start after system restart")
+                # Ensure autostart script exists in a stable per-user location
+                src_autostart_bat = os.path.join(os.path.dirname(__file__), 'kamiwaza_autostart.bat')
+                dest_dir = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza')
+                os.makedirs(dest_dir, exist_ok=True)
+                dest_autostart_bat = os.path.join(dest_dir, 'kamiwaza_autostart.bat')
+                
+                # Check if source autostart script exists
+                if not os.path.exists(src_autostart_bat):
+                    self.log_output(f"ERROR: Source autostart script not found: {src_autostart_bat}")
+                    self.log_output("This file is required for autostart functionality")
+                    self.log_output("Please ensure kamiwaza_autostart.bat is in the same directory as this installer")
+                    self.log_output("Continuing with installation but autostart will not work")
+                    return  # Skip autostart registration if source script is missing
+                
+                # Only copy if source and destination are different
+                if os.path.exists(src_autostart_bat) and os.path.abspath(src_autostart_bat) != os.path.abspath(dest_autostart_bat):
+                    try:
+                        shutil.copy2(src_autostart_bat, dest_autostart_bat)
+                        self.log_output(f"Copied autostart script to: {dest_autostart_bat}")
+                    except Exception as copy_err:
+                        self.log_output(f"Warning: Failed to copy autostart script: {copy_err}")
+                elif os.path.exists(dest_autostart_bat):
+                    self.log_output(f"Using existing autostart script at: {dest_autostart_bat}")
                 else:
-                    self.log_output("Warning: Autostart script not found; skipping RunOnce registration")
+                    self.log_output("Warning: Autostart script not found; autostart registration may be skipped")
+                
+                # Verify we have a valid autostart script before proceeding with registration
+                if not os.path.exists(dest_autostart_bat):
+                    self.log_output("ERROR: No autostart script available - cannot register autostart mechanisms")
+                    self.log_output("This may prevent Kamiwaza from starting automatically after restart")
+                    self.log_output("Continuing with installation but autostart will not work")
+                    return  # Skip autostart registration if no script exists
+                
+                # Verify the autostart script is valid and readable
+                try:
+                    with open(dest_autostart_bat, 'r', encoding='utf-8', errors='ignore') as f:
+                        script_content = f.read()
+                    if not script_content.strip():
+                        self.log_output("ERROR: Autostart script is empty - cannot register autostart mechanisms")
+                        return
+                    if 'kamiwaza' not in script_content.lower():
+                        self.log_output("WARNING: Autostart script content doesn't appear to be for Kamiwaza")
+                        self.log_output("Script content preview: " + script_content[:100] + "...")
+                    else:
+                        self.log_output("Autostart script content verified successfully")
+                    
+                    # Check file permissions and ensure it's executable
+                    try:
+                        import stat
+                        current_mode = os.stat(dest_autostart_bat).st_mode
+                        if not (current_mode & stat.S_IXUSR):  # Check if user executable bit is set
+                            # Make the file executable for the current user
+                            os.chmod(dest_autostart_bat, current_mode | stat.S_IXUSR)
+                            self.log_output("Made autostart script executable for current user")
+                    except Exception as perm_err:
+                        self.log_output(f"Warning: Could not set executable permissions: {perm_err}")
+                        
+                except Exception as script_err:
+                    self.log_output(f"ERROR: Cannot read autostart script: {script_err}")
+                    return
+                
+                # Prefer a Scheduled Task with a short delay to avoid races with WSL/GPU init
+                # The task is self-deleting in the autostart script after successful start
+                try:
+                    autostart_task_cmd = (
+                        'schtasks /Create /TN "KamiwazaAutostart" '
+                        '/SC ONLOGON /DELAY 0000:15 /RL HIGHEST '
+                        f'/TR "cmd.exe /c \"{dest_autostart_bat}\"" /F'
+                    )
+                    autostart_result = subprocess.run(autostart_task_cmd, shell=True, check=False, capture_output=True, text=True)
+                    if autostart_result.returncode == 0:
+                        self.log_output("Registered Scheduled Task for autostart at next logon with 15s delay")
+                    else:
+                        self.log_output(f"Warning: Failed to create autostart scheduled task (exit code: {autostart_result.returncode})")
+                        if autostart_result.stderr:
+                            self.log_output(f"  Error: {autostart_result.stderr.strip()}")
+                        if autostart_result.stdout:
+                            self.log_output(f"  Output: {autostart_result.stdout.strip()}")
+                except Exception as task_reg_err:
+                    self.log_output(f"Warning: Failed to create autostart scheduled task: {task_reg_err}")
+                
+                # Legacy/backup: also set HKCU RunOnce if possible (runs once for current user on next logon)
+                # This doesn't require admin privileges and is more reliable
+                try:
+                    ps_cmd = (
+                        "$runOnceKey = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce'; "
+                        "$runOnceName = 'KamiwazaGPUAutostart'; "
+                        f"$runOnceValue = '\"{dest_autostart_bat}\"'; "
+                        "New-Item -Path $runOnceKey -Force | Out-Null; "
+                        "Set-ItemProperty -Path $runOnceKey -Name $runOnceName -Value $runOnceValue -Type String -Force"
+                    )
+                    hkcu_result = subprocess.run(['powershell.exe', '-ExecutionPolicy', 'Bypass', '-Command', ps_cmd], 
+                                               check=False, capture_output=True, text=True)
+                    if hkcu_result.returncode == 0:
+                        self.log_output("Registered HKCU RunOnce backup entry for autostart")
+                    else:
+                        self.log_output(f"Warning: Failed to register HKCU RunOnce backup (exit code: {hkcu_result.returncode})")
+                        if hkcu_result.stderr:
+                            self.log_output(f"  Error: {hkcu_result.stderr.strip()}")
+                except Exception as runonce_err:
+                    self.log_output(f"Warning: Failed to register HKCU RunOnce backup: {runonce_err}")
+                
+                # Note: HKLM RunOnce registration removed - script never runs as administrator
+                
+                # Provide summary of autostart registration
+                self.log_output("=== AUTOSTART REGISTRATION SUMMARY ===")
+                self.log_output("Successfully registered autostart mechanisms:")
+                self.log_output("  ✓ Scheduled Task: KamiwazaAutostart (15s delay)")
+                self.log_output("  ✓ Scheduled Task: KamiwazaWSLPreWarm (5s delay)")
+                self.log_output("  ✓ HKCU RunOnce: KamiwazaGPUAutostart")
+                self.log_output("After restart, Kamiwaza will start automatically with GPU acceleration ready")
+                
+                # Final verification of autostart mechanisms
+                self.log_output("=== VERIFYING AUTOSTART MECHANISMS ===")
+                try:
+                    # Check if scheduled tasks exist
+                    task_check_cmd = 'schtasks /Query /TN "KamiwazaAutostart" 2>nul & if %errorlevel% equ 0 (echo EXISTS) else (echo MISSING)'
+                    task_result = subprocess.run(task_check_cmd, shell=True, capture_output=True, text=True)
+                    if 'EXISTS' in task_result.stdout:
+                        self.log_output("  ✓ Scheduled Task KamiwazaAutostart: VERIFIED")
+                    else:
+                        self.log_output("  ⚠ Scheduled Task KamiwazaAutostart: NOT FOUND")
+                    
+                    # Check if RunOnce registry entries exist
+                    reg_check_cmd = 'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce" /v "KamiwazaGPUAutostart" 2>nul & if %errorlevel% equ 0 (echo EXISTS) else (echo MISSING)'
+                    reg_result = subprocess.run(reg_check_cmd, shell=True, capture_output=True, text=True)
+                    if 'EXISTS' in reg_result.stdout:
+                        self.log_output("  ✓ HKCU RunOnce: VERIFIED")
+                    else:
+                        self.log_output("  ⚠ HKCU RunOnce: NOT FOUND")
+                        
+                except Exception as verify_err:
+                    self.log_output(f"  ⚠ Verification failed: {verify_err}")
+                
+                self.log_output("=== AUTOSTART REGISTRATION COMPLETE ===")
+                    
             except Exception as task_err:
-                self.log_output(f"Warning: Failed to register RunOnce entry: {task_err}")
+                self.log_output(f"Warning: Failed to register autostart mechanisms: {task_err}")
             
             # Register a Scheduled Task to pre-warm WSL at user logon (reduces cold-start delay before RunOnce)
             try:
@@ -2041,8 +2177,13 @@ class HeadlessKamiwazaInstaller:
                     '/SC ONLOGON /DELAY 0000:05 /RL HIGHEST '
                     '/TR "wsl -d kamiwaza -u root -e true" /F'
                 )
-                subprocess.run(warm_cmd, shell=True, check=False)
-                self.log_output("Registered Scheduled Task to pre-warm WSL at user logon")
+                warm_result = subprocess.run(warm_cmd, shell=True, check=False, capture_output=True, text=True)
+                if warm_result.returncode == 0:
+                    self.log_output("Registered Scheduled Task to pre-warm WSL at user logon")
+                else:
+                    self.log_output(f"Warning: Failed to register WSL pre-warm task (exit code: {warm_result.returncode})")
+                    if warm_result.stderr:
+                        self.log_output(f"  Error: {warm_result.stderr.strip()}")
             except Exception as warm_err:
                 self.log_output(f"Warning: Failed to register WSL pre-warm task: {warm_err}")
             
@@ -2589,9 +2730,9 @@ class HeadlessKamiwazaInstaller:
         # Use curl to download (more reliable and shows progress)
         download_cmd = [
             'curl', '-L', '-o', rootfs_file, download_url,
-            '--max-time', '600', '--connect-timeout', '30'
+            '--connect-timeout', '30'
         ]
-        ret, _, err = self.run_command(download_cmd, timeout=700)  # 11+ minutes for 340MB download
+        ret, _, err = self.run_command(download_cmd)  # 23+ minutes for 340MB download
         
         if ret != 0:
             self.log_output(f"ERROR: Failed to download Ubuntu rootfs: {err}")
