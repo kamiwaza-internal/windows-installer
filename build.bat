@@ -343,6 +343,17 @@ echo [INFO] Cleaning up working copy...
 del kamiwaza_headless_installer_build.py 2>nul
 echo [SUCCESS] Working copy cleaned up
 
+REM Clean up backup template files
+echo [INFO] Cleaning up backup template files...
+if exist "windows_installer_template.py.backup" (
+    del "windows_installer_template.py.backup" 2>nul
+    echo [SUCCESS] Windows installer template backup cleaned up
+)
+if exist "kamiwaza_headless_installer_template.py.backup" (
+    del "kamiwaza_headless_installer_template.py.backup" 2>nul
+    echo [SUCCESS] Kamiwaza installer template backup cleaned up
+)
+
 REM Clean up GUI executable
 if exist "KamiwazaGUIManager.exe" (
     del "KamiwazaGUIManager.exe" 2>nul

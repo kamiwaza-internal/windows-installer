@@ -2031,33 +2031,33 @@ class HeadlessKamiwazaInstaller:
             try:
                 import subprocess
                 # Ensure autostart script exists in a stable per-user location
-                src_autostart_bat = os.path.join(os.path.dirname(__file__), 'kamiwaza_autostart.bat')
+                src_start_bat = os.path.join(os.path.dirname(__file__), 'kamiwaza_start.bat')
                 dest_dir = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza')
                 os.makedirs(dest_dir, exist_ok=True)
-                dest_autostart_bat = os.path.join(dest_dir, 'kamiwaza_autostart.bat')
+                dest_start_bat = os.path.join(dest_dir, 'kamiwaza_start.bat')
                 
                 # Check if source autostart script exists
-                if not os.path.exists(src_autostart_bat):
-                    self.log_output(f"ERROR: Source autostart script not found: {src_autostart_bat}")
+                if not os.path.exists(src_start_bat):
+                    self.log_output(f"ERROR: Source start script not found: {src_start_bat}")
                     self.log_output("This file is required for autostart functionality")
-                    self.log_output("Please ensure kamiwaza_autostart.bat is in the same directory as this installer")
+                    self.log_output("Please ensure kamiwaza_start.bat is in the same directory as this installer")
                     self.log_output("Continuing with installation but autostart will not work")
                     return  # Skip autostart registration if source script is missing
                 
                 # Only copy if source and destination are different
-                if os.path.exists(src_autostart_bat) and os.path.abspath(src_autostart_bat) != os.path.abspath(dest_autostart_bat):
+                if os.path.exists(src_start_bat) and os.path.abspath(src_start_bat) != os.path.abspath(dest_start_bat):
                     try:
-                        shutil.copy2(src_autostart_bat, dest_autostart_bat)
-                        self.log_output(f"Copied autostart script to: {dest_autostart_bat}")
+                        shutil.copy2(src_start_bat, dest_start_bat)
+                        self.log_output(f"Copied start script to: {dest_start_bat}")
                     except Exception as copy_err:
                         self.log_output(f"Warning: Failed to copy autostart script: {copy_err}")
-                elif os.path.exists(dest_autostart_bat):
-                    self.log_output(f"Using existing autostart script at: {dest_autostart_bat}")
+                elif os.path.exists(dest_start_bat):
+                    self.log_output(f"Using existing start script at: {dest_start_bat}")
                 else:
                     self.log_output("Warning: Autostart script not found; autostart registration may be skipped")
                 
                 # Verify we have a valid autostart script before proceeding with registration
-                if not os.path.exists(dest_autostart_bat):
+                if not os.path.exists(dest_start_bat):
                     self.log_output("ERROR: No autostart script available - cannot register autostart mechanisms")
                     self.log_output("This may prevent Kamiwaza from starting automatically after restart")
                     self.log_output("Continuing with installation but autostart will not work")
@@ -2065,7 +2065,7 @@ class HeadlessKamiwazaInstaller:
                 
                 # Verify the autostart script is valid and readable
                 try:
-                    with open(dest_autostart_bat, 'r', encoding='utf-8', errors='ignore') as f:
+                    with open(dest_start_bat, 'r', encoding='utf-8', errors='ignore') as f:
                         script_content = f.read()
                     if not script_content.strip():
                         self.log_output("ERROR: Autostart script is empty - cannot register autostart mechanisms")
@@ -2079,10 +2079,10 @@ class HeadlessKamiwazaInstaller:
                     # Check file permissions and ensure it's executable
                     try:
                         import stat
-                        current_mode = os.stat(dest_autostart_bat).st_mode
+                        current_mode = os.stat(dest_start_bat).st_mode
                         if not (current_mode & stat.S_IXUSR):  # Check if user executable bit is set
                             # Make the file executable for the current user
-                            os.chmod(dest_autostart_bat, current_mode | stat.S_IXUSR)
+                            os.chmod(dest_start_bat, current_mode | stat.S_IXUSR)
                             self.log_output("Made autostart script executable for current user")
                     except Exception as perm_err:
                         self.log_output(f"Warning: Could not set executable permissions: {perm_err}")
@@ -2097,7 +2097,7 @@ class HeadlessKamiwazaInstaller:
                     autostart_task_cmd = (
                         'schtasks /Create /TN "KamiwazaAutostart" '
                         '/SC ONLOGON /DELAY 0000:15 /RL HIGHEST '
-                        f'/TR "cmd.exe /c \"{dest_autostart_bat}\"" /F'
+                        f'/TR "cmd.exe /c \"{dest_start_bat}\"" /F'
                     )
                     autostart_result = subprocess.run(autostart_task_cmd, shell=True, check=False, capture_output=True, text=True)
                     if autostart_result.returncode == 0:
@@ -2117,7 +2117,7 @@ class HeadlessKamiwazaInstaller:
                     ps_cmd = (
                         "$runOnceKey = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce'; "
                         "$runOnceName = 'KamiwazaGPUAutostart'; "
-                        f"$runOnceValue = '\"{dest_autostart_bat}\"'; "
+                        f"$runOnceValue = '\"{dest_start_bat}\"'; "
                         "New-Item -Path $runOnceKey -Force | Out-Null; "
                         "Set-ItemProperty -Path $runOnceKey -Name $runOnceName -Value $runOnceValue -Type String -Force"
                     )

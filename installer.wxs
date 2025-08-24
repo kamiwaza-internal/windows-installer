@@ -75,7 +75,6 @@
                         <File Id="StartPlatformBatch" Name="start_platform.bat" Source="start_platform.bat"/>
                         <File Id="KamiwazaStartBatch" Name="kamiwaza_start.bat" Source="kamiwaza_start.bat"/>
                         <File Id="KamiwazaStopBatch" Name="kamiwaza_stop.bat" Source="kamiwaza_stop.bat"/>
-                        <File Id="AutoStartBatch" Name="kamiwaza_autostart.bat" Source="kamiwaza_autostart.bat"/>
                         <File Id="CreateRunOnceBatch" Name="create_runonce.bat" Source="create_runonce.bat"/>
                         <File Id="CreateAutostartRegistry" Name="create_autostart_registry.ps1" Source="create_autostart_registry.ps1"/>
                         <File Id="KamiwazaGUIManager" Name="KamiwazaGUIManager.exe" Source="KamiwazaGUIManager.exe"/>

@@ -13,17 +13,17 @@ Write-Host "Setting up RunOnce entry for Kamiwaza autostart..." -ForegroundColor
 try {
     # Determine the script path if not provided
     if (-not $ScriptPath) {
-        $ScriptPath = Join-Path $PSScriptRoot "kamiwaza_autostart.bat"
+        $ScriptPath = Join-Path $PSScriptRoot "kamiwaza_start.bat"
         if (-not (Test-Path $ScriptPath)) {
             # Fallback to LocalAppData folder
-            $ScriptPath = Join-Path $env:LOCALAPPDATA "Kamiwaza\kamiwaza_autostart.bat"
+            $ScriptPath = Join-Path $env:LOCALAPPDATA "Kamiwaza\kamiwaza_start.bat"
         }
     }
     
     # Verify the script exists
     if (-not (Test-Path $ScriptPath)) {
         Write-Error "Autostart script not found at: $ScriptPath"
-        Write-Host "Please ensure kamiwaza_autostart.bat exists in the Kamiwaza installation folder." -ForegroundColor Red
+        Write-Host "Please ensure kamiwaza_start.bat exists in the Kamiwaza installation folder." -ForegroundColor Red
         exit 1
     }
     

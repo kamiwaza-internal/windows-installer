@@ -387,7 +387,7 @@ echo "=== End GPU Status ==="
             Write-LogMessage "Created restart flag at $flagFile"
 
             # Use RunOnce registry entry instead of Task Scheduler (no admin rights required)
-            $scriptPath = Find-SetupScript "kamiwaza_autostart.bat"
+            $scriptPath = Find-SetupScript "kamiwaza_start.bat"
             
             if ($scriptPath) {
                 $runOnceKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce"

@@ -1,7 +1,0 @@
-kamiwaza_version: 0.5.0-test
-codename: noble
-build_number: 999
-arch: amd64  # Use 'auto' to detect, or specify 'amd64' or 'arm64' 
-r2_endpoint_url: https://a8269aa1c3e707a1ce89dd67bdef4a0f.r2.cloudflarestorage.com
-# Test DEB URL - use a minimal test package or mock DEB for testing
-deb_file_url: https://httpbin.org/robots.txt

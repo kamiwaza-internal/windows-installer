@@ -81,8 +81,8 @@ echo [INFO] Testing autostart script detection...
 echo [INFO] Running autostart script in test mode...
 echo.
 
-REM Run the autostart script to test detection
-call "%~dp0kamiwaza_autostart.bat"
+REM Run the start script to test detection
+call "%~dp0kamiwaza_start.bat"
 
 echo.
 echo ===============================================
