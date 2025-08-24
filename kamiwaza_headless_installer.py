@@ -318,14 +318,14 @@ class HeadlessKamiwazaInstaller:
                 self.log_output("Verifying NVIDIA GPU drivers...")
                 
                 # Check if nvidia-smi works
-                ret, out, err = self.run_command(wsl_cmd + ['nvidia-smi', '--query-gpu=name,driver_version', '--format=csv,noheader'], timeout=30)
+                ret, out, err = self.run_command(wsl_cmd + ['nvidia-smi', '--query-gpu=name,driver_version', '--format=csv,noheader'])
                 if ret == 0 and out.strip():
                     gpu_info = out.strip()
                     self.log_output(f"[OK] NVIDIA GPU detected: {gpu_info}")
                     
                     # Check PyTorch CUDA support
                     pytorch_cmd = 'python3 -c "import torch; print(f\"CUDA available: {torch.cuda.is_available()}\"); print(f\"CUDA device count: {torch.cuda.device_count()}\"); print(f\"CUDA version: {torch.version.cuda}\")"'
-                    ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', pytorch_cmd], timeout=30)
+                    ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', pytorch_cmd])
                     if ret == 0:
                         self.log_output(f"[OK] PyTorch CUDA status: {out.strip()}")
                     else:
@@ -337,7 +337,7 @@ class HeadlessKamiwazaInstaller:
                 self.log_output("Verifying Intel Arc GPU drivers...")
                 
                 # Check if clinfo works and shows Intel devices
-                ret, out, err = self.run_command(wsl_cmd + ['clinfo'], timeout=30)
+                ret, out, err = self.run_command(wsl_cmd + ['clinfo'])
                 if ret == 0:
                     if 'intel' in out.lower():
                         self.log_output("[OK] Intel OpenCL platform detected")
@@ -354,7 +354,7 @@ class HeadlessKamiwazaInstaller:
                 self.log_output("Verifying Intel integrated graphics...")
                 
                 # Check if vainfo works
-                ret, out, err = self.run_command(wsl_cmd + ['vainfo'], timeout=30)
+                ret, out, err = self.run_command(wsl_cmd + ['vainfo'])
                 if ret == 0:
                     if 'intel' in out.lower():
                         self.log_output("[OK] Intel VA-API drivers detected")
@@ -364,7 +364,7 @@ class HeadlessKamiwazaInstaller:
                     self.log_output(f"[ERROR] VA-API check failed: {err}")
                     
                 # Check OpenCL
-                ret, out, err = self.run_command(wsl_cmd + ['clinfo'], timeout=30)
+                ret, out, err = self.run_command(wsl_cmd + ['clinfo'])
                 if ret == 0:
                     if 'intel' in out.lower():
                         self.log_output("[OK] Intel OpenCL platform detected")
@@ -385,7 +385,7 @@ class HeadlessKamiwazaInstaller:
             
             if self.gpu_detection_results['nvidia_rtx_detected']:
                 # Check if NVIDIA drivers are available
-                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', 'which nvidia-smi'], timeout=30)
+                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', 'which nvidia-smi'])
                 if ret == 0:
                     self.log_output("[OK] NVIDIA drivers appear to be available")
                 else:
@@ -393,7 +393,7 @@ class HeadlessKamiwazaInstaller:
             
             elif self.gpu_detection_results['intel_arc_detected'] or self.gpu_detection_results['intel_integrated_detected']:
                 # Check if Intel drivers are available
-                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', 'which vainfo'], timeout=30)
+                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', 'which vainfo'])
                 if ret == 0:
                     self.log_output("[OK] Intel GPU drivers appear to be available")
                 else:
@@ -416,7 +416,7 @@ class HeadlessKamiwazaInstaller:
             self.log_output("")
         
         # Test basic WSL availability
-        ret, out, err = self.run_command(['wsl', '--version'], timeout=10)
+        ret, out, err = self.run_command(['wsl', '--version'])
         if ret != 0:
             self.log_output("WSL not installed or not available")
             
@@ -432,7 +432,7 @@ class HeadlessKamiwazaInstaller:
                 # Try to fix the HCS service error
                 if self.fix_hcs_service_error():
                     self.log_output("HCS service fixed successfully, retrying WSL check...")
-                    ret, out, err = self.run_command(['wsl', '--version'], timeout=10)
+                    ret, out, err = self.run_command(['wsl', '--version'])
                     if ret == 0:
                         self.log_output("SUCCESS: WSL is now available after fixing HCS service")
                         return True
@@ -544,7 +544,7 @@ class HeadlessKamiwazaInstaller:
             
             # Additional check: Test if WSL service is actually functional
             self.log_output("Testing WSL service functionality...")
-            service_test_ret, service_test_out, service_test_err = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+            service_test_ret, service_test_out, service_test_err = self.run_command(['wsl', '--list', '--quiet'])
             if service_test_ret != 0:
                 self.log_output("WARNING: WSL version command succeeded but service is not functional")
                 self.log_output(f"Service test error: {service_test_err}")
@@ -580,13 +580,13 @@ class HeadlessKamiwazaInstaller:
                     self.log_output("Running: wsl --update")
                     
                     # Try to update WSL first
-                    update_ret, update_out, update_err = self.run_command(['wsl', '--update'], timeout=360)
+                    update_ret, update_out, update_err = self.run_command(['wsl', '--update'])
                     if update_ret == 0:
                         self.log_output("WSL update completed successfully")
                         self.log_output("Testing WSL service again...")
                         
                         # Test service again
-                        retest_ret, retest_out, retest_err = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+                        retest_ret, retest_out, retest_err = self.run_command(['wsl', '--list', '--quiet'])
                         if retest_ret == 0:
                             self.log_output("SUCCESS: WSL service is now functional")
                             return True
@@ -595,11 +595,11 @@ class HeadlessKamiwazaInstaller:
                             self.log_output("Attempting full WSL reinstall...")
                             
                             # Try full reinstall
-                            reinstall_ret, reinstall_out, reinstall_err = self.run_command(['wsl', '--unregister', 'Ubuntu'], timeout=60)
+                            reinstall_ret, reinstall_out, reinstall_err = self.run_command(['wsl', '--unregister', 'Ubuntu'])
                             if reinstall_ret == 0:
                                 self.log_output("Removed existing Ubuntu distribution")
                             
-                            install_ret, install_out, install_err = self.run_command(['wsl', '--install'], timeout=360)
+                            install_ret, install_out, install_err = self.run_command(['wsl', '--install'])
                             if install_ret == 0:
                                 self.log_output("")
                                 self.log_output("=== WSL REINSTALLATION COMPLETE - RESTART REQUIRED ===")
@@ -763,7 +763,7 @@ class HeadlessKamiwazaInstaller:
             
             # Step 1: Force shutdown all WSL instances
             self.log_output("Step 1: Force shutting down all WSL instances...")
-            shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'], timeout=60)
+            shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'])
             if shutdown_ret == 0:
                 self.log_output("  [OK] WSL shutdown completed successfully")
             else:
@@ -808,7 +808,7 @@ class HeadlessKamiwazaInstaller:
             
             # Step 5: Test WSL functionality
             self.log_output("Step 5: Testing WSL functionality...")
-            test_ret, test_out, test_err = self.run_command(['wsl', '--list', '--quiet'], timeout=30)
+            test_ret, test_out, test_err = self.run_command(['wsl', '--list', '--quiet'])
             if test_ret == 0:
                 self.log_output("  [OK] WSL list command successful after recovery")
                 if test_out:
@@ -819,7 +819,7 @@ class HeadlessKamiwazaInstaller:
                 
                 # Step 6: Try WSL update as additional recovery step
                 self.log_output("Step 6: Attempting WSL update for additional recovery...")
-                update_ret, update_out, update_err = self.run_command(['wsl', '--update'], timeout=240)
+                update_ret, update_out, update_err = self.run_command(['wsl', '--update'])
                 if update_ret == 0:
                     self.log_output("  [OK] WSL update completed successfully")
                     import time
@@ -827,7 +827,7 @@ class HeadlessKamiwazaInstaller:
                     time.sleep(10)
                     
                     # Test again after update
-                    final_test_ret, final_test_out, final_test_err = self.run_command(['wsl', '--list', '--quiet'], timeout=30)
+                    final_test_ret, final_test_out, final_test_err = self.run_command(['wsl', '--list', '--quiet'])
                     if final_test_ret == 0:
                         self.log_output("  [OK] WSL is now functional after update recovery")
                         return True
@@ -859,7 +859,7 @@ class HeadlessKamiwazaInstaller:
             # Step 1: Check if WSL AppX package exists
             self.log_output("Step 1: Checking WSL AppX package status...")
             check_cmd = ['powershell', '-Command', 'Get-AppxPackage -AllUsers Microsoft.WSL']
-            ret, out, err = self.run_command(check_cmd, timeout=30)
+            ret, out, err = self.run_command(check_cmd)
             
             if ret == 0 and out.strip():
                 self.log_output("WSL AppX package found - attempting removal...")
@@ -867,7 +867,7 @@ class HeadlessKamiwazaInstaller:
                 # Step 2: Remove the corrupted WSL AppX package
                 self.log_output("Step 2: Removing corrupted WSL AppX package...")
                 remove_cmd = ['powershell', '-Command', 'Remove-AppxPackage Microsoft.WSL -AllUsers']
-                remove_ret, remove_out, remove_err = self.run_command(remove_cmd, timeout=60)
+                remove_ret, remove_out, remove_err = self.run_command(remove_cmd)
                 
                 if remove_ret == 0:
                     self.log_output("WSL AppX package removed successfully")
@@ -886,7 +886,7 @@ class HeadlessKamiwazaInstaller:
             
             for cmd in cleanup_commands:
                 try:
-                    ret, out, err = self.run_command(cmd, timeout=30)
+                    ret, out, err = self.run_command(cmd)
                     if ret == 0:
                         self.log_output(f"Successfully unregistered: {' '.join(cmd)}")
                     else:
@@ -897,7 +897,7 @@ class HeadlessKamiwazaInstaller:
             
             # Step 4: Shutdown WSL completely
             self.log_output("Step 4: Shutting down WSL completely...")
-            shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'], timeout=60)
+            shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'])
             if shutdown_ret == 0:
                 self.log_output("WSL shutdown completed successfully")
             else:
@@ -1197,7 +1197,7 @@ class HeadlessKamiwazaInstaller:
             # Copy APT terminal log (detailed installation output)
             apt_term_log = os.path.join(appdata_logs, 'apt_term_log.txt')
             cmd = f"cat /var/log/apt/term.log"
-            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=30)
+            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd])
             if ret == 0 and out:
                 with open(apt_term_log, 'w', encoding='utf-8') as f:
                     f.write(f"Kamiwaza Installation - APT Terminal Log\n")
@@ -1212,7 +1212,7 @@ class HeadlessKamiwazaInstaller:
             # Copy APT history log
             apt_history_log = os.path.join(appdata_logs, 'apt_history_log.txt')
             cmd = f"cat /var/log/apt/history.log"
-            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=30)
+            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd])
             if ret == 0 and out:
                 with open(apt_history_log, 'w', encoding='utf-8') as f:
                     f.write(f"Kamiwaza Installation - APT History Log\n")
@@ -1224,7 +1224,7 @@ class HeadlessKamiwazaInstaller:
             # Copy DPKG log (kamiwaza entries only)
             dpkg_log = os.path.join(appdata_logs, 'dpkg_log.txt')
             cmd = f"grep kamiwaza /var/log/dpkg.log"
-            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=30)
+            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd])
             if ret == 0 and out:
                 with open(dpkg_log, 'w', encoding='utf-8') as f:
                     f.write(f"Kamiwaza Installation - DPKG Operations Log\n")
@@ -1274,13 +1274,13 @@ class HeadlessKamiwazaInstaller:
         try:
             # Check APT terminal log
             cmd = f"ls -la /var/log/apt/term.log"
-            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=15)
+            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd])
             if ret == 0:
                 self.log_output(f"[OK] APT terminal log exists: {out.strip()}")
                 
                 # Show last few lines
                 cmd = f"tail -10 /var/log/apt/term.log"
-                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=15)
+                ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd])
                 if ret == 0 and out:
                     self.log_output("Last 10 lines of APT installation log:")
                     for line in out.strip().split('\n')[-5:]:  # Show only last 5 lines to save space
@@ -1291,7 +1291,7 @@ class HeadlessKamiwazaInstaller:
             
             # Check APT history log
             cmd = f"ls -la /var/log/apt/history.log"
-            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=15)
+            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd])
             if ret == 0:
                 self.log_output(f"[OK] APT history log exists: {out.strip()}")
             else:
@@ -1299,7 +1299,7 @@ class HeadlessKamiwazaInstaller:
             
             # Check for kamiwaza in dpkg log
             cmd = f"grep -c kamiwaza /var/log/dpkg.log"
-            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd], timeout=15)
+            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', cmd])
             if ret == 0 and out.strip().isdigit():
                 count = int(out.strip())
                 self.log_output(f"[OK] Found {count} kamiwaza entries in DPKG log")
@@ -1678,14 +1678,14 @@ class HeadlessKamiwazaInstaller:
             
             # Test WSL connectivity and user
             self.log_output("Testing WSL instance connectivity and user configuration...")
-            test_ret, test_out, test_err = self.run_command(wsl_cmd + ['echo', 'WSL_CONNECTION_TEST'], timeout=15)
+            test_ret, test_out, test_err = self.run_command(wsl_cmd + ['echo', 'WSL_CONNECTION_TEST'])
             if test_ret == 0:
                 self.log_output(f"SUCCESS: WSL connectivity confirmed: {test_out.strip()}")
             else:
                 self.log_output(f"WARNING: WSL connectivity test failed: {test_err}")
             
             # Verify user configuration
-            user_ret, user_out, user_err = self.run_command(wsl_cmd + ['whoami'], timeout=15)
+            user_ret, user_out, user_err = self.run_command(wsl_cmd + ['whoami'])
             if user_ret == 0:
                 current_user = user_out.strip()
                 self.log_output(f"WSL default user: {current_user}")
@@ -1698,7 +1698,7 @@ class HeadlessKamiwazaInstaller:
             
             # Test sudo access for kamiwaza user
             if user_ret == 0 and user_out.strip() == 'kamiwaza':
-                sudo_ret, sudo_out, sudo_err = self.run_command(wsl_cmd + ['sudo', '-n', 'whoami'], timeout=15)
+                sudo_ret, sudo_out, sudo_err = self.run_command(wsl_cmd + ['sudo', '-n', 'whoami'])
                 if sudo_ret == 0 and sudo_out.strip() == 'root':
                     self.log_output("[OK] Confirmed: kamiwaza user has passwordless sudo access")
                 else:
@@ -1757,7 +1757,7 @@ class HeadlessKamiwazaInstaller:
             download_cmd = f"wget --timeout=60 --tries=3 --progress=bar --show-progress '{deb_url}' -O {deb_path}"
             self.log_output(f"Download command: {download_cmd}")
             
-            ret, download_out, err = self.run_command(wsl_cmd + ['bash', '-c', download_cmd], timeout=300)
+            ret, download_out, err = self.run_command(wsl_cmd + ['bash', '-c', download_cmd])
             if ret != 0:
                 self.log_output(f"CRITICAL ERROR: Download failed with exit code {ret}")
                 self.log_output(f"Download error: {err}")
@@ -1770,23 +1770,23 @@ class HeadlessKamiwazaInstaller:
             
             # Ensure file command is available before verification
             file_check_cmd = f"which file"
-            file_check_ret, _, _ = self.run_command(wsl_cmd + ['bash', '-c', file_check_cmd], timeout=15)
+            file_check_ret, _, _ = self.run_command(wsl_cmd + ['bash', '-c', file_check_cmd])
             if file_check_ret != 0:
                 self.log_output("Installing file command...")
                 install_file_cmd = f"sudo apt update -qq"
-                self.run_command(wsl_cmd + ['bash', '-c', install_file_cmd], timeout=60)
+                self.run_command(wsl_cmd + ['bash', '-c', install_file_cmd])
                 install_file_cmd2 = f"sudo apt install -y file"
-                self.run_command(wsl_cmd + ['bash', '-c', install_file_cmd2], timeout=60)
+                self.run_command(wsl_cmd + ['bash', '-c', install_file_cmd2])
             
             # Verify downloaded file (split into separate commands)
             verify_cmd = f"ls -la {deb_path}"
-            verify_ret, verify_out, verify_err = self.run_command(wsl_cmd + ['bash', '-c', verify_cmd], timeout=30)
+            verify_ret, verify_out, verify_err = self.run_command(wsl_cmd + ['bash', '-c', verify_cmd])
             if verify_ret == 0:
                 self.log_output(f"SUCCESS: Download verified: {verify_out.strip()}")
                 
                 # Get file type
                 file_cmd = f"file {deb_path}"
-                file_ret, file_out, file_err = self.run_command(wsl_cmd + ['bash', '-c', file_cmd], timeout=30)
+                file_ret, file_out, file_err = self.run_command(wsl_cmd + ['bash', '-c', file_cmd])
                 if file_ret == 0:
                     self.log_output(f"File type: {file_out.strip()}")
                 else:
@@ -1809,7 +1809,7 @@ class HeadlessKamiwazaInstaller:
             # First, log the start of installation
             self.log_output(f"Step 1/3: Logging installation start", progress=60)
             start_cmd = f"echo '[{timestamp}] Starting Kamiwaza installation' | systemd-cat -t kamiwaza-install -p info 2>/dev/null || true"
-            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', start_cmd], timeout=30)
+            ret, out, err = self.run_command(wsl_cmd + ['bash', '-c', start_cmd])
             
             # Update package lists with logging
             self.log_output(f"Step 2/3: Updating package lists", progress=70)
@@ -1914,7 +1914,7 @@ class HeadlessKamiwazaInstaller:
                 
                 # Show success message from backup log if available
                 log_cmd = f"tail -10 /tmp/kamiwaza_install.log 2>/dev/null || echo 'Backup log not found'"
-                log_ret, log_out, log_err = self.run_command(wsl_cmd + ['bash', '-c', log_cmd], timeout=30)
+                log_ret, log_out, log_err = self.run_command(wsl_cmd + ['bash', '-c', log_cmd])
                 if log_ret == 0 and log_out and 'Backup log not found' not in log_out:
                     self.log_output("Last lines from backup install log:")
                     for line in log_out.strip().split('\n')[-5:]:
@@ -1923,7 +1923,7 @@ class HeadlessKamiwazaInstaller:
             
             # Clean up the DEB file
             cleanup_cmd = f"rm {deb_path}"
-            self.run_command(wsl_cmd + ['bash', '-c', cleanup_cmd], timeout=30)
+            self.run_command(wsl_cmd + ['bash', '-c', cleanup_cmd])
             
             # Copy logs to Windows AppData folder for easy access
             self.log_output("=== COPYING LOGS TO WINDOWS ===")
@@ -1939,14 +1939,14 @@ class HeadlessKamiwazaInstaller:
             
             # Test if kamiwaza command is available
             self.log_output("=== POST-INSTALLATION VERIFICATION ===")
-            kamiwaza_test_ret, kamiwaza_out, kamiwaza_err = self.run_command(wsl_cmd + ['which', 'kamiwaza'], timeout=15)
+            kamiwaza_test_ret, kamiwaza_out, kamiwaza_err = self.run_command(wsl_cmd + ['which', 'kamiwaza'])
             if kamiwaza_test_ret == 0:
                 self.log_output(f"SUCCESS: kamiwaza command found at: {kamiwaza_out.strip()}")
             else:
                 self.log_output(f"WARNING: kamiwaza command not found in PATH: {kamiwaza_err}")
             
             # Test kamiwaza version
-            version_ret, version_out, version_err = self.run_command(wsl_cmd + ['kamiwaza', 'version'], timeout=15)
+            version_ret, version_out, version_err = self.run_command(wsl_cmd + ['kamiwaza', 'version'])
             if version_ret == 0:
                 self.log_output(f"SUCCESS: Kamiwaza version: {version_out.strip()}")
             else:
@@ -2471,7 +2471,7 @@ class HeadlessKamiwazaInstaller:
         # Only check for existing kamiwaza instance or Ubuntu-24.04
         # User explicitly requested: "We should only use the existing wsl if its name is KAMIWAZA - nothing else"
         # and "We NEVER want 22.04 - only 24.04"
-        ret, out, _ = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+        ret, out, _ = self.run_command(['wsl', '--list', '--quiet'])
         if ret != 0:
             self.log_output("ERROR: WSL is not available")
             
@@ -2482,14 +2482,14 @@ class HeadlessKamiwazaInstaller:
                 # Try to fix the HCS service error
                 if self.fix_hcs_service_error():
                     self.log_output("WSL service fixed successfully, retrying distribution check...")
-                    ret, out, _ = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+                    ret, out, _ = self.run_command(['wsl', '--list', '--quiet'])
                     if ret != 0:
                         self.log_output("WSL service still not functional after basic repair")
                         self.log_output("Attempting advanced repair methods...")
                         
                         if self.perform_advanced_hcs_repair():
                             self.log_output("Advanced repair completed, retrying distribution check...")
-                            ret, out, _ = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+                            ret, out, _ = self.run_command(['wsl', '--list', '--quiet'])
                             if ret != 0:
                                 self.log_output("WSL service still not functional after all repair attempts")
                                 self.log_output("System restart required to fully resolve WSL service issues")
@@ -2502,7 +2502,7 @@ class HeadlessKamiwazaInstaller:
                     
                     if self.perform_advanced_hcs_repair():
                         self.log_output("Advanced repair completed, retrying distribution check...")
-                        ret, out, _ = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+                        ret, out, _ = self.run_command(['wsl', '--list', '--quiet'])
                         if ret != 0:
                             self.log_output("WSL service still not functional after advanced repair")
                             self.log_output("System restart required to fully resolve WSL service issues")
@@ -2516,7 +2516,7 @@ class HeadlessKamiwazaInstaller:
                     self.log_output("DETECTED: Possible WSL disk attachment issue - attempting recovery...")
                     if self.recover_wsl_disk_attachment():
                         self.log_output("WSL disk attachment recovered, retrying distribution check...")
-                        ret, out, _ = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+                        ret, out, _ = self.run_command(['wsl', '--list', '--quiet'])
                         if ret == 0:
                             self.log_output("SUCCESS: WSL is now available after disk attachment recovery")
                             return True
@@ -2541,7 +2541,7 @@ class HeadlessKamiwazaInstaller:
                 
                 # Stop the existing Ubuntu-24.04 instance
                 self.log_output("Stopping Ubuntu-24.04 WSL instance...")
-                stop_ret, stop_out, stop_err = self.run_command(['wsl', '--terminate', 'Ubuntu-24.04'], timeout=30)
+                stop_ret, stop_out, stop_err = self.run_command(['wsl', '--terminate', 'Ubuntu-24.04'])
                 if stop_ret == 0:
                     self.log_output("Successfully stopped Ubuntu-24.04 instance")
                 else:
@@ -2550,7 +2550,7 @@ class HeadlessKamiwazaInstaller:
                 # Shutdown all WSL instances to ensure clean restart (WSL ONLY - not the entire device)
                 self.log_output("Shutting down all WSL instances for clean restart...")
                 self.log_output("NOTE: This only stops WSL Linux instances - does NOT restart your computer")
-                shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'], timeout=60)
+                shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'])
                 if shutdown_ret == 0:
                     self.log_output("Successfully shutdown all WSL instances")
                 else:
@@ -2563,7 +2563,7 @@ class HeadlessKamiwazaInstaller:
                 
                 # Verify the instance is accessible after restart
                 self.log_output("Verifying Ubuntu-24.04 instance accessibility after restart...")
-                test_ret, test_out, test_err = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'echo', 'restart_test'], timeout=30)
+                test_ret, test_out, test_err = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'echo', 'restart_test'])
                 if test_ret == 0:
                     self.log_output("Successfully restarted and verified Ubuntu-24.04 instance")
                     self.log_output(f"Test output: {test_out.strip()}")
@@ -2586,7 +2586,7 @@ class HeadlessKamiwazaInstaller:
                         time.sleep(5)
                         
                         # Test access again
-                        retry_ret, retry_out, retry_err = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'echo', 'recovery_test'], timeout=30)
+                        retry_ret, retry_out, retry_err = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'echo', 'recovery_test'])
                         if retry_ret == 0:
                             self.log_output("SUCCESS: Ubuntu-24.04 instance accessible after recovery!")
                             self.log_output(f"Recovery test output: {retry_out.strip()}")
@@ -2605,13 +2605,13 @@ class HeadlessKamiwazaInstaller:
                 
                 # Ensure Ubuntu-24.04 also uses kamiwaza as default user
                 self.log_output("Verifying default user for Ubuntu-24.04...")
-                ret, whoami_out, _ = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'whoami'], timeout=15)
+                ret, whoami_out, _ = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'whoami'])
                 if ret == 0:
                     current_user = whoami_out.strip()
                     self.log_output(f"Current Ubuntu-24.04 default user: {current_user}")
                     if current_user != 'kamiwaza':
                         self.log_output("Configuring Ubuntu-24.04 to use kamiwaza as default user...")
-                        ret, _, err = self.run_command(['wsl', '--set-default-user', 'Ubuntu-24.04', 'kamiwaza'], timeout=15)
+                        ret, _, err = self.run_command(['wsl', '--set-default-user', 'Ubuntu-24.04', 'kamiwaza'])
                         if ret != 0:
                             self.log_output(f"WARNING: Failed to set Ubuntu-24.04 default user: {err}")
                         else:
@@ -2630,7 +2630,7 @@ class HeadlessKamiwazaInstaller:
         self.log_output(f"Setting up dedicated WSL instance: {instance_name}")
         
         # Check what WSL distributions exist
-        ret, out, err = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+        ret, out, err = self.run_command(['wsl', '--list', '--quiet'])
         if ret != 0:
             self.log_output("ERROR: WSL is not available")
             self.log_output("On Windows Server, you may need to manually enable WSL:")
@@ -2647,7 +2647,7 @@ class HeadlessKamiwazaInstaller:
             
             # Stop the existing WSL instance
             self.log_output(f"Stopping {instance_name} WSL instance...")
-            stop_ret, stop_out, stop_err = self.run_command(['wsl', '--terminate', instance_name], timeout=30)
+            stop_ret, stop_out, stop_err = self.run_command(['wsl', '--terminate', instance_name])
             if stop_ret == 0:
                 self.log_output(f"Successfully stopped {instance_name} instance")
             else:
@@ -2656,7 +2656,7 @@ class HeadlessKamiwazaInstaller:
             # Shutdown all WSL instances to ensure clean restart (WSL ONLY - not the entire device)
             self.log_output("Shutting down all WSL instances for clean restart...")
             self.log_output("NOTE: This only stops WSL Linux instances - does NOT restart your computer")
-            shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'], timeout=60)
+            shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'])
             if shutdown_ret == 0:
                 self.log_output("Successfully shutdown all WSL instances")
             else:
@@ -2669,7 +2669,7 @@ class HeadlessKamiwazaInstaller:
             
             # Verify the instance is accessible after restart
             self.log_output(f"Verifying {instance_name} instance accessibility after restart...")
-            test_ret, test_out, test_err = self.run_command(['wsl', '-d', instance_name, 'echo', 'restart_test'], timeout=30)
+            test_ret, test_out, test_err = self.run_command(['wsl', '-d', instance_name, 'echo', 'restart_test'])
             if test_ret == 0:
                 self.log_output(f"Successfully restarted and verified {instance_name} instance")
                 self.log_output(f"Test output: {test_out.strip()}")
@@ -2692,7 +2692,7 @@ class HeadlessKamiwazaInstaller:
                         time.sleep(5)
                         
                         # Test access again
-                        retry_ret, retry_out, retry_err = self.run_command(['wsl', '-d', instance_name, 'echo', 'recovery_test'], timeout=30)
+                        retry_ret, retry_out, retry_err = self.run_command(['wsl', '-d', instance_name, 'echo', 'recovery_test'])
                         if retry_ret == 0:
                             self.log_output("SUCCESS: {instance_name} instance accessible after recovery!")
                             self.log_output(f"Recovery test output: {retry_out.strip()}")
@@ -2748,7 +2748,7 @@ class HeadlessKamiwazaInstaller:
         # Import as kamiwaza WSL instance
         self.log_output(f"Importing as '{instance_name}' WSL instance...")
         self.log_output(f"Import command: wsl --import {instance_name} {wsl_dir} {rootfs_file}")
-        ret, _, err = self.run_command(['wsl', '--import', instance_name, wsl_dir, rootfs_file], timeout=300)
+        ret, _, err = self.run_command(['wsl', '--import', instance_name, wsl_dir, rootfs_file])
         
         # Clean up downloaded file
         try:
@@ -2768,7 +2768,7 @@ class HeadlessKamiwazaInstaller:
                 # Try to fix the HCS service error
                 if self.fix_hcs_service_error():
                     self.log_output("WSL service fixed successfully, retrying import...")
-                    ret, _, err = self.run_command(['wsl', '--import', instance_name, wsl_dir, rootfs_file], timeout=300)
+                    ret, _, err = self.run_command(['wsl', '--import', instance_name, wsl_dir, rootfs_file])
                     if ret == 0:
                         self.log_output("SUCCESS: WSL import completed after fixing service")
                     else:
@@ -2781,7 +2781,7 @@ class HeadlessKamiwazaInstaller:
                             # Try additional repair methods
                             if self.perform_advanced_hcs_repair():
                                 self.log_output("Advanced repair completed, retrying import...")
-                                ret, _, err = self.run_command(['wsl', '--import', instance_name, wsl_dir, rootfs_file], timeout=300)
+                                ret, _, err = self.run_command(['wsl', '--import', instance_name, wsl_dir, rootfs_file])
                                 if ret == 0:
                                     self.log_output("SUCCESS: WSL import completed after advanced repair")
                                 else:
@@ -2800,7 +2800,7 @@ class HeadlessKamiwazaInstaller:
                     
                     if self.perform_advanced_hcs_repair():
                         self.log_output("Advanced repair completed, retrying import...")
-                        ret, _, err = self.run_command(['wsl', '--import', instance_name, wsl_dir, rootfs_file], timeout=300)
+                        ret, _, err = self.run_command(['wsl', '--import', instance_name, wsl_dir, rootfs_file])
                         if ret == 0:
                             self.log_output("SUCCESS: WSL import completed after advanced repair")
                         else:
@@ -2818,7 +2818,7 @@ class HeadlessKamiwazaInstaller:
         else:
             self.log_output(f"WSL import completed successfully")
             # Verify what WSL instances exist after import
-            ret_check, out_check, _ = self.run_command(['wsl', '--list', '--quiet'], timeout=15)
+            ret_check, out_check, _ = self.run_command(['wsl', '--list', '--quiet'])
             if ret_check == 0:
                 instances_after = out_check.replace('\x00', '').replace(' ', '').replace('\r', '').replace('\n', ' ').split()
                 instances_after = [name.strip() for name in instances_after if name.strip()]
@@ -2830,14 +2830,14 @@ class HeadlessKamiwazaInstaller:
         self.log_output(f"Verifying and initializing '{instance_name}' instance...")
         
         # Test basic functionality
-        ret, _, _ = self.run_command(['wsl', '-d', instance_name, 'echo', 'test'], timeout=15)
+        ret, _, _ = self.run_command(['wsl', '-d', instance_name, 'echo', 'test'])
         if ret != 0:
             self.log_output(f"ERROR: {instance_name} instance verification failed")
             return None
 
         # First, build the kamiwaza user
         self.log_output(f"Building the kamiwaza user...")
-        ret, _, err = self.run_command(['wsl', '-d', instance_name, 'bash', '-c', 'useradd -m -s /bin/bash kamiwaza'], timeout=15)
+        ret, _, err = self.run_command(['wsl', '-d', instance_name, 'bash', '-c', 'useradd -m -s /bin/bash kamiwaza'])
         if ret != 0:
             self.log_output(f"ERROR: Failed to build the kamiwaza user: {err}")
             return None
@@ -2851,14 +2851,14 @@ class HeadlessKamiwazaInstaller:
         echo '[user]' > /etc/wsl.conf
         echo 'default=kamiwaza' >> /etc/wsl.conf
         """
-        ret2, _, err2 = self.run_command(['wsl', '-d', instance_name, 'bash', '-c', wsl_conf_cmd], timeout=15)
+        ret2, _, err2 = self.run_command(['wsl', '-d', instance_name, 'bash', '-c', wsl_conf_cmd])
         if ret2 != 0:
             self.log_output(f"WARNING: Failed to configure /etc/wsl.conf: {err2}")
         else:
             self.log_output("Configured /etc/wsl.conf to use kamiwaza as default user")
         
         # Verify the user configuration
-        ret, whoami_out, _ = self.run_command(['wsl', '-d', instance_name, 'whoami'], timeout=15)
+        ret, whoami_out, _ = self.run_command(['wsl', '-d', instance_name, 'whoami'])
         if ret == 0:
             current_user = whoami_out.strip()
             self.log_output(f"Current default user: {current_user}")
@@ -2872,12 +2872,12 @@ class HeadlessKamiwazaInstaller:
                     'echo "kamiwaza ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/kamiwaza'
                 ]
                 for cmd in create_user_cmds:
-                    ret, _, err = self.run_command(['wsl', '-d', instance_name, 'bash', '-c', cmd], timeout=30)
+                    ret, _, err = self.run_command(['wsl', '-d', instance_name, 'bash', '-c', cmd])
                     if ret != 0:
                         self.log_output(f"WARNING: User setup command failed: {cmd} - {err}")
                 
                 # Try setting default user again
-                ret, _, _ = self.run_command(['wsl', '--set-default-user', instance_name, 'kamiwaza'], timeout=15)
+                ret, _, _ = self.run_command(['wsl', '--set-default-user', instance_name, 'kamiwaza'])
                 if ret == 0:
                     self.log_output("Successfully configured kamiwaza as default user after creation")
         
@@ -2888,18 +2888,18 @@ class HeadlessKamiwazaInstaller:
         ]
         
         for cmd in init_commands:
-            ret, _, err = self.run_command(['wsl', '-d', instance_name, 'sudo', 'bash', '-c', cmd], timeout=120)
+            ret, _, err = self.run_command(['wsl', '-d', instance_name, 'sudo', 'bash', '-c', cmd])
             if ret != 0:
                 self.log_output(f"WARNING: Failed to initialize {instance_name}: {cmd} - {err}")
         
         # Final verification of user setup
-        ret, final_user, _ = self.run_command(['wsl', '-d', instance_name, 'whoami'], timeout=15)
+        ret, final_user, _ = self.run_command(['wsl', '-d', instance_name, 'whoami'])
         if ret == 0:
             self.log_output(f"Final default user verification: {final_user.strip()}")
         
         # Set kamiwaza as the default WSL distribution
         self.log_output(f"Setting '{instance_name}' as default WSL distribution...")
-        ret, _, err = self.run_command(['wsl', '--set-default', instance_name], timeout=15)
+        ret, _, err = self.run_command(['wsl', '--set-default', instance_name])
         if ret == 0:
             self.log_output(f"Successfully set '{instance_name}' as default WSL distribution")
         else:

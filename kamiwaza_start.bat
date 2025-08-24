@@ -52,5 +52,3 @@ echo   wsl -d %WSL_INSTANCE% -- kamiwaza stop     - Stop the platform
 echo   wsl -d %WSL_INSTANCE% -- kamiwaza status   - Show platform status
 echo   wsl -d %WSL_INSTANCE%                      - Enter WSL directly
 echo.
-echo Press any key to close this window...
-pause >nul 

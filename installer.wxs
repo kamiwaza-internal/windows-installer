@@ -449,15 +449,18 @@ After installation completes:
 
         <!-- Install Execute Sequence - automatically run Kamiwaza installation -->
         <InstallExecuteSequence>
-            <Custom Action="ReservePorts" After="InstallFiles">NOT Installed AND NOT REMOVE</Custom>
-            <Custom Action="CheckRemotePC" After="ReservePorts">NOT Installed AND NOT REMOVE</Custom>
-            <Custom Action="DetectGPUCmd" After="CheckRemotePC">NOT Installed AND NOT REMOVE</Custom>
-            <Custom Action="RunKamiwazaInstaller" After="DetectGPUCmd">NOT Installed AND NOT REMOVE</Custom>
-            <Custom Action="DetectGPU" After="RunKamiwazaInstaller">NOT Installed AND NOT REMOVE</Custom>
-            <Custom Action="SetupAutostartRegistry" After="DetectGPU">NOT Installed AND NOT REMOVE</Custom>
-            <Custom Action="InstallGUIManager" After="SetupAutostartRegistry">NOT Installed AND NOT REMOVE</Custom>
-            <Custom Action="SetRunOnceEntry" After="InstallGUIManager">NOT Installed AND NOT REMOVE</Custom>
-            <Custom Action="LaunchDiagnosticGUI" After="SetRunOnceEntry">NOT Installed AND NOT REMOVE AND LAUNCH_GUI = "1"</Custom>
+            <!-- Run during both fresh install AND repair mode (NOT REMOVE) -->
+            <Custom Action="ReservePorts" After="InstallFiles">NOT REMOVE</Custom>
+            <Custom Action="CheckRemotePC" After="ReservePorts">NOT REMOVE</Custom>
+            <Custom Action="DetectGPUCmd" After="CheckRemotePC">NOT REMOVE</Custom>
+            <Custom Action="RunKamiwazaInstaller" After="DetectGPUCmd">NOT REMOVE</Custom>
+            <Custom Action="DetectGPU" After="RunKamiwazaInstaller">NOT REMOVE</Custom>
+            <Custom Action="SetupAutostartRegistry" After="DetectGPU">NOT REMOVE</Custom>
+            <Custom Action="InstallGUIManager" After="SetupAutostartRegistry">NOT REMOVE</Custom>
+            <Custom Action="SetRunOnceEntry" After="InstallGUIManager">NOT REMOVE</Custom>
+            <Custom Action="LaunchDiagnosticGUI" After="SetRunOnceEntry">NOT REMOVE AND LAUNCH_GUI = "1"</Custom>
+            
+            <!-- Uninstall actions only -->
             <Custom Action="ComprehensiveCleanup" Before="RemoveFiles">Installed AND REMOVE</Custom>
             <Custom Action="ReleasePorts" After="ComprehensiveCleanup">Installed AND REMOVE</Custom>
             

@@ -103,6 +103,5 @@ echo [INFO] Results will be used during Kamiwaza platform installation
 echo.
 
 echo ===============================================
-echo GPU Detection Complete - Press any key to continue...
+echo GPU Detection Complete 
 echo ===============================================
-pause >nul
