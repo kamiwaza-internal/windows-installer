@@ -484,10 +484,37 @@ class KamiwazaGUIManager:
         def status_thread():
             self.run_wsl_command(['kamiwaza', 'status'], "Checking Kamiwaza status")
             
-            # Also check if kamiwaza process is running
-            self.run_wsl_command(['ps', 'aux', '|', 'grep', 'kamiwaza'], "Checking Kamiwaza processes")
+            # Check key Kamiwaza processes with better formatting
+            self.check_kamiwaza_processes()
         
         threading.Thread(target=status_thread, daemon=True).start()
+
+    def check_kamiwaza_processes(self):
+        """Check Kamiwaza processes with better formatting"""
+        def process_thread():
+            self.log_output("=== KAMIWAZA PROCESS STATUS ===", level="INFO")
+            
+            # Check main Kamiwaza daemon
+            self.run_wsl_command(['pgrep', '-f', 'kamiwazad.py'], "Checking Kamiwaza daemon process")
+            
+            # Check main Kamiwaza application
+            self.run_wsl_command(['pgrep', '-f', 'main.py'], "Checking Kamiwaza main application")
+            
+            # Check frontend processes
+            self.run_wsl_command(['pgrep', '-f', 'kamiwaza-frontend'], "Checking Kamiwaza frontend")
+            
+            # Check Ray processes (simplified)
+            self.run_wsl_command(['pgrep', '-f', 'ray::'], "Checking Ray processes")
+            
+            # Show a summary of key processes
+            self.run_wsl_command(['ps', 'h', '-o', 'pid,ppid,cmd', '-C', 'python'], "Python processes summary")
+            
+            # Check if specific ports are listening
+            self.run_wsl_command(['netstat', '-tlnp', '|', 'grep', ':443'], "Checking HTTPS port (443)")
+            self.run_wsl_command(['netstat', '-tlnp', '|', 'grep', ':7777'], "Checking API port (7777)")
+            self.run_wsl_command(['netstat', '-tlnp', '|', 'grep', ':8265'], "Checking Ray dashboard port (8265)")
+        
+        threading.Thread(target=process_thread, daemon=True).start()
 
     def view_kamiwaza_logs(self):
         """Open Kamiwaza logs folder in AppData"""
