@@ -346,6 +346,19 @@ class KamiwazaGUIManager:
         wsl_cmd = ['wsl', '-d', clean_dist, '--'] + command
         return self.run_command(wsl_cmd, description, timeout)
 
+    def run_wsl_command_silent(self, command, timeout=30):
+        """Run a WSL command silently and return True/False for success/failure"""
+        try:
+            clean_dist = self.wsl_distribution.strip()
+            if not clean_dist or len(clean_dist) < 2:
+                return False
+            
+            wsl_cmd = ['wsl', '-d', clean_dist, '--'] + command
+            result = subprocess.run(wsl_cmd, capture_output=True, text=True, timeout=timeout, encoding='utf-8', errors='replace')
+            return result.returncode == 0
+        except Exception:
+            return False
+
     def detect_wsl_distribution(self):
         """Auto-detect available WSL distributions"""
         self.log_output("Detecting available WSL distributions...", level="INFO")
@@ -467,7 +480,7 @@ class KamiwazaGUIManager:
         """Start Kamiwaza service"""
         def start_thread():
             self.run_wsl_command(['kamiwaza', 'start'], "Starting Kamiwaza service")
-            self.check_kamiwaza_status()
+            #self.check_kamiwaza_status()
         
         threading.Thread(target=start_thread, daemon=True).start()
 
@@ -475,7 +488,7 @@ class KamiwazaGUIManager:
         """Stop Kamiwaza service"""
         def stop_thread():
             self.run_wsl_command(['kamiwaza', 'stop'], "Stopping Kamiwaza service")
-            self.check_kamiwaza_status()
+            #self.check_kamiwaza_status()
         
         threading.Thread(target=stop_thread, daemon=True).start()
 
@@ -494,36 +507,110 @@ class KamiwazaGUIManager:
         def process_thread():
             self.log_output("=== KAMIWAZA PROCESS STATUS ===", level="INFO")
             
+            # Track results for accurate summary
+            results = {}
+            
             # Check main Kamiwaza daemon
-            self.run_wsl_command(['pgrep', '-f', 'kamiwazad.py'], "Checking Kamiwaza daemon process")
+            daemon_result = self.run_wsl_command_silent(['pgrep', '-f', 'kamiwazad.py'])
+            results['daemon'] = daemon_result
+            if daemon_result:
+                self.log_output("✓ Daemon process found", level="SUCCESS")
+            else:
+                self.log_output("✗ Daemon process not found", level="ERROR")
             
             # Check main Kamiwaza application
-            self.run_wsl_command(['pgrep', '-f', 'main.py'], "Checking Kamiwaza main application")
+            main_result = self.run_wsl_command_silent(['pgrep', '-f', 'main.py'])
+            results['main'] = main_result
+            if main_result:
+                self.log_output("✓ Main application processes found", level="SUCCESS")
+            else:
+                self.log_output("✗ Main application processes not found", level="ERROR")
             
             # Check frontend processes
-            self.run_wsl_command(['pgrep', '-f', 'kamiwaza-frontend'], "Checking Kamiwaza frontend")
+            frontend_result = self.run_wsl_command_silent(['pgrep', '-f', 'kamiwaza-frontend'])
+            results['frontend'] = frontend_result
+            if frontend_result:
+                self.log_output("✓ Frontend processes found", level="SUCCESS")
+            else:
+                self.log_output("✗ Frontend processes not found", level="ERROR")
             
-            # Check Ray processes (simplified)
-            self.run_wsl_command(['pgrep', '-f', 'ray::'], "Checking Ray processes")
+            # Check Ray processes
+            ray_result = self.run_wsl_command_silent(['pgrep', '-f', 'ray::'])
+            results['ray'] = ray_result
+            if ray_result:
+                self.log_output("✓ Ray processes found", level="SUCCESS")
+            else:
+                self.log_output("✗ Ray processes not found", level="ERROR")
             
             # Show a summary of key processes
             self.run_wsl_command(['ps', 'h', '-o', 'pid,ppid,cmd', '-C', 'python'], "Python processes summary")
             
             # Check if specific ports are listening
-            self.run_wsl_command(['netstat', '-tlnp', '2>/dev/null', '|', 'grep', ':443'], "Checking HTTPS port (443)")
-            self.run_wsl_command(['netstat', '-tlnp', '2>/dev/null', '|', 'grep', ':7777'], "Checking API port (7777)")
-            self.run_wsl_command(['netstat', '-tlnp', '2>/dev/null', '|', 'grep', ':8265'], "Checking Ray dashboard port (8265)")
+            https_result = self.run_wsl_command_silent(['netstat', '-tlnp', '2>/dev/null', '|', 'grep', ':443'])
+            results['https'] = https_result
+            if https_result:
+                self.log_output("✓ HTTPS port (443) is listening", level="SUCCESS")
+            else:
+                self.log_output("✗ HTTPS port (443) not listening", level="ERROR")
             
-            # Add a summary at the end
+            api_result = self.run_wsl_command_silent(['netstat', '-tlnp', '2>/dev/null', '|', 'grep', ':7777'])
+            results['api'] = api_result
+            if api_result:
+                self.log_output("✓ API port (7777) is listening", level="SUCCESS")
+            else:
+                self.log_output("✗ API port (7777) not listening", level="ERROR")
+            
+            ray_dashboard_result = self.run_wsl_command_silent(['netstat', '-tlnp', '2>/dev/null', '|', 'grep', ':8265'])
+            results['ray_dashboard'] = ray_dashboard_result
+            if ray_dashboard_result:
+                self.log_output("✓ Ray dashboard port (8265) is listening", level="SUCCESS")
+            else:
+                self.log_output("✗ Ray dashboard port (8265) not listening", level="ERROR")
+            
+            # Generate accurate summary based on actual results
             self.log_output("=== SUMMARY ===", level="INFO")
-            self.log_output("✓ Daemon: Running", level="SUCCESS")
-            self.log_output("✓ Main Application: Running", level="SUCCESS")
-            self.log_output("✓ Frontend: Running", level="SUCCESS")
-            self.log_output("✓ Ray Processes: Running", level="SUCCESS")
-            self.log_output("✓ HTTPS (443): Listening", level="SUCCESS")
-            self.log_output("✓ API (7777): Listening", level="SUCCESS")
-            self.log_output("✓ Ray Dashboard (8265): Listening", level="SUCCESS")
-            self.log_output("All systems operational!", level="SUCCESS")
+            
+            # Count successes and failures
+            total_checks = len(results)
+            successful_checks = sum(1 for result in results.values() if result)
+            failed_checks = total_checks - successful_checks
+            
+            # Show individual results
+            status_symbols = {
+                'daemon': '✓' if results['daemon'] else '✗',
+                'main': '✓' if results['main'] else '✗', 
+                'frontend': '✓' if results['frontend'] else '✗',
+                'ray': '✓' if results['ray'] else '✗',
+                'https': '✓' if results['https'] else '✗',
+                'api': '✓' if results['api'] else '✗',
+                'ray_dashboard': '✓' if results['ray_dashboard'] else '✗'
+            }
+            
+            status_levels = {
+                'daemon': 'SUCCESS' if results['daemon'] else 'ERROR',
+                'main': 'SUCCESS' if results['main'] else 'ERROR',
+                'frontend': 'SUCCESS' if results['frontend'] else 'ERROR',
+                'ray': 'SUCCESS' if results['ray'] else 'ERROR',
+                'https': 'SUCCESS' if results['https'] else 'ERROR',
+                'api': 'SUCCESS' if results['api'] else 'ERROR',
+                'ray_dashboard': 'SUCCESS' if results['ray_dashboard'] else 'ERROR'
+            }
+            
+            self.log_output(f"{status_symbols['daemon']} Daemon: {'Running' if results['daemon'] else 'Not Running'}", level=status_levels['daemon'])
+            self.log_output(f"{status_symbols['main']} Main Application: {'Running' if results['main'] else 'Not Running'}", level=status_levels['main'])
+            self.log_output(f"{status_symbols['frontend']} Frontend: {'Running' if results['frontend'] else 'Not Running'}", level=status_levels['frontend'])
+            self.log_output(f"{status_symbols['ray']} Ray Processes: {'Running' if results['ray'] else 'Not Running'}", level=status_levels['ray'])
+            self.log_output(f"{status_symbols['https']} HTTPS (443): {'Listening' if results['https'] else 'Not Listening'}", level=status_levels['https'])
+            self.log_output(f"{status_symbols['api']} API (7777): {'Listening' if results['api'] else 'Not Listening'}", level=status_levels['api'])
+            self.log_output(f"{status_symbols['ray_dashboard']} Ray Dashboard (8265): {'Listening' if results['ray_dashboard'] else 'Not Listening'}", level=status_levels['ray_dashboard'])
+            
+            # Overall status
+            if failed_checks == 0:
+                self.log_output(f"All systems operational! ({successful_checks}/{total_checks} checks passed)", level="SUCCESS")
+            elif successful_checks == 0:
+                self.log_output(f"All systems down! ({failed_checks}/{total_checks} checks failed)", level="ERROR")
+            else:
+                self.log_output(f"System partially operational ({successful_checks}/{total_checks} checks passed, {failed_checks} failed)", level="WARN")
         
         threading.Thread(target=process_thread, daemon=True).start()
 
