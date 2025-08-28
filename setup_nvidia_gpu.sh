@@ -467,6 +467,31 @@ main() {
         warn "  [WARN] Failed to configure environment variables - continuing anyway"
     fi
     
+    # 6. Install NVIDIA Container Toolkit for Docker GPU access
+    log "6. Installing NVIDIA Container Toolkit for Docker GPU access..."
+    if sudo apt-get install -y nvidia-container-toolkit; then
+        log "  [OK] NVIDIA Container Toolkit installed"
+        
+        # Configure Docker to use NVIDIA runtime
+        log "  Configuring Docker NVIDIA runtime..."
+        if sudo nvidia-ctk runtime configure --runtime=docker; then
+            log "  [OK] Docker NVIDIA runtime configured"
+            
+            # Restart Docker service to apply changes
+            log "  Restarting Docker service..."
+            if sudo service docker restart; then
+                log "  [OK] Docker service restarted with NVIDIA runtime"
+            else
+                warn "  [WARN] Docker service restart failed - manual restart may be needed"
+            fi
+        else
+            warn "  [WARN] Docker NVIDIA runtime configuration failed"
+        fi
+    else
+        error "  [ERROR] Failed to install NVIDIA Container Toolkit"
+        installation_success=false
+    fi
+    
     echo
     if [ "$installation_success" = true ]; then
         log "Setup completed successfully! [SUCCESS]"
@@ -510,6 +535,8 @@ main() {
     echo "  - ls -la /dev/nvidia*         # Check NVIDIA device files"
     echo "  - groups                       # Check user groups"
     echo "  - dmesg | grep -i nvidia      # Check kernel messages for NVIDIA GPU"
+    echo "  - docker info | grep -i runtime # Check Docker runtime configuration"
+    echo "  - docker run --rm --gpus all ubuntu:22.04 nvidia-smi # Test Docker GPU access"
     echo
     log "To close this terminal, type 'exit' or press Ctrl+D"
     echo

@@ -15,6 +15,8 @@ RESTART BEHAVIOR:
 - Headless mode: Automatic restart after package installation
 - Automatic restart after GPU driver installation + package installation
 - Kamiwaza starts automatically after restart via RunOnce registry
+
+NOTE - DO NOT ADD UNICODE CHARACTERS TO ANY FILES IN THIS REPO.
 """
 import subprocess
 import sys
@@ -2137,9 +2139,9 @@ class HeadlessKamiwazaInstaller:
                 # Provide summary of autostart registration
                 self.log_output("=== AUTOSTART REGISTRATION SUMMARY ===")
                 self.log_output("Successfully registered autostart mechanisms:")
-                self.log_output("  ✓ Scheduled Task: KamiwazaAutostart (15s delay)")
-                self.log_output("  ✓ Scheduled Task: KamiwazaWSLPreWarm (5s delay)")
-                self.log_output("  ✓ HKCU RunOnce: KamiwazaGPUAutostart")
+                self.log_output("  [OK] Scheduled Task: KamiwazaAutostart (15s delay)")
+                self.log_output("  [OK] Scheduled Task: KamiwazaWSLPreWarm (5s delay)")
+                self.log_output("  [OK] HKCU RunOnce: KamiwazaGPUAutostart")
                 self.log_output("After restart, Kamiwaza will start automatically with GPU acceleration ready")
                 
                 # Final verification of autostart mechanisms
@@ -2149,20 +2151,20 @@ class HeadlessKamiwazaInstaller:
                     task_check_cmd = 'schtasks /Query /TN "KamiwazaAutostart" 2>nul & if %errorlevel% equ 0 (echo EXISTS) else (echo MISSING)'
                     task_result = subprocess.run(task_check_cmd, shell=True, capture_output=True, text=True)
                     if 'EXISTS' in task_result.stdout:
-                        self.log_output("  ✓ Scheduled Task KamiwazaAutostart: VERIFIED")
+                        self.log_output("  [OK] Scheduled Task KamiwazaAutostart: VERIFIED")
                     else:
-                        self.log_output("  ⚠ Scheduled Task KamiwazaAutostart: NOT FOUND")
+                        self.log_output("  [WARNING] Scheduled Task KamiwazaAutostart: NOT FOUND")
                     
                     # Check if RunOnce registry entries exist
                     reg_check_cmd = 'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce" /v "KamiwazaGPUAutostart" 2>nul & if %errorlevel% equ 0 (echo EXISTS) else (echo MISSING)'
                     reg_result = subprocess.run(reg_check_cmd, shell=True, capture_output=True, text=True)
                     if 'EXISTS' in reg_result.stdout:
-                        self.log_output("  ✓ HKCU RunOnce: VERIFIED")
+                        self.log_output("  [OK] HKCU RunOnce: VERIFIED")
                     else:
-                        self.log_output("  ⚠ HKCU RunOnce: NOT FOUND")
+                        self.log_output("  [WARNING] HKCU RunOnce: NOT FOUND")
                         
                 except Exception as verify_err:
-                    self.log_output(f"  ⚠ Verification failed: {verify_err}")
+                    self.log_output(f"  [WARNING] Verification failed: {verify_err}")
                 
                 self.log_output("=== AUTOSTART REGISTRATION COMPLETE ===")
                     
