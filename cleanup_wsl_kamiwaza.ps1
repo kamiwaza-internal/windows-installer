@@ -47,7 +47,8 @@ try {
     
     # Check if kamiwaza WSL instance exists
     Write-Verbose "Checking if kamiwaza WSL instance exists..."
-    $wslListOutput = wsl --list --verbose 2>$null
+    $wslListOutput = & wsl --list --verbose 2>$null
+    Start-Sleep -Seconds 5
     
     if ($wslListOutput -and $wslListOutput -match "kamiwaza") {
         Write-Host "Found Kamiwaza WSL instance: kamiwaza" -ForegroundColor Green

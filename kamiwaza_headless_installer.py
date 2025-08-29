@@ -15,6 +15,8 @@ RESTART BEHAVIOR:
 - Headless mode: Automatic restart after package installation
 - Automatic restart after GPU driver installation + package installation
 - Kamiwaza starts automatically after restart via RunOnce registry
+
+NOTE - DO NOT ADD UNICODE CHARACTERS TO ANY FILES IN THIS REPO.
 """
 import subprocess
 import sys
@@ -2012,12 +2014,12 @@ class HeadlessKamiwazaInstaller:
             self.log_output("the complete installation details and are the authoritative source.")
             self.log_output("")
             
-            self.log_output("=== INSTALLATION COMPLETE - SINGLE RESTART IN 10 SECONDS ===")
+            self.log_output("=== INSTALLATION COMPLETE ===")
             
             self.log_output("KAMIWAZA INSTALLATION COMPLETED SUCCESSFULLY!")
             self.log_output("")
-            self.log_output("CRITICAL: System will restart automatically in 10 seconds to activate BOTH GPU acceleration AND Kamiwaza!")
-            self.log_output("This is the SINGLE restart needed for the complete installation.")
+            self.log_output("A system restart is required to activate GPU acceleration and Kamiwaza.")
+            self.log_output("The MSI installer will prompt you to restart; you may reboot later.")
             self.log_output("")
             self.log_output("After restart:")
             self.log_output("1. GPU acceleration will be active and ready")
@@ -2137,9 +2139,9 @@ class HeadlessKamiwazaInstaller:
                 # Provide summary of autostart registration
                 self.log_output("=== AUTOSTART REGISTRATION SUMMARY ===")
                 self.log_output("Successfully registered autostart mechanisms:")
-                self.log_output("  ✓ Scheduled Task: KamiwazaAutostart (15s delay)")
-                self.log_output("  ✓ Scheduled Task: KamiwazaWSLPreWarm (5s delay)")
-                self.log_output("  ✓ HKCU RunOnce: KamiwazaGPUAutostart")
+                self.log_output("  [OK] Scheduled Task: KamiwazaAutostart (15s delay)")
+                self.log_output("  [OK] Scheduled Task: KamiwazaWSLPreWarm (5s delay)")
+                self.log_output("  [OK] HKCU RunOnce: KamiwazaGPUAutostart")
                 self.log_output("After restart, Kamiwaza will start automatically with GPU acceleration ready")
                 
                 # Final verification of autostart mechanisms
@@ -2149,20 +2151,20 @@ class HeadlessKamiwazaInstaller:
                     task_check_cmd = 'schtasks /Query /TN "KamiwazaAutostart" 2>nul & if %errorlevel% equ 0 (echo EXISTS) else (echo MISSING)'
                     task_result = subprocess.run(task_check_cmd, shell=True, capture_output=True, text=True)
                     if 'EXISTS' in task_result.stdout:
-                        self.log_output("  ✓ Scheduled Task KamiwazaAutostart: VERIFIED")
+                        self.log_output("  [OK] Scheduled Task KamiwazaAutostart: VERIFIED")
                     else:
-                        self.log_output("  ⚠ Scheduled Task KamiwazaAutostart: NOT FOUND")
+                        self.log_output("  [WARNING] Scheduled Task KamiwazaAutostart: NOT FOUND")
                     
                     # Check if RunOnce registry entries exist
                     reg_check_cmd = 'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce" /v "KamiwazaGPUAutostart" 2>nul & if %errorlevel% equ 0 (echo EXISTS) else (echo MISSING)'
                     reg_result = subprocess.run(reg_check_cmd, shell=True, capture_output=True, text=True)
                     if 'EXISTS' in reg_result.stdout:
-                        self.log_output("  ✓ HKCU RunOnce: VERIFIED")
+                        self.log_output("  [OK] HKCU RunOnce: VERIFIED")
                     else:
-                        self.log_output("  ⚠ HKCU RunOnce: NOT FOUND")
+                        self.log_output("  [WARNING] HKCU RunOnce: NOT FOUND")
                         
                 except Exception as verify_err:
-                    self.log_output(f"  ⚠ Verification failed: {verify_err}")
+                    self.log_output(f"  [WARNING] Verification failed: {verify_err}")
                 
                 self.log_output("=== AUTOSTART REGISTRATION COMPLETE ===")
                     
@@ -2187,276 +2189,46 @@ class HeadlessKamiwazaInstaller:
             except Exception as warm_err:
                 self.log_output(f"Warning: Failed to register WSL pre-warm task: {warm_err}")
             
-            # AUTOMATIC FULL DEVICE RESTART - NO USER INPUT REQUIRED
+            # Request reboot via MSI (no automatic restart)
             self.log_output("")
-            self.log_output("=== AUTOMATIC FULL DEVICE RESTART IN PROGRESS ===")
-            self.log_output("WARNING: Your ENTIRE COMPUTER will restart automatically in 3 seconds!")
-            self.log_output("This is a FULL SYSTEM RESTART - not just WSL!")
-            self.log_output("Save any unsaved work immediately!")
-            self.log_output("")
+            self.log_output("=== REBOOT REQUIRED ===", progress=100)
+            self.log_output("Installation completed successfully. A system restart is required to activate GPU acceleration and finalize setup.")
+            self.log_output("The MSI installer will prompt you to restart. You can restart later if preferred.")
             
-            # Clean WSL shutdown before device restart
-            self.log_output("")
-            self.log_output("=== CLEANING UP WSL INSTANCES ===")
-            self.log_output("Shutting down all WSL instances for clean restart...")
-            
+            # Attempt a clean WSL shutdown to avoid locks before reboot
             try:
-                shutdown_ret, shutdown_out, shutdown_err = self.run_command(['wsl', '--shutdown'], timeout=60)
-                if shutdown_ret == 0:
-                    self.log_output("[OK] WSL shutdown completed successfully")
-                    self.log_output("All WSL instances have been cleanly terminated")
-                else:
-                    self.log_output(f"[WARN] WSL shutdown had issues: {shutdown_err}")
-                    self.log_output("Continuing with device restart anyway...")
-            except Exception as wsl_err:
-                self.log_output(f"[WARN] WSL shutdown failed: {wsl_err}")
-                self.log_output("Continuing with device restart anyway...")
-            
-            # Wait a moment for WSL to fully shutdown
-            self.log_output("Waiting for WSL to fully shutdown...")
-            import time
-            time.sleep(2)
-            
-            self.log_output("WSL cleanup complete. Proceeding with device restart...")
-            self.log_output("")
-            
-            # Optional interactive pause before countdown
-            try:
-                if sys.stdin.isatty() and hasattr(sys.stdin, 'readline'):
-                    self.log_output("Press Enter to proceed with FULL DEVICE restart...")
-                    input()
-                    self.log_output("Proceeding with restart...")
+                self.run_command(['wsl', '--shutdown'], timeout=30)
             except Exception:
                 pass
             
-            # Countdown and automatic restart
-            import time
-            for i in range(3, 0, -1):
-                self.log_output(f"FULL DEVICE RESTART in {i} seconds...")
-                time.sleep(1)
-            
-            # Trigger automatic FULL DEVICE restart
-            try:
-                import subprocess
-                self.log_output("[INFO] Executing automatic FULL DEVICE restart...")
-                self.log_output("[INFO] Command: shutdown /r /t 0 (restarts entire Windows system)")
-                
-                # Enhanced restart command with verbose logging
-                restart_cmd = ['shutdown', '/r', '/t', '0', '/c', 'Kamiwaza installation complete - FULL DEVICE restart for GPU acceleration']
-                self.log_output(f"[VERBOSE] Full restart command: {restart_cmd}")
-                
-                # Execute restart command with detailed logging
-                restart_result = subprocess.run(restart_cmd, capture_output=True, text=True, timeout=30)
-                
-                if restart_result.returncode == 0:
-                    self.log_output("[OK] Automatic FULL DEVICE restart command executed successfully")
-                    self.log_output("Your entire computer will restart now to activate GPU acceleration")
-                    self.log_output("After restart, Kamiwaza will start automatically with GPU acceleration ready")
-                else:
-                    self.log_output(f"[WARNING] Restart command returned non-zero exit code: {restart_result.returncode}")
-                    self.log_output(f"[VERBOSE] Restart command stdout: {restart_result.stdout}")
-                    self.log_output(f"[VERBOSE] Restart command stderr: {restart_result.stderr}")
-                    
-                    # Try alternative restart methods
-                    self.log_output("[VERBOSE] Attempting alternative restart methods...")
-                    
-                    # Method 1: Try with different shutdown flags
-                    alt_restart_cmd = ['shutdown', '/r', '/t', '0']
-                    self.log_output(f"[VERBOSE] Trying alternative restart command: {alt_restart_cmd}")
-                    alt_result = subprocess.run(alt_restart_cmd, capture_output=True, text=True, timeout=30)
-                    if alt_result.returncode == 0:
-                        self.log_output("[OK] Alternative restart command succeeded")
-                    else:
-                        self.log_output(f"[WARNING] Alternative restart command failed: {alt_result.returncode}")
-                        self.log_output(f"[VERBOSE] Alternative command stderr: {alt_result.stderr}")
-                    
-                    # Method 2: Try PowerShell restart command
-                    ps_restart_cmd = ['powershell.exe', '-Command', 'Restart-Computer -Force']
-                    self.log_output(f"[VERBOSE] Trying PowerShell restart command: {ps_restart_cmd}")
-                    ps_result = subprocess.run(ps_restart_cmd, capture_output=True, text=True, timeout=30)
-                    if ps_result.returncode == 0:
-                        self.log_output("[OK] PowerShell restart command succeeded")
-                    else:
-                        self.log_output(f"[WARNING] PowerShell restart command failed: {ps_result.returncode}")
-                        self.log_output(f"[VERBOSE] PowerShell command stderr: {ps_result.stderr}")
-                    
-                    # Method 3: Try Windows API restart (requires elevation)
-                    try:
-                        import ctypes
-                        self.log_output("[VERBOSE] Attempting Windows API restart...")
-                        # This requires elevation and may not work in all contexts
-                        ctypes.windll.advapi32.InitiateSystemShutdownW(None, "Kamiwaza restart", 0, True, True)
-                        self.log_output("[OK] Windows API restart initiated")
-                    except Exception as api_error:
-                        self.log_output(f"[VERBOSE] Windows API restart failed: {api_error}")
-                    
-                    # Check for common restart prevention reasons
-                    self.log_output("[VERBOSE] Analyzing restart prevention reasons...")
-                    
-                    # Check if running as administrator
-                    if self.is_running_as_administrator():
-                        self.log_output("[VERBOSE] Running as Administrator - restart should work")
-                    else:
-                        self.log_output("[VERBOSE] NOT running as Administrator - restart may be blocked")
-                        self.log_output("[VERBOSE] Some restart methods require elevated privileges")
-                    
-                    # Check for active processes that might prevent restart
-                    try:
-                        import psutil
-                        self.log_output("[VERBOSE] Checking for processes that might prevent restart...")
-                        critical_processes = []
-                        for proc in psutil.process_iter(['pid', 'name', 'status']):
-                            try:
-                                if proc.info['status'] == 'running':
-                                    # Check for common processes that prevent restart
-                                    proc_name = proc.info['name'].lower()
-                                    if any(x in proc_name for x in ['installer', 'setup', 'msiexec', 'windows', 'update']):
-                                        critical_processes.append(f"{proc.info['name']} (PID: {proc.info['pid']})")
-                            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                                pass
-                        
-                        if critical_processes:
-                            self.log_output(f"[VERBOSE] Found {len(critical_processes)} potentially blocking processes:")
-                            for proc in critical_processes[:10]:  # Show first 10
-                                self.log_output(f"[VERBOSE]   {proc}")
-                            if len(critical_processes) > 10:
-                                self.log_output(f"[VERBOSE]   ... and {len(critical_processes) - 10} more")
-                        else:
-                            self.log_output("[VERBOSE] No obvious blocking processes found")
-                    except ImportError:
-                        self.log_output("[VERBOSE] psutil not available - cannot check for blocking processes")
-                    except Exception as proc_error:
-                        self.log_output(f"[VERBOSE] Error checking processes: {proc_error}")
-                    
-                    # Check Windows Update status
-                    try:
-                        self.log_output("[VERBOSE] Checking Windows Update status...")
-                        wu_check = subprocess.run(['powershell.exe', '-Command', 'Get-WindowsUpdate'], 
-                                               capture_output=True, text=True, timeout=30)
-                        if wu_check.returncode == 0:
-                            if 'No updates available' in wu_check.stdout:
-                                self.log_output("[VERBOSE] Windows Update: No pending updates")
-                            else:
-                                self.log_output("[VERBOSE] Windows Update: Updates may be pending")
-                                self.log_output(f"[VERBOSE] Windows Update output: {wu_check.stdout[:200]}...")
-                        else:
-                            self.log_output(f"[VERBOSE] Windows Update check failed: {wu_check.stderr}")
-                    except Exception as wu_error:
-                        self.log_output(f"[VERBOSE] Windows Update check error: {wu_error}")
-                    
-                    # Check for pending system changes
-                    try:
-                        self.log_output("[VERBOSE] Checking for pending system changes...")
-                        pending_check = subprocess.run(['powershell.exe', '-Command', 'Get-ComputerInfo | Select-Object WindowsUpdateAutoUpdateEnabled'], 
-                                                   capture_output=True, text=True, timeout=30)
-                        if pending_check.returncode == 0:
-                            self.log_output(f"[VERBOSE] Windows Update Auto Update: {pending_check.stdout.strip()}")
-                    except Exception as pending_error:
-                        self.log_output(f"[VERBOSE] Pending changes check error: {pending_error}")
-                    
-                    # Final restart attempt with maximum verbosity
-                    self.log_output("[VERBOSE] Final restart attempt with maximum verbosity...")
-                    final_restart_cmd = ['shutdown', '/r', '/t', '0', '/c', 'Kamiwaza restart - final attempt', '/f']
-                    self.log_output(f"[VERBOSE] Final restart command: {final_restart_cmd}")
-                    
-                    final_result = subprocess.run(final_restart_cmd, capture_output=True, text=True, timeout=30)
-                    if final_result.returncode == 0:
-                        self.log_output("[OK] Final restart attempt succeeded")
-                    else:
-                        self.log_output(f"[CRITICAL] All restart methods failed - manual restart required")
-                        self.log_output(f"[VERBOSE] Final attempt stderr: {final_result.stderr}")
-                        
-                        # Provide detailed manual restart instructions
-                        self.log_output("")
-                        self.log_output("=== MANUAL RESTART REQUIRED ===")
-                        self.log_output("Automatic restart failed - please restart manually:")
-                        self.log_output("1. Save all work and close applications")
-                        self.log_output("2. Press Windows + R, type 'shutdown /r /t 0', press Enter")
-                        self.log_output("3. Or use Start Menu > Power > Restart")
-                        self.log_output("4. Or press Ctrl + Alt + Delete > Power > Restart")
-                        self.log_output("")
-                        self.log_output("After restart, Kamiwaza will start automatically with GPU acceleration")
-                        self.log_output("")
-                        
-                        # Wait for user acknowledgment
-                        self._wait_for_user_input("Press Enter after manually restarting your computer...")
-                        
-            except Exception as e:
-                self.log_output(f"[ERROR] Failed to trigger automatic FULL DEVICE restart: {e}")
-                self.log_output("[VERBOSE] Exception details:")
-                import traceback
-                for line in traceback.format_exc().split('\n'):
-                    if line.strip():
-                        self.log_output(f"[VERBOSE]   {line}")
-                
-                self.log_output("[CRITICAL] Please restart your computer manually to activate GPU acceleration")
-                self.log_output("After restart, Kamiwaza will start automatically")
-                
-                # Provide detailed manual restart instructions
-                self.log_output("")
-                self.log_output("=== MANUAL RESTART REQUIRED ===")
-                self.log_output("Automatic restart failed - please restart manually:")
-                self.log_output("1. Save all work and close applications")
-                self.log_output("2. Press Windows + R, type 'shutdown /r /t 0', press Enter")
-                self.log_output("3. Or use Start Menu > Power > Restart")
-                self.log_output("4. Or press Ctrl + Alt + Delete > Power > Restart")
-                self.log_output("")
-                self.log_output("After restart, Kamiwaza will start automatically with GPU acceleration")
-                self.log_output("")
-                
-                self._wait_for_user_input("Press Enter to exit...")
-            
-            return 0
+            return 3010
             
         except Exception as e:
-            self.log_output("=== CRITICAL INSTALLATION FAILURE ===")
-            self.log_output(f"EXCEPTION: {str(e)}")
-            self.log_output(f"EXCEPTION TYPE: {type(e).__name__}")
-            
-            # Add more context about where we failed
-            self.log_output("")
-            self.log_output("=== FAILURE CONTEXT ===")
-            if 'wsl_cmd' in locals():
-                self.log_output(f"WSL command: {wsl_cmd}")
-            if 'instance_name' in locals():
-                self.log_output(f"Instance name: {instance_name}")
-            
-            # Check if this was a GPU restart re-run
-            restart_flag_file = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'restart_required.flag')
-            if os.path.exists(restart_flag_file):
-                self.log_output("GPU restart flag still exists - this may indicate restart logic failure")
-            else:
-                self.log_output("No GPU restart flag found - this was not a GPU restart re-run")
-            
+            self.log_output("[ERROR] Failed to trigger automatic FULL DEVICE restart: {e}")
+            self.log_output("[VERBOSE] Exception details:")
             import traceback
-            self.log_output("=== FULL STACK TRACE ===")
             for line in traceback.format_exc().split('\n'):
                 if line.strip():
-                    self.log_output(f"TRACE: {line}")
+                    self.log_output(f"[VERBOSE]   {line}")
             
-            # Clean up WSL instance on critical failure
-            self.log_output("Cleaning up WSL instance due to critical installation failure...")
-            self.cleanup_on_failure(wsl_cmd, instance_name)
+            self.log_output("[CRITICAL] Please restart your computer manually to activate GPU acceleration")
+            self.log_output("After restart, Kamiwaza will start automatically")
             
-            self.log_output("=== FAILURE SUMMARY ===")  
-            self.log_output("The installation has failed with a critical error.")
-            self.log_output("Please review the logs above and check the detailed APT logs.")
+            # Provide detailed manual restart instructions
             self.log_output("")
-            self.log_output("PRIMARY LOG LOCATIONS:")
-            self.log_output("  Detailed APT output: wsl -d kamiwaza -- cat /var/log/apt/term.log")
-            self.log_output("  Installation history: wsl -d kamiwaza -- cat /var/log/apt/history.log")
-            self.log_output("  DPKG operations: wsl -d kamiwaza -- grep kamiwaza /var/log/dpkg.log")
+            self.log_output("=== MANUAL RESTART REQUIRED ===")
+            self.log_output("Automatic restart failed - please restart manually:")
+            self.log_output("1. Save all work and close applications")
+            self.log_output("2. Press Windows + R, type 'shutdown /r /t 0', press Enter")
+            self.log_output("3. Or use Start Menu > Power > Restart")
+            self.log_output("4. Or press Ctrl + Alt + Delete > Power > Restart")
             self.log_output("")
-            self.log_output("SEARCH FOR ERRORS:")
-            self.log_output("  wsl -d kamiwaza -- grep -i error /var/log/apt/term.log")
-            self.log_output("  wsl -d kamiwaza -- grep -i fail /var/log/apt/term.log")
+            self.log_output("After restart, Kamiwaza will start automatically with GPU acceleration")
             self.log_output("")
-            self.log_output("BACKUP LOGS (if available):")
-            self.log_output("  wsl -d kamiwaza -- cat /tmp/kamiwaza_install.log")
-            self.log_output("  wsl -d kamiwaza -- journalctl -t kamiwaza-install")
             
-            self._wait_for_user_input("Press Enter to close this window...")
-            return 1
+            self._wait_for_user_input("Press Enter to exit...")
+        
+        return 0
 
     def get_wsl_distribution(self):
         """Get WSL distribution command"""
@@ -3349,10 +3121,10 @@ def main():
     print(f"Working Dir: {os.getcwd()}")
     print("=" * 50)
     print("")
-    print("IMPORTANT: This installer will restart your ENTIRE COMPUTER AUTOMATICALLY!")
-    print("GPU setup + package installation + FULL DEVICE restart + Kamiwaza autostart")
-    print("This is NOT just a WSL restart - your entire Windows system will reboot!")
-    print("No user confirmation required - save work before running!")
+    print("IMPORTANT: A system restart will be required to activate GPU acceleration.")
+    print("MSI will prompt you to restart at the end of installation; you can reboot later.")
+    print("This is a standard Windows restart prompt managed by the installer UI.")
+    print("Save your work before proceeding.")
     print("")
     print("ENHANCED LOGGING: All output is logged to multiple locations:")
     print("- Windows AppData: %LOCALAPPDATA%\\Kamiwaza\\logs\\")
@@ -3362,8 +3134,8 @@ def main():
     print("AUTOMATIC INSTALLATION FLOW:")
     print("1. WSL setup and GPU driver installation")
     print("2. Kamiwaza package installation (sudo apt install)")
-    print("3. SINGLE automatic FULL DEVICE restart (10 second countdown)")
-    print("4. Kamiwaza starts automatically with GPU acceleration ready")
+    print("3. MSI will prompt you to restart to finalize activation")
+    print("4. After restart, Kamiwaza starts with GPU acceleration ready")
     print("=" * 50)
     
     parser = argparse.ArgumentParser(description='Headless Kamiwaza Installer')
@@ -3411,6 +3183,8 @@ def main():
         print(f"Exit code: {exit_code}")
         if exit_code == 0:
             print("SUCCESS: Installation completed successfully")
+        elif exit_code == 3010:
+            print("SUCCESS: Installation completed. Reboot required to finish activation.")
         else:
             print("FAILURE: Installation failed")
             print("")

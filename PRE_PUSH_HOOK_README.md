@@ -167,7 +167,7 @@ git checkout test_installer_simple_fixed.py
 
 ## Bypassing the Hook (Emergency Only)
 
-⚠️ **WARNING: Only use in emergencies!**
+[WARNING]️ **WARNING: Only use in emergencies!**
 
 ```bash
 # Skip pre-push hook (not recommended)

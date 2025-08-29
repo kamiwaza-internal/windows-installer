@@ -514,7 +514,7 @@ class KamiwazaGUIManager:
             daemon_result = self.run_wsl_command_silent(['pgrep', '-f', 'kamiwazad.py'])
             results['daemon'] = daemon_result
             if daemon_result:
-                self.log_output("✓ Daemon process found", level="SUCCESS")
+                self.log_output("[OK] Daemon process found", level="SUCCESS")
             else:
                 self.log_output("✗ Daemon process not found", level="ERROR")
             
@@ -522,7 +522,7 @@ class KamiwazaGUIManager:
             main_result = self.run_wsl_command_silent(['pgrep', '-f', 'main.py'])
             results['main'] = main_result
             if main_result:
-                self.log_output("✓ Main application processes found", level="SUCCESS")
+                self.log_output("[OK] Main application processes found", level="SUCCESS")
             else:
                 self.log_output("✗ Main application processes not found", level="ERROR")
             
@@ -530,7 +530,7 @@ class KamiwazaGUIManager:
             frontend_result = self.run_wsl_command_silent(['pgrep', '-f', 'kamiwaza-frontend'])
             results['frontend'] = frontend_result
             if frontend_result:
-                self.log_output("✓ Frontend processes found", level="SUCCESS")
+                self.log_output("[OK] Frontend processes found", level="SUCCESS")
             else:
                 self.log_output("✗ Frontend processes not found", level="ERROR")
             
@@ -538,7 +538,7 @@ class KamiwazaGUIManager:
             ray_result = self.run_wsl_command_silent(['pgrep', '-f', 'ray::'])
             results['ray'] = ray_result
             if ray_result:
-                self.log_output("✓ Ray processes found", level="SUCCESS")
+                self.log_output("[OK] Ray processes found", level="SUCCESS")
             else:
                 self.log_output("✗ Ray processes not found", level="ERROR")
             
@@ -549,21 +549,21 @@ class KamiwazaGUIManager:
             https_result = self.run_wsl_command_silent(['netstat', '-tlnp', '2>/dev/null', '|', 'grep', ':443'])
             results['https'] = https_result
             if https_result:
-                self.log_output("✓ HTTPS port (443) is listening", level="SUCCESS")
+                self.log_output("[OK] HTTPS port (443) is listening", level="SUCCESS")
             else:
                 self.log_output("✗ HTTPS port (443) not listening", level="ERROR")
             
             api_result = self.run_wsl_command_silent(['netstat', '-tlnp', '2>/dev/null', '|', 'grep', ':7777'])
             results['api'] = api_result
             if api_result:
-                self.log_output("✓ API port (7777) is listening", level="SUCCESS")
+                self.log_output("[OK] API port (7777) is listening", level="SUCCESS")
             else:
                 self.log_output("✗ API port (7777) not listening", level="ERROR")
             
             ray_dashboard_result = self.run_wsl_command_silent(['netstat', '-tlnp', '2>/dev/null', '|', 'grep', ':8265'])
             results['ray_dashboard'] = ray_dashboard_result
             if ray_dashboard_result:
-                self.log_output("✓ Ray dashboard port (8265) is listening", level="SUCCESS")
+                self.log_output("[OK] Ray dashboard port (8265) is listening", level="SUCCESS")
             else:
                 self.log_output("✗ Ray dashboard port (8265) not listening", level="ERROR")
             
@@ -577,13 +577,13 @@ class KamiwazaGUIManager:
             
             # Show individual results
             status_symbols = {
-                'daemon': '✓' if results['daemon'] else '✗',
-                'main': '✓' if results['main'] else '✗', 
-                'frontend': '✓' if results['frontend'] else '✗',
-                'ray': '✓' if results['ray'] else '✗',
-                'https': '✓' if results['https'] else '✗',
-                'api': '✓' if results['api'] else '✗',
-                'ray_dashboard': '✓' if results['ray_dashboard'] else '✗'
+                'daemon': '[OK]' if results['daemon'] else '✗',
+                'main': '[OK]' if results['main'] else '✗', 
+                'frontend': '[OK]' if results['frontend'] else '✗',
+                'ray': '[OK]' if results['ray'] else '✗',
+                'https': '[OK]' if results['https'] else '✗',
+                'api': '[OK]' if results['api'] else '✗',
+                'ray_dashboard': '[OK]' if results['ray_dashboard'] else '✗'
             }
             
             status_levels = {

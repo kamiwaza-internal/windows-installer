@@ -9,7 +9,8 @@
         
         <Package InstallerVersion="200" 
                  Compressed="yes" 
-                 InstallScope="perUser" />
+                 InstallScope="perMachine"
+                 InstallPrivileges="elevated" />
 
         <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
         <MediaTemplate EmbedCab="yes" />
@@ -61,6 +62,9 @@
                         <File Id="DownloadScriptFile" Name="download_exe.ps1" Source="download_exe.ps1"/>
                         <File Id="HeadlessInstaller" Name="kamiwaza_headless_installer.py" Source="kamiwaza_headless_installer_build.py"/>
                         <File Id="KamiwazaBatchWrapper" Name="run_kamiwaza.bat" Source="run_kamiwaza.bat"/>
+                        
+                        <!-- Install Kamiwaza icon so WSL/shortcuts can reference it -->
+                        <File Id="KamiwazaIconAsset" Name="kamiwaza.ico" Source="kamiwaza.ico"/>
 
                         <File Id="WSLConfigScript" Name="configure_wsl_memory.ps1" Source="configure_wsl_memory.ps1"/>
                         <File Id="DebconfSetupScript" Name="setup_debconf.sh" Source="setup_debconf.sh"/>
@@ -130,6 +134,16 @@
                                  Name="Kamiwaza Stop" 
                                  Description="Stop Kamiwaza platform and show status (keeps CLI open)" 
                                  Target="[INSTALLFOLDER]kamiwaza_stop.bat"
+                                 WorkingDirectory="INSTALLFOLDER"
+                                 Icon="KamiwazaIcon"
+                                 IconIndex="0" />
+
+                        <!-- Open Kamiwaza WSL shell -->
+                        <Shortcut Id="OpenKamiwazaWSLShell"
+                                 Name="Kamiwaza WSL Shell"
+                                 Description="Open Kamiwaza WSL shell"
+                                 Target="wsl.exe"
+                                 Arguments="-d kamiwaza"
                                  WorkingDirectory="INSTALLFOLDER"
                                  Icon="KamiwazaIcon"
                                  IconIndex="0" />
@@ -314,8 +328,7 @@ After installation completes:
    If you're working on a remote PC, please restart manually after installation completes." />
             
             <!-- Require user confirmation for reboot - no automatic restarts -->
-            <Property Id="REBOOT" Value="ReallySuppress" />
-            <Property Id="REBOOTPROMPT" Value="Suppress" />
+            <!-- Removed REBOOT and REBOOTPROMPT suppression to allow MSI to prompt when required -->
         </UI>
 
         <!-- Safety check to prevent automatic restarts -->
@@ -346,7 +359,7 @@ After installation completes:
                       ExeCommand="--memory &quot;[WSLMEMORY]&quot; --email &quot;[USER_EMAIL]&quot; --license-key &quot;[LICENSE_KEY]&quot; --usage-reporting &quot;[USAGE_REPORTING]&quot; --mode &quot;[INSTALL_MODE]&quot;"
                       Execute="deferred" 
                       Impersonate="yes"
-                      Return="ignore" />
+                      Return="check" />
         
         <!-- Reserve Kamiwaza ports on install -->
         <CustomAction Id="ReservePorts"
