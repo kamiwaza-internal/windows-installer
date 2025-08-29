@@ -52,6 +52,10 @@
         <!-- Force verbose logging for debugging -->
         <Property Id="MSIEXEC_LOGGING" Value="/L*V &quot;%TEMP%\kamiwaza_install.log&quot;" />
 
+        <!-- Ensure reboot prompts are shown when needed -->
+        <Property Id="REBOOTPROMPT" Value="Force" />
+        <Property Id="REBOOT" Value="Force" />
+
         <!-- Define the directory structure -->
         <Directory Id="TARGETDIR" Name="SourceDir">
             <Directory Id="LocalAppDataFolder">
@@ -279,15 +283,8 @@ The Kamiwaza installation will continue in a separate 'Kamiwaza Installer' windo
 
 IMPORTANT: GPU acceleration has been configured but requires ONE MANUAL system restart to activate after the complete installation.
 
-After installation completes:
-• Access your deployment at https://localhost (or the URL shown in the installer output)
-• For troubleshooting, run: wsl -d kamiwaza
-• Use Start Menu shortcuts to manage your Kamiwaza platform
-• To access Kamiwaza WSL instance directly: wsl -d kamiwaza
-• GPU autostart has been configured using RunOnce registry (no admin rights required)
-• Kamiwaza Monitor GUI has been installed for easy management
 
-*** SINGLE RESTART REQUIRED: After the Python installer completes, restart your computer ONCE to activate GPU acceleration." />
+*** SINGLE RESTART REQUIRED: Restart your computer ONCE to activate GPU acceleration." />
                 
                 <!-- GUI Launch Checkbox -->
                 <Control Id="LaunchGUICheck" Type="CheckBox" X="15" Y="125" Width="340" Height="17" Property="LAUNCH_GUI" CheckBoxValue="1" Text="Launch Kamiwaza Diagnostic GUI when ready" />
@@ -317,15 +314,7 @@ After installation completes:
 
 IMPORTANT: GPU acceleration has been configured but requires ONE MANUAL system restart to activate after the complete installation.
 
-After installation completes:
-• Access your deployment at https://localhost (or the URL shown in the installer output)
-• For troubleshooting, run: wsl -d kamiwaza
-• Use Start Menu shortcuts to manage your Kamiwaza platform
-• To access Kamiwaza WSL instance directly: wsl -d kamiwaza
-• GPU autostart has been configured using RunOnce registry (no admin rights required)
-
-*** SINGLE RESTART REQUIRED: After the Python installer completes, restart your computer ONCE to activate GPU acceleration.
-   If you're working on a remote PC, please restart manually after installation completes." />
+*** SINGLE RESTART REQUIRED: Restart your computer ONCE to activate GPU acceleration." />
             
             <!-- Require user confirmation for reboot - no automatic restarts -->
             <!-- Removed REBOOT and REBOOTPROMPT suppression to allow MSI to prompt when required -->
@@ -333,7 +322,7 @@ After installation completes:
 
         <!-- Safety check to prevent automatic restarts -->
         <CustomAction Id="CheckRemotePC"
-                      ExeCommand='powershell.exe -Command "try { $isRemote = (Get-WmiObject -Class Win32_ComputerSystem).PrimaryOwnerName -ne $env:USERNAME; if ($isRemote) { Write-Host \"[WARNING]  REMOTE PC DETECTED: Please restart manually after installation completes.\" -ForegroundColor Yellow; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show(\"[WARNING]  REMOTE PC DETECTED!`n`nThis appears to be a remote computer. Please restart manually after installation completes to avoid disconnection.`n`nClick OK to continue installation.\", \"Kamiwaza Remote PC Warning\", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning) } } catch { Write-Host \"Could not determine if remote PC - proceeding with caution\" }"'
+                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -Command "try { $isRemote = (Get-WmiObject -Class Win32_ComputerSystem).PrimaryOwnerName -ne $env:USERNAME; if ($isRemote) { Write-Output \"Remote PC detected\" | Out-File -FilePath \"$env:TEMP\\kamiwaza_remote_warn.log\" -Encoding utf8 -Append } } catch { }"'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="yes"
@@ -348,7 +337,7 @@ After installation completes:
                       Return="ignore" />
                       
         <CustomAction Id="DetectGPU"
-                      ExeCommand='powershell.exe -ExecutionPolicy Bypass -File "[INSTALLFOLDER]detect_gpu.ps1" -WSLDistribution "kamiwaza"'
+                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "[INSTALLFOLDER]detect_gpu.ps1" -WSLDistribution "kamiwaza" ^> "$env:TEMP\kamiwaza_gpu_detect.log" 2^>^&amp;1'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="yes"
@@ -397,7 +386,7 @@ After installation completes:
 
         <!-- Setup Autostart Registry Entry (alternative to Task Scheduler) -->
         <CustomAction Id="SetupAutostartRegistry"
-                      ExeCommand='powershell.exe -ExecutionPolicy Bypass -File "[INSTALLFOLDER]create_autostart_registry.ps1"'
+                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "[INSTALLFOLDER]create_autostart_registry.ps1" ^> "$env:TEMP\kamiwaza_autostart.log" 2^>^&amp;1'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="yes"
@@ -405,7 +394,7 @@ After installation completes:
 
         <!-- Install Kamiwaza GUI Manager to AppData and Start Menu -->
         <CustomAction Id="InstallGUIManager"
-                      ExeCommand='powershell.exe -ExecutionPolicy Bypass -File "[INSTALLFOLDER]install_gui_manager.ps1"'
+                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "[INSTALLFOLDER]install_gui_manager.ps1" ^> "$env:TEMP\kamiwaza_gui_install.log" 2^>^&amp;1'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="yes"
@@ -413,45 +402,7 @@ After installation completes:
 
         <!-- Launch Kamiwaza Diagnostic GUI if requested -->
         <CustomAction Id="LaunchDiagnosticGUI"
-                      ExeCommand='powershell.exe -Command "try { 
-    $guiPath = \"$env:LOCALAPPDATA\Kamiwaza\GUI\KamiwazaGUIManager.exe\"; 
-    $sourcePath = \"[INSTALLFOLDER]kamiwaza_gui_manager.py\";
-    
-    Write-Host \"=== KAMIWAZA DIAGNOSTIC GUI STATUS ===\";
-    Write-Host \"Checking for Kamiwaza Diagnostic GUI...\";
-    
-    if (Test-Path $guiPath) { 
-        Write-Host \"[OK] GUI found and ready to launch\";
-        Write-Host \"Launching Kamiwaza Diagnostic GUI...\";
-        Start-Process $guiPath;
-        Write-Host \"[OK] Launched Kamiwaza Diagnostic GUI successfully\";
-    } else { 
-        Write-Host \"[INFO] GUI not found at: $guiPath\";
-        Write-Host \"This is expected - the GUI Manager is installed by the Python installer phase\";
-        Write-Host \"\";
-        Write-Host \"The Python installer will:\";
-        Write-Host \"1. Build the GUI Manager EXE\";
-        Write-Host \"2. Install it to %LOCALAPPDATA%\\Kamiwaza\\GUI\\\";
-        Write-Host \"3. Create Start Menu shortcuts\";
-        Write-Host \"\";
-        
-        # Check if source files exist
-        if (Test-Path $sourcePath) {
-            Write-Host \"[OK] Source files found - GUI Manager will be installed\";
-            Write-Host \"You can launch it later from: Start Menu > Kamiwaza > Kamiwaza GUI Manager\";
-        } else {
-            Write-Host \"[WARN] Source files not found - GUI Manager may not be included in this build\";
-        }
-        
-        Write-Host \"\";
-        Write-Host \"To access the GUI Manager after installation:\";
-        Write-Host \"• Start Menu: Start > Kamiwaza > Kamiwaza GUI Manager\";
-        Write-Host \"• Direct path: %LOCALAPPDATA%\\Kamiwaza\\GUI\\KamiwazaGUIManager.exe\";
-    } 
-} catch { 
-    Write-Host \"Error checking GUI: $_\";
-    Write-Host \"You can manually launch the GUI Manager from the Start Menu later\";
-}"'
+                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -Command "try { $p=Join-Path $env:LOCALAPPDATA \"Kamiwaza\\GUI\\KamiwazaGUIManager.exe\"; if (Test-Path $p) { Start-Process $p } } catch { }"'
                       Directory="TARGETDIR"
                       Execute="immediate"
                       Impersonate="yes"
@@ -469,8 +420,8 @@ After installation completes:
             <Custom Action="DetectGPU" After="RunKamiwazaInstaller">NOT REMOVE</Custom>
             <Custom Action="SetupAutostartRegistry" After="DetectGPU">NOT REMOVE</Custom>
             <Custom Action="InstallGUIManager" After="SetupAutostartRegistry">NOT REMOVE</Custom>
-            <Custom Action="SetRunOnceEntry" After="InstallGUIManager">NOT REMOVE</Custom>
-            <Custom Action="LaunchDiagnosticGUI" After="SetRunOnceEntry">NOT REMOVE AND LAUNCH_GUI = "1"</Custom>
+            <Custom Action="LaunchDiagnosticGUI" After="InstallGUIManager">NOT REMOVE AND LAUNCH_GUI = "1"</Custom>
+            <ScheduleReboot After="InstallGUIManager">NOT REMOVE</ScheduleReboot>
             
             <!-- Uninstall actions only -->
             <Custom Action="ComprehensiveCleanup" Before="RemoveFiles">Installed AND REMOVE</Custom>
@@ -481,12 +432,6 @@ After installation completes:
 
 
         
-        <!-- Reboot Continuation - Custom Action to set RunOnce entry -->
-        <CustomAction Id="SetRunOnceEntry"
-                      FileKey="CreateRunOnceBatch"
-                      ExeCommand='"[INSTALLFOLDER]" "[WSLMEMORY]" "[USER_EMAIL]" "[LICENSE_KEY]" "[USAGE_REPORTING]" "[INSTALL_MODE]"'
-                      Execute="deferred"
-                      Impersonate="yes"
-                      Return="ignore" />
+        <!-- Persistent autostart now handled by SetupAutostartRegistry (HKCU Run). Removing one-time RunOnce CA. -->
     </Product>
 </Wix> 

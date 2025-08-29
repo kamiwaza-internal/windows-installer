@@ -113,5 +113,5 @@ if errorlevel 1 (
 echo.
 echo Cleanup completed!
 echo.
-echo [DEBUG] Script completed. Press any key to close...
-pause >nul 
+rem [SILENT] Script completed.
+exit /b 0 

@@ -2093,75 +2093,38 @@ class HeadlessKamiwazaInstaller:
                     self.log_output(f"ERROR: Cannot read autostart script: {script_err}")
                     return
                 
-                # Prefer a Scheduled Task with a short delay to avoid races with WSL/GPU init
-                # The task is self-deleting in the autostart script after successful start
-                try:
-                    autostart_task_cmd = (
-                        'schtasks /Create /TN "KamiwazaAutostart" '
-                        '/SC ONLOGON /DELAY 0000:15 /RL HIGHEST '
-                        f'/TR "cmd.exe /c \"{dest_start_bat}\"" /F'
-                    )
-                    autostart_result = subprocess.run(autostart_task_cmd, shell=True, check=False, capture_output=True, text=True)
-                    if autostart_result.returncode == 0:
-                        self.log_output("Registered Scheduled Task for autostart at next logon with 15s delay")
-                    else:
-                        self.log_output(f"Warning: Failed to create autostart scheduled task (exit code: {autostart_result.returncode})")
-                        if autostart_result.stderr:
-                            self.log_output(f"  Error: {autostart_result.stderr.strip()}")
-                        if autostart_result.stdout:
-                            self.log_output(f"  Output: {autostart_result.stdout.strip()}")
-                except Exception as task_reg_err:
-                    self.log_output(f"Warning: Failed to create autostart scheduled task: {task_reg_err}")
-                
-                # Legacy/backup: also set HKCU RunOnce if possible (runs once for current user on next logon)
-                # This doesn't require admin privileges and is more reliable
+                # Register persistent autostart using HKCU Run (no admin required)
                 try:
                     ps_cmd = (
-                        "$runOnceKey = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce'; "
-                        "$runOnceName = 'KamiwazaGPUAutostart'; "
-                        f"$runOnceValue = '\"{dest_start_bat}\"'; "
-                        "New-Item -Path $runOnceKey -Force | Out-Null; "
-                        "Set-ItemProperty -Path $runOnceKey -Name $runOnceName -Value $runOnceValue -Type String -Force"
+                        "$runKey = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run'; "
+                        "New-Item -Path $runKey -Force | Out-Null; "
+                        f"Set-ItemProperty -Path $runKey -Name 'KamiwazaAutoStart' -Value '\"{dest_start_bat}\"' -Type String -Force"
                     )
-                    hkcu_result = subprocess.run(['powershell.exe', '-ExecutionPolicy', 'Bypass', '-Command', ps_cmd], 
+                    reg_result = subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps_cmd], 
                                                check=False, capture_output=True, text=True)
-                    if hkcu_result.returncode == 0:
-                        self.log_output("Registered HKCU RunOnce backup entry for autostart")
+                    if reg_result.returncode == 0:
+                        self.log_output("Registered HKCU Run entry for persistent autostart")
                     else:
-                        self.log_output(f"Warning: Failed to register HKCU RunOnce backup (exit code: {hkcu_result.returncode})")
-                        if hkcu_result.stderr:
-                            self.log_output(f"  Error: {hkcu_result.stderr.strip()}")
-                except Exception as runonce_err:
-                    self.log_output(f"Warning: Failed to register HKCU RunOnce backup: {runonce_err}")
+                        self.log_output(f"Warning: Failed to register HKCU Run entry (exit code: {reg_result.returncode})")
+                        if reg_result.stderr:
+                            self.log_output(f"  Error: {reg_result.stderr.strip()}")
+                except Exception as run_err:
+                    self.log_output(f"Warning: Failed to register HKCU Run entry: {run_err}")
                 
-                # Note: HKLM RunOnce registration removed - script never runs as administrator
-                
-                # Provide summary of autostart registration
+                # Provide concise summary of autostart registration
                 self.log_output("=== AUTOSTART REGISTRATION SUMMARY ===")
-                self.log_output("Successfully registered autostart mechanisms:")
-                self.log_output("  [OK] Scheduled Task: KamiwazaAutostart (15s delay)")
-                self.log_output("  [OK] Scheduled Task: KamiwazaWSLPreWarm (5s delay)")
-                self.log_output("  [OK] HKCU RunOnce: KamiwazaGPUAutostart")
+                self.log_output("  [OK] HKCU Run: KamiwazaAutoStart")
                 self.log_output("After restart, Kamiwaza will start automatically with GPU acceleration ready")
                 
-                # Final verification of autostart mechanisms
-                self.log_output("=== VERIFYING AUTOSTART MECHANISMS ===")
+                # Final verification of autostart mechanism
+                self.log_output("=== VERIFYING AUTOSTART MECHANISM ===")
                 try:
-                    # Check if scheduled tasks exist
-                    task_check_cmd = 'schtasks /Query /TN "KamiwazaAutostart" 2>nul & if %errorlevel% equ 0 (echo EXISTS) else (echo MISSING)'
-                    task_result = subprocess.run(task_check_cmd, shell=True, capture_output=True, text=True)
-                    if 'EXISTS' in task_result.stdout:
-                        self.log_output("  [OK] Scheduled Task KamiwazaAutostart: VERIFIED")
-                    else:
-                        self.log_output("  [WARNING] Scheduled Task KamiwazaAutostart: NOT FOUND")
-                    
-                    # Check if RunOnce registry entries exist
-                    reg_check_cmd = 'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce" /v "KamiwazaGPUAutostart" 2>nul & if %errorlevel% equ 0 (echo EXISTS) else (echo MISSING)'
+                    reg_check_cmd = 'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "KamiwazaAutoStart" 2>nul & if %errorlevel% equ 0 (echo EXISTS) else (echo MISSING)'
                     reg_result = subprocess.run(reg_check_cmd, shell=True, capture_output=True, text=True)
                     if 'EXISTS' in reg_result.stdout:
-                        self.log_output("  [OK] HKCU RunOnce: VERIFIED")
+                        self.log_output("  [OK] HKCU Run: VERIFIED")
                     else:
-                        self.log_output("  [WARNING] HKCU RunOnce: NOT FOUND")
+                        self.log_output("  [WARNING] HKCU Run: NOT FOUND")
                         
                 except Exception as verify_err:
                     self.log_output(f"  [WARNING] Verification failed: {verify_err}")
@@ -2170,24 +2133,6 @@ class HeadlessKamiwazaInstaller:
                     
             except Exception as task_err:
                 self.log_output(f"Warning: Failed to register autostart mechanisms: {task_err}")
-            
-            # Register a Scheduled Task to pre-warm WSL at user logon (reduces cold-start delay before RunOnce)
-            try:
-                # Trigger at user logon with a small delay; run with highest privileges, target kamiwaza distro
-                warm_cmd = (
-                    'schtasks /Create /TN "KamiwazaWSLPreWarm" '
-                    '/SC ONLOGON /DELAY 0000:05 /RL HIGHEST '
-                    '/TR "wsl -d kamiwaza -u root -e true" /F'
-                )
-                warm_result = subprocess.run(warm_cmd, shell=True, check=False, capture_output=True, text=True)
-                if warm_result.returncode == 0:
-                    self.log_output("Registered Scheduled Task to pre-warm WSL at user logon")
-                else:
-                    self.log_output(f"Warning: Failed to register WSL pre-warm task (exit code: {warm_result.returncode})")
-                    if warm_result.stderr:
-                        self.log_output(f"  Error: {warm_result.stderr.strip()}")
-            except Exception as warm_err:
-                self.log_output(f"Warning: Failed to register WSL pre-warm task: {warm_err}")
             
             # Request reboot via MSI (no automatic restart)
             self.log_output("")
@@ -3192,14 +3137,7 @@ def main():
             print("1. Restart your computer")
             print("2. Run Windows Update")
             print("3. Run this installer as Administrator")
-        
-        # Only wait for user input in interactive mode
-        if sys.stdin.isatty() and hasattr(sys.stdin, 'readline'):
-            try:
-                input("Press Enter to exit...")
-            except:
-                pass
-        
+                
         sys.exit(exit_code)
         
     except Exception as e:

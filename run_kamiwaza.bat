@@ -9,4 +9,8 @@ if exist "%SCRIPT_DIR%embedded_python\python.exe" (
 )
 
 "%PYTHON_EXE%" "%INSTALLER_SCRIPT%" %*
-exit /b %ERRORLEVEL%
+set EXITCODE=%ERRORLEVEL%
+
+REM Treat reboot-required (3010) as success from MSI's perspective
+if %EXITCODE% EQU 3010 exit /b 0
+exit /b %EXITCODE%

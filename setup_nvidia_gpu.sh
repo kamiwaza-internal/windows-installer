@@ -401,6 +401,44 @@ verify_installation() {
     fi
 }
 
+# Attempt to repair dpkg/apt when packages are in 'reinstreq' state
+fix_broken_packages() {
+	header "Repairing broken package state"
+	# First, try to configure any unpacked packages
+	sudo dpkg --configure -a || true
+	# Find packages marked as requiring reinstallation (reinstreq)
+	BROKEN_PKGS=$(dpkg-query -Wf '${db:Status-Abbrev} ${binary:Package}\n' 2>/dev/null | awk '$1 ~ /r/ {print $2}' | xargs || true)
+	if [ -n "$BROKEN_PKGS" ]; then
+		warn "Detected packages requiring reinstallation: $BROKEN_PKGS"
+		for pkg in $BROKEN_PKGS; do
+			warn "Handling package: $pkg"
+			# Try to reinstall from repository if available
+			if apt-cache policy "$pkg" 2>/dev/null | grep -q "Candidate:" && \
+			   ! apt-cache policy "$pkg" 2>/dev/null | grep -q "Candidate: (none)"; then
+				log "Reinstalling $pkg from repository"
+				sudo apt-get install -y --reinstall "$pkg" || true
+			else
+				# Try local cached archive
+				DEB_PATH=$(ls /var/cache/apt/archives/${pkg}_*.deb 2>/dev/null | head -n1)
+				if [ -n "$DEB_PATH" ]; then
+					log "Reinstalling $pkg from local archive $DEB_PATH"
+					sudo apt-get install -y --reinstall "$DEB_PATH" || true
+				else
+					warn "No archive available for $pkg; forcing removal to unblock apt"
+					sudo dpkg --remove --force-remove-reinstreq "$pkg" || sudo dpkg --purge --force-all "$pkg" || true
+				fi
+			fi
+		done
+		# Attempt to fix any remaining dependency issues and refresh indexes
+		sudo dpkg --configure -a || true
+		sudo apt-get -f install -y || true
+		sudo apt-get update || true
+	else
+		log "No broken packages detected [OK]"
+	fi
+	echo
+}
+
 # Main execution
 main() {
     header "NVIDIA GPU CUDA Setup for WSL2"
@@ -409,6 +447,9 @@ main() {
     echo
     
     check_prerequisites
+
+    # Preflight: repair any dpkg/apt issues that would block installs (e.g., 'kamiwaza' in reinstreq)
+    fix_broken_packages
     
     # Always proceed with installation (no user prompts)
     log "Proceeding with installation automatically..."
@@ -435,12 +476,17 @@ main() {
     sudo apt-get autoremove -y
     sudo apt-get clean
     log "  [OK] Cleanup completed"
+
+    # Repair any newly broken states after cleanup
+    fix_broken_packages
     
     # 3. Install CUDA repository and key
     log "3. Installing CUDA repository and key..."
-    if sudo apt-get install -y wget gpg && \
+    if sudo apt-get install -y wget curl ca-certificates gnupg && \
+       sudo update-ca-certificates || true && \
        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb && \
-       sudo dpkg -i --force-confdef cuda-keyring_1.1-1_all.deb && \
+       (sudo apt-get -y install ./cuda-keyring_1.1-1_all.deb || sudo dpkg -i --force-confdef cuda-keyring_1.1-1_all.deb) && \
+       rm -f cuda-keyring_1.1-1_all.deb && \
        sudo apt-get update; then
         log "  [OK] CUDA repository and key installed"
     else
