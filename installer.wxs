@@ -271,10 +271,7 @@
 
 The Kamiwaza installation will continue in a separate 'Kamiwaza Installer' window when you click Finish.
 
-IMPORTANT: GPU acceleration has been configured but requires ONE MANUAL system restart to activate after the complete installation.
-
-
-*** SINGLE RESTART REQUIRED: Restart your computer ONCE to activate GPU acceleration." />
+IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to activate after the complete installation." />
                 
                 <!-- GUI Launch Checkbox -->
                 <Control Id="LaunchGUICheck" Type="CheckBox" X="15" Y="125" Width="340" Height="17" Property="LAUNCH_GUI" CheckBoxValue="1" Text="Launch Kamiwaza Diagnostic GUI when ready" />
@@ -302,9 +299,7 @@ IMPORTANT: GPU acceleration has been configured but requires ONE MANUAL system r
             <Property Id="WIXUI_EXITDIALOGTITLE" Value="Kamiwaza Setup Complete!" />
             <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Setup is complete! The Kamiwaza installation will continue in a separate 'Kamiwaza Installer' window when you click Finish.
 
-IMPORTANT: GPU acceleration has been configured but requires ONE MANUAL system restart to activate after the complete installation.
-
-*** SINGLE RESTART REQUIRED: Restart your computer ONCE to activate GPU acceleration." />
+IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to activate after the complete installation." />
             
             <!-- Require user confirmation for reboot - no automatic restarts -->
             <!-- Removed REBOOT and REBOOTPROMPT suppression to allow MSI to prompt when required -->

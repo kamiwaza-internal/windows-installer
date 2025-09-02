@@ -882,7 +882,6 @@ class HeadlessKamiwazaInstaller:
             self.log_output("Step 3: Cleaning up existing WSL distributions...")
             cleanup_commands = [
                 ['wsl', '--unregister', 'Ubuntu'],
-                ['wsl', '--unregister', 'Ubuntu-24.04'],
                 ['wsl', '--unregister', 'kamiwaza']
             ]
             
@@ -2079,9 +2078,7 @@ class HeadlessKamiwazaInstaller:
         # If dedicated instance creation failed, attempt automatic repair
         self.log_output("Dedicated kamiwaza instance creation failed - attempting automatic repair...")
         
-        # Only check for existing kamiwaza instance or Ubuntu-24.04
-        # User explicitly requested: "We should only use the existing wsl if its name is KAMIWAZA - nothing else"
-        # and "We NEVER want 22.04 - only 24.04"
+        # Only check for existing kamiwaza instance - NO fallback to Ubuntu-24.04
         ret, out, _ = self.run_command(['wsl', '--list', '--quiet'])
         if ret != 0:
             self.log_output("ERROR: WSL is not available")
@@ -2146,17 +2143,19 @@ class HeadlessKamiwazaInstaller:
         if ret == 0:
             wsl_instances = out.replace('\x00', '').replace(' ', '').replace('\r', '').replace('\n', ' ').split()
             wsl_instances = [name.strip() for name in wsl_instances if name.strip()]  # Remove empty entries
-            if 'Ubuntu-24.04' in wsl_instances:
-                self.log_output("Existing Ubuntu-24.04 WSL instance found")
+            
+            # Check ONLY for existing kamiwaza instance - no fallback to Ubuntu-24.04
+            if 'kamiwaza' in wsl_instances:
+                self.log_output("Existing kamiwaza WSL instance found")
                 self.log_output("Restarting WSL to ensure clean state for installation...")
                 
-                # Stop the existing Ubuntu-24.04 instance
-                self.log_output("Stopping Ubuntu-24.04 WSL instance...")
-                stop_ret, stop_out, stop_err = self.run_command(['wsl', '--terminate', 'Ubuntu-24.04'])
+                # Stop the existing kamiwaza instance
+                self.log_output("Stopping kamiwaza WSL instance...")
+                stop_ret, stop_out, stop_err = self.run_command(['wsl', '--terminate', 'kamiwaza'])
                 if stop_ret == 0:
-                    self.log_output("Successfully stopped Ubuntu-24.04 instance")
+                    self.log_output("Successfully stopped kamiwaza instance")
                 else:
-                    self.log_output(f"Warning: Could not stop Ubuntu-24.04 instance: {stop_err}")
+                    self.log_output(f"Warning: Could not stop kamiwaza instance: {stop_err}")
                 
                 # Shutdown all WSL instances to ensure clean restart (WSL ONLY - not the entire device)
                 self.log_output("Shutting down all WSL instances for clean restart...")
@@ -2173,65 +2172,71 @@ class HeadlessKamiwazaInstaller:
                 time.sleep(3)
                 
                 # Verify the instance is accessible after restart
-                self.log_output("Verifying Ubuntu-24.04 instance accessibility after restart...")
-                test_ret, test_out, test_err = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'echo', 'restart_test'])
+                self.log_output("Verifying kamiwaza instance accessibility after restart...")
+                test_ret, test_out, test_err = self.run_command(['wsl', '-d', 'kamiwaza', 'echo', 'restart_test'])
                 if test_ret == 0:
-                    self.log_output("Successfully restarted and verified Ubuntu-24.04 instance")
+                    self.log_output("Successfully restarted and verified kamiwaza instance")
                     self.log_output(f"Test output: {test_out.strip()}")
                 else:
-                    self.log_output(f"ERROR: Could not access Ubuntu-24.04 instance after restart: {test_err}")
+                    self.log_output(f"ERROR: Could not access kamiwaza instance after restart: {test_err}")
                     
-                                    # Check if it's a disk attachment issue (recoverable)
-                if "Failed to attach disk" in test_err or "ERROR_PATH_NOT_FOUND" in test_err:
-                    self.log_output("DETECTED: WSL disk attachment issue - this is recoverable!")
-                    self.log_output("The WSL service is having trouble mounting the disk, but this can be fixed.")
-                    self.log_output("Attempting automatic recovery...")
-                    
-                    # Try to recover the WSL service
-                    if self.recover_wsl_disk_attachment():
-                        self.log_output("WSL disk attachment recovered successfully!")
-                        self.log_output("Retrying instance access...")
+                    # Check if it's a disk attachment issue (recoverable)
+                    if "Failed to attach disk" in test_err or "ERROR_PATH_NOT_FOUND" in test_err:
+                        self.log_output("DETECTED: WSL disk attachment issue - this is recoverable!")
+                        self.log_output("The WSL service is having trouble mounting the disk, but this can be fixed.")
+                        self.log_output("Attempting automatic recovery...")
                         
-                        # Wait a moment for recovery to take effect
-                        import time
-                        time.sleep(5)
-                        
-                        # Test access again
-                        retry_ret, retry_out, retry_err = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'echo', 'recovery_test'])
-                        if retry_ret == 0:
-                            self.log_output("SUCCESS: Ubuntu-24.04 instance accessible after recovery!")
-                            self.log_output(f"Recovery test output: {retry_out.strip()}")
-                            return ['wsl', '-d', 'Ubuntu-24.04']
+                        # Try to recover the WSL service
+                        if self.recover_wsl_disk_attachment():
+                            self.log_output("WSL disk attachment recovered successfully!")
+                            self.log_output("Retrying instance access...")
+                            
+                            # Wait a moment for recovery to take effect
+                            import time
+                            time.sleep(5)
+                            
+                            # Test access again
+                            retry_ret, retry_out, retry_err = self.run_command(['wsl', '-d', 'kamiwaza', 'echo', 'recovery_test'])
+                            if retry_ret == 0:
+                                self.log_output("SUCCESS: kamiwaza instance accessible after recovery!")
+                                self.log_output(f"Recovery test output: {retry_out.strip()}")
+                                return ['wsl', '-d', 'kamiwaza']
+                            else:
+                                self.log_output(f"Recovery attempt failed - instance still not accessible: {retry_err}")
+                                self.log_output("This indicates a deeper issue that may require manual intervention")
+                                return None
                         else:
-                            self.log_output(f"Recovery attempt failed - instance still not accessible: {retry_err}")
-                            self.log_output("This indicates a deeper issue that may require manual intervention")
+                            self.log_output("WSL disk attachment recovery failed")
+                            self.log_output("This may require manual intervention or system restart")
                             return None
                     else:
-                        self.log_output("WSL disk attachment recovery failed")
-                        self.log_output("This may require manual intervention or system restart")
+                        self.log_output("This may indicate a different WSL issue. Please check WSL configuration.")
                         return None
-                else:
-                    self.log_output("This may indicate a different WSL issue. Please check WSL configuration.")
-                    return None
                 
-                # Ensure Ubuntu-24.04 also uses kamiwaza as default user
-                self.log_output("Verifying default user for Ubuntu-24.04...")
-                ret, whoami_out, _ = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'whoami'])
+                # Ensure kamiwaza uses kamiwaza as default user
+                self.log_output("Verifying default user for kamiwaza instance...")
+                ret, whoami_out, _ = self.run_command(['wsl', '-d', 'kamiwaza', 'whoami'])
                 if ret == 0:
                     current_user = whoami_out.strip()
-                    self.log_output(f"Current Ubuntu-24.04 default user: {current_user}")
+                    self.log_output(f"Current kamiwaza default user: {current_user}")
                     if current_user != 'kamiwaza':
-                        self.log_output("Configuring Ubuntu-24.04 to use kamiwaza as default user...")
-                        ret, _, err = self.run_command(['wsl', '--set-default-user', 'Ubuntu-24.04', 'kamiwaza'])
+                        self.log_output("Configuring kamiwaza to use kamiwaza as default user...")
+                        ret, _, err = self.run_command(['wsl', '--set-default-user', 'kamiwaza', 'kamiwaza'])
                         if ret != 0:
-                            self.log_output(f"WARNING: Failed to set Ubuntu-24.04 default user: {err}")
+                            self.log_output(f"WARNING: Failed to set kamiwaza default user: {err}")
                         else:
-                            self.log_output("Successfully configured Ubuntu-24.04 default user to kamiwaza")
-                return ['wsl', '-d', 'Ubuntu-24.04']
+                            self.log_output("Successfully configured kamiwaza default user to kamiwaza")
+                return ['wsl', '-d', 'kamiwaza']
         
-        self.log_output("ERROR: No suitable WSL distribution found. Only 'kamiwaza' or 'Ubuntu-24.04' are supported.")
-        self.log_output("All automatic repair attempts have been exhausted.")
-        self.log_output("System restart required to resolve WSL service issues.")
+        # NO FALLBACK - only kamiwaza is supported
+        self.log_output("ERROR: No 'kamiwaza' WSL distribution found.")
+        self.log_output("This installer ONLY works with the 'kamiwaza' WSL distribution.")
+        self.log_output("No fallback distributions are supported to prevent conflicts.")
+        self.log_output("")
+        self.log_output("SOLUTION:")
+        self.log_output("1. Run this installer again - it will create the 'kamiwaza' instance automatically")
+        self.log_output("2. If WSL issues persist, restart your system and try again")
+        self.log_output("3. Ensure WSL is properly installed and functional")
         
         return None
 
