@@ -63,7 +63,6 @@
                     <!-- Embedded Python Runtime Directory -->
                     <Directory Id="PYTHONFOLDER" Name="python" />
                     <Component Id="KamiwazaInstallerFiles" Guid="9C7B2A3D-4E5F-6071-8B9C-0D1E2F3A4B5C">
-                        <File Id="DownloadScriptFile" Name="download_exe.ps1" Source="download_exe.ps1"/>
                         <File Id="HeadlessInstaller" Name="kamiwaza_headless_installer.py" Source="kamiwaza_headless_installer_build.py"/>
                         <File Id="KamiwazaBatchWrapper" Name="run_kamiwaza.bat" Source="run_kamiwaza.bat"/>
                         
@@ -80,7 +79,6 @@
                         <File Id="GPUDetectionCMDScript" Name="detect_gpu_cmd.bat" Source="detect_gpu_cmd.bat"/>
                         <File Id="NvidiaSetupScript" Name="setup_nvidia_gpu.sh" Source="setup_nvidia_gpu.sh"/>
                         <File Id="IntelArcSetupScript" Name="setup_intel_arc_gpu.sh" Source="setup_intel_arc_gpu.sh"/>
-                        <File Id="StartPlatformBatch" Name="start_platform.bat" Source="start_platform.bat"/>
                         <File Id="KamiwazaStartBatch" Name="kamiwaza_start.bat" Source="kamiwaza_start.bat"/>
                         <File Id="KamiwazaStopBatch" Name="kamiwaza_stop.bat" Source="kamiwaza_stop.bat"/>
                         <File Id="CreateRunOnceBatch" Name="create_runonce.bat" Source="create_runonce.bat"/>
@@ -114,14 +112,6 @@
                                  Description="Download and Install Kamiwaza with [WSLMEMORY] dedicated memory" 
                                  Target="[INSTALLFOLDER]run_kamiwaza.bat" 
                                  Arguments="--memory &quot;[WSLMEMORY]&quot; --email &quot;[USER_EMAIL]&quot; --license-key &quot;[LICENSE_KEY]&quot; --usage-reporting &quot;[USAGE_REPORTING]&quot; --mode &quot;[INSTALL_MODE]&quot;"
-                                 WorkingDirectory="INSTALLFOLDER"
-                                 Icon="KamiwazaIcon"
-                                 IconIndex="0" />
-                                 
-                        <Shortcut Id="StartPlatformShortcut" 
-                                 Name="Start Platform" 
-                                 Description="Launch Kamiwaza Platform in dedicated WSL instance" 
-                                 Target="[INSTALLFOLDER]start_platform.bat"
                                  WorkingDirectory="INSTALLFOLDER"
                                  Icon="KamiwazaIcon"
                                  IconIndex="0" />
@@ -336,12 +326,7 @@ IMPORTANT: GPU acceleration has been configured but requires ONE MANUAL system r
                       Impersonate="yes"
                       Return="ignore" />
                       
-        <CustomAction Id="DetectGPU"
-                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "[INSTALLFOLDER]detect_gpu.ps1" -WSLDistribution "kamiwaza" ^> "$env:TEMP\kamiwaza_gpu_detect.log" 2^>^&amp;1'
-                      Directory="TARGETDIR"
-                      Execute="deferred"
-                      Impersonate="yes"
-                      Return="ignore" />
+
                       
         <CustomAction Id="RunKamiwazaInstaller" 
                       FileKey="KamiwazaBatchWrapper"
@@ -417,8 +402,7 @@ IMPORTANT: GPU acceleration has been configured but requires ONE MANUAL system r
             <Custom Action="CheckRemotePC" After="ReservePorts">NOT REMOVE</Custom>
             <Custom Action="DetectGPUCmd" After="CheckRemotePC">NOT REMOVE</Custom>
             <Custom Action="RunKamiwazaInstaller" After="DetectGPUCmd">NOT REMOVE</Custom>
-            <Custom Action="DetectGPU" After="RunKamiwazaInstaller">NOT REMOVE</Custom>
-            <Custom Action="SetupAutostartRegistry" After="DetectGPU">NOT REMOVE</Custom>
+            <Custom Action="SetupAutostartRegistry" After="RunKamiwazaInstaller">NOT REMOVE</Custom>
             <Custom Action="InstallGUIManager" After="SetupAutostartRegistry">NOT REMOVE</Custom>
             <Custom Action="LaunchDiagnosticGUI" After="InstallGUIManager">NOT REMOVE AND LAUNCH_GUI = "1"</Custom>
             <ScheduleReboot After="InstallGUIManager">NOT REMOVE</ScheduleReboot>
