@@ -1,0 +1,4 @@
+---
+description: for a github pr, please respond in the following format - ## What type of PR is this? - [ ] 🍕 Feature - [ ] 🐛 Bug Fix - [ ] 📝 Documentation - [ ] 🧑‍💻 Code Refactor - [ ] 🔧 Other  ## Description <!-- What changed and why? Optional: include screenshots or other supporting artifacts.  -->  ## Related Issues <!-- Link issues like: Fixes #123 -->  ## Updated requirements or dependencies? - [ ] Requirements or dependencies added/updated/removed - [ ] No requirements changed  ## Testing - [ ] Tests added/updated - [ ] No tests needed  **How to test or why no tests:** <!-- Describe test steps or explain why tests aren't needed -->  ## Checklist - [ ] Self-reviewed the code - [ ] Tests pass locally - [ ] No console errors/warnings  ## [optional] What gif best describes this PR?
+alwaysApply: false
+---
