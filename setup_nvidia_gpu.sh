@@ -367,8 +367,25 @@ verify_installation() {
     
     echo
     log "Checking NVIDIA GPU detection..."
+    
+    # Check nvidia-smi symlink
+    if [ -L "/usr/local/bin/nvidia-smi" ]; then
+        SYMLINK_TARGET=$(readlink /usr/local/bin/nvidia-smi)
+        log "nvidia-smi symlink found: /usr/local/bin/nvidia-smi -> $SYMLINK_TARGET"
+        
+        if /usr/local/bin/nvidia-smi --version >/dev/null 2>&1; then
+            log "Symlinked nvidia-smi is working"
+        else
+            warn "Symlinked nvidia-smi exists but not responding"
+        fi
+    else
+        warn "nvidia-smi symlink not found in /usr/local/bin"
+    fi
+    
+    # Check standard nvidia-smi command
     if command -v nvidia-smi >/dev/null 2>&1; then
-        log "nvidia-smi command found - testing GPU detection..."
+        NVIDIA_SMI_LOCATION=$(which nvidia-smi)
+        log "nvidia-smi command found at: $NVIDIA_SMI_LOCATION"
         echo "Running: nvidia-smi --query-gpu=name,driver_version --format=csv,noheader"
         nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null || warn "nvidia-smi failed to detect GPU"
     else
@@ -513,6 +530,56 @@ main() {
         warn "  [WARN] Failed to configure environment variables - continuing anyway"
     fi
     
+    # 5.5. Create nvidia-smi symlink for consistent access
+    log "5.5. Setting up nvidia-smi symlink in /usr/local/bin..."
+    
+    # Ensure /usr/local/bin exists and is writable
+    sudo mkdir -p /usr/local/bin
+    
+    # Find nvidia-smi in common locations
+    NVIDIA_SMI_PATH=""
+    for path in /usr/bin/nvidia-smi /usr/lib/wsl/lib/nvidia-smi /usr/local/cuda/bin/nvidia-smi; do
+        if [ -f "$path" ]; then
+            NVIDIA_SMI_PATH="$path"
+            log "  Found nvidia-smi at: $path"
+            break
+        fi
+    done
+    
+    if [ -n "$NVIDIA_SMI_PATH" ]; then
+        # Remove existing symlink if it exists
+        sudo rm -f /usr/local/bin/nvidia-smi
+        
+        # Create symlink
+        if sudo ln -sf "$NVIDIA_SMI_PATH" /usr/local/bin/nvidia-smi; then
+            log "  [OK] nvidia-smi symlink created: /usr/local/bin/nvidia-smi -> $NVIDIA_SMI_PATH"
+            
+            # Verify symlink works
+            if /usr/local/bin/nvidia-smi --version >/dev/null 2>&1; then
+                log "  [OK] nvidia-smi symlink verified working"
+            else
+                warn "  [WARN] nvidia-smi symlink created but not responding - may need restart"
+            fi
+        else
+            warn "  [WARN] Failed to create nvidia-smi symlink"
+        fi
+    else
+        warn "  [WARN] nvidia-smi not found in expected locations - will be available after restart"
+        # Create a placeholder that will work after restart
+        sudo rm -f /usr/local/bin/nvidia-smi
+        if sudo ln -sf /usr/bin/nvidia-smi /usr/local/bin/nvidia-smi; then
+            log "  [OK] Created placeholder nvidia-smi symlink for post-restart access"
+        fi
+    fi
+    
+    # Add /usr/local/bin to PATH in bashrc if not already there
+    if ! grep -q '/usr/local/bin' ~/.bashrc; then
+        echo 'export PATH=/usr/local/bin:$PATH' >> ~/.bashrc
+        log "  [OK] Added /usr/local/bin to PATH in ~/.bashrc"
+    else
+        log "  [OK] /usr/local/bin already in PATH"
+    fi
+    
     # 6. Install NVIDIA Container Toolkit for Docker GPU access
     log "6. Installing NVIDIA Container Toolkit for Docker GPU access..."
     if sudo apt-get install -y nvidia-container-toolkit; then
@@ -576,6 +643,9 @@ main() {
     echo
     log "Useful debugging commands:"
     echo "  - nvidia-smi                    # Check NVIDIA GPU status"
+    echo "  - /usr/local/bin/nvidia-smi     # Check symlinked nvidia-smi"
+    echo "  - ls -la /usr/local/bin/nvidia-smi # Check nvidia-smi symlink"
+    echo "  - which nvidia-smi             # Find nvidia-smi location"
     echo "  - nvcc --version               # Check CUDA compiler version"
     echo "  - dpkg -l | grep nvidia       # Check installed NVIDIA packages"
     echo "  - ls -la /dev/nvidia*         # Check NVIDIA device files"
