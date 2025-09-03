@@ -171,7 +171,7 @@
 
                         <Shortcut Id="KamiwazaMonitorShortcut" 
                                  Name="Kamiwaza Manager" 
-                                 Description="Launch Kamiwaza Manager - GUI Management Tool" 
+                                 Description="Launch Kamiwaza Manager" 
                                  Target="[INSTALLFOLDER]KamiwazaManager.exe"
                                  WorkingDirectory="INSTALLFOLDER"
                                  Icon="KamiwazaIcon"

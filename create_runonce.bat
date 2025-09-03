@@ -16,7 +16,7 @@ REM Ensure INSTALLFOLDER ends with backslash
 if not "%INSTALLFOLDER:~-1%"=="\" set INSTALLFOLDER=%INSTALLFOLDER%\
 
 REM Create the RunOnce registry entry (silent)
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "KamiwazaContinueInstall" /t REG_SZ /d "\"%INSTALLFOLDER%run_kamiwaza.bat\" --memory \"%WSLMEMORY%\" --email \"%USER_EMAIL%\" --license-key \"%LICENSE_KEY%\" --usage-reporting \"%USAGE_REPORTING%\" --mode \"%INSTALL_MODE%\"" /f >nul 2>&1
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "KamiwazaContinueInstall" /t REG_SZ /d "\"%INSTALLFOLDER%kamiwaza_start.bat\" --memory \"%WSLMEMORY%\" --email \"%USER_EMAIL%\" --license-key \"%LICENSE_KEY%\" --usage-reporting \"%USAGE_REPORTING%\" --mode \"%INSTALL_MODE%\"" /f >nul 2>&1
 
 endlocal
 exit /b 0 
