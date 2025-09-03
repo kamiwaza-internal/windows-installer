@@ -620,7 +620,7 @@ class KamiwazaGUIManager:
         """Start Kamiwaza service"""
         def start_thread():
             self.switch_to_logs_tab()
-            self.run_wsl_command(['kamiwaza', 'start'], "Starting Kamiwaza service")
+            self.run_wsl_command(['kamiwaza', 'start'], "Starting Kamiwaza service", 3600)
             #self.check_kamiwaza_status()
         
         threading.Thread(target=start_thread, daemon=True).start()
@@ -629,7 +629,7 @@ class KamiwazaGUIManager:
         """Stop Kamiwaza service"""
         def stop_thread():
             self.switch_to_logs_tab()
-            self.run_wsl_command(['kamiwaza', 'stop'], "Stopping Kamiwaza service")
+            self.run_wsl_command(['kamiwaza', 'stop'], "Stopping Kamiwaza service", 3600)
             #self.check_kamiwaza_status()
         
         threading.Thread(target=stop_thread, daemon=True).start()
