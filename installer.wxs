@@ -83,6 +83,8 @@
                         <File Id="KamiwazaStartBatch" Name="kamiwaza_start.bat" Source="kamiwaza_start.bat"/>
                         <File Id="KamiwazaStopBatch" Name="kamiwaza_stop.bat" Source="kamiwaza_stop.bat"/>
                         <File Id="CreateRunOnceBatch" Name="create_runonce.bat" Source="create_runonce.bat"/>
+                        <File Id="CreateAutostartRegistry" Name="create_autostart_registry.ps1" Source="create_autostart_registry.ps1"/>
+                        <File Id="KamiwazaAutostartBatch" Name="kamiwaza_autostart.bat" Source="kamiwaza_autostart.bat"/>
 
                         <File Id="KamiwazaGUIManager" Name="KamiwazaGUIManager.exe" Source="KamiwazaGUIManager.exe"/>
                         <File Id="InstallGUIManager" Name="install_gui_manager.ps1" Source="install_gui_manager.ps1"/>
@@ -394,6 +396,14 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
                       Impersonate="yes"
                       Return="ignore" />
 
+        <!-- Setup Autostart Registry Entry (alternative to Task Scheduler) -->
+        <CustomAction Id="SetupAutostartRegistry"
+                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "[INSTALLFOLDER]create_autostart_registry.ps1" ^> "$env:TEMP\kamiwaza_autostart.log" 2^>^&amp;1'
+                      Directory="TARGETDIR"
+                      Execute="deferred"
+                      Impersonate="yes"
+                      Return="ignore" />
+
         <!-- Launch Kamiwaza Manager if requested -->
         <CustomAction Id="LaunchDiagnosticGUI"
                       ExeCommand='powershell.exe -Command "$p=Join-Path $env:LOCALAPPDATA \"Kamiwaza\\GUI\\KamiwazaGUIManager.exe\"; if (Test-Path $p) { Start-Process $p }"'
@@ -411,7 +421,8 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
             <Custom Action="RunKamiwazaInstaller" After="DetectGPUCmd">NOT REMOVE</Custom>
             <Custom Action="InstallGUIManager" After="RunKamiwazaInstaller">NOT REMOVE</Custom>
             <Custom Action="SetupRunOnce" After="InstallGUIManager">NOT REMOVE</Custom>
-            <Custom Action="SetupManagerAutostart" After="SetupRunOnce">NOT REMOVE AND AUTOSTART_TRAY = "1"</Custom>
+            <Custom Action="SetupAutostartRegistry" After="SetupRunOnce">NOT REMOVE</Custom>
+            <Custom Action="SetupManagerAutostart" After="SetupAutostartRegistry">NOT REMOVE AND AUTOSTART_TRAY = "1"</Custom>
             <Custom Action="LaunchDiagnosticGUI" After="SetupManagerAutostart">NOT REMOVE AND LAUNCH_GUI = "1"</Custom>
             <ScheduleReboot After="SetupManagerAutostart">NOT REMOVE</ScheduleReboot>
             

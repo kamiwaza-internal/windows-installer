@@ -1,6 +1,7 @@
 # Kamiwaza Autostart Registry Setup Script
 # This script creates a persistent Run registry entry to launch Kamiwaza at every user logon
 # No admin rights required - uses HKCU (current user) registry
+Write-Host "AUTOSTART REGISTRY"
 
 param(
     [string]$ScriptPath = "",
@@ -38,4 +39,4 @@ try {
 } catch {
     Write-Error "Failed to create autostart registry entry: $($_.Exception.Message)"
     exit 1
-} 
+}
