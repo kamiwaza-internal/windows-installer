@@ -26,7 +26,7 @@ import time
 import pystray
 from PIL import Image, ImageDraw
 
-class KamiwazaGUIManager:
+class KamiwazaManager:
     def __init__(self, root):
         self.root = root
         self.root.title("Kamiwaza Manager")
@@ -1274,7 +1274,7 @@ def main():
     except:
         pass
     
-    app = KamiwazaGUIManager(root)
+    app = KamiwazaManager(root)
     
     # Center the window
     root.update_idletasks()

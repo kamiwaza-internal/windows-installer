@@ -138,7 +138,7 @@ echo ===============================================
 echo Auto-Start Complete
 echo ===============================================
 echo [INFO] Launching Kamiwaza GUI Monitor...
-start "" "%LOCALAPPDATA%\Kamiwaza\KamiwazaGUIManager.exe"
+start "" "%LOCALAPPDATA%\Kamiwaza\KamiwazaManager.exe"
 
 echo Press any key to close this window, or leave open for debugging...
 

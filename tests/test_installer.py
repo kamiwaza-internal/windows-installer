@@ -76,7 +76,7 @@ def test_required_files():
         ("kamiwaza_start.bat", "Kamiwaza start script"),
         ("kamiwaza_stop.bat", "Kamiwaza stop script"),
         ("create_autostart_registry.ps1", "Autostart registry script"),
-        ("install_gui_manager.ps1", "GUI manager installer")
+        ("install_manager.ps1", "GUI manager installer")
     ]
     
     all_exist = True

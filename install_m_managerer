@@ -9,8 +9,7 @@ Write-Host "Installing Kamiwaza GUI Manager..." -ForegroundColor Green
 
 # Get the source executable path (from MSI installer)
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$sourceExe = Join-Path $scriptDir "KamiwazaGUIManager.exe"
-$targetDir = Join-Path $env:LOCALAPPDATA "Kamiwaza\GUI"
+$sourceExe = Join-Path $scriptDir "KamiwazaManager.exexe$targetDir = Join-Path $env:LOCALAPPDATA "Kamiwaza"
 $startMenuDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Kamiwaza"
 
 # Create target directories
@@ -29,11 +28,11 @@ if (Test-Path $sourceExe) {
     # Create Start Menu shortcut using WScript.Shell
     try {
         $WshShell = New-Object -ComObject WScript.Shell
-        $shortcut = $WshShell.CreateShortcut("$startMenuDir\Kamiwaza Monitor.lnk")
-        $shortcut.TargetPath = "$targetDir\KamiwazaGUIManager.exe"
+        $shortcut = $WshShell.CreateShortcut("$startMenuDir\Kamiwaza Managerrnk")
+        $shortcut.TargetPath = "$targetDir\KamiwazaManager.exe
         $shortcut.WorkingDirectory = $targetDir
-        $shortcut.Description = "Kamiwaza Monitor - GUI Management Tool"
-        $shortcut.IconLocation = "$targetDir\KamiwazaGUIManager.exe,0"
+        $shortcut.Description = "Kamiwaza Managerr GUI Management Tool"
+        $shortcut.IconLocation = "$targetDir\KamiwazaManager.exe
         $shortcut.Save()
         Write-Host "Created Start Menu shortcut" -ForegroundColor Green
         
@@ -41,11 +40,11 @@ if (Test-Path $sourceExe) {
         if ($CreateDesktopShortcut) {
             $desktopDir = [Environment]::GetFolderPath("Desktop")
             if (Test-Path $desktopDir) {
-                $desktopShortcut = $WshShell.CreateShortcut("$desktopDir\Kamiwaza Monitor.lnk")
-                $desktopShortcut.TargetPath = "$targetDir\KamiwazaGUIManager.exe"
+                $desktopShortcut = $WshShell.CreateShortcut("$desktopDir\Kamiwaza Managerrnk")
+                $desktopShortcut.TargetPath = "$targetDir\KamiwazaManager.exe               
                 $desktopShortcut.WorkingDirectory = $targetDir
-                $desktopShortcut.Description = "Kamiwaza Monitor - GUI Management Tool"
-                $desktopShortcut.IconLocation = "$targetDir\KamiwazaGUIManager.exe,0"
+                $desktopShortcut.Description = "Kamiwaza Managerr GUI Management Tool"
+                $desktopShortcut.IconLocation = "$targetDir\KamiwazaManager.exe
                 $desktopShortcut.Save()
                 Write-Host "Created desktop shortcut" -ForegroundColor Green
             }
@@ -54,8 +53,8 @@ if (Test-Path $sourceExe) {
     catch {
         Write-Warning "Could not create shortcuts: $_"
         # Fallback: create batch file shortcuts
-        $batchContent = "@echo off`nstart `"`" `"$targetDir\KamiwazaGUIManager.exe`""
-        Set-Content -Path "$startMenuDir\Kamiwaza Monitor.bat" -Value $batchContent
+        $batchContent = "@echo off`nstart `"`" `"$targetDir\KamiwazaManager.exe
+        Set-Content -Path "$startMenuDir\Kamiwaza Managerrat" -Value $batchContent
         Write-Host "Created batch file shortcut as fallback" -ForegroundColor Yellow
     }
     
@@ -66,8 +65,8 @@ if (Test-Path $sourceExe) {
 }
 
 Write-Host ""
-Write-Host "Kamiwaza Monitor is now available:" -ForegroundColor Cyan
-Write-Host "- Start Menu: Start > Kamiwaza > Kamiwaza Monitor" -ForegroundColor White
-Write-Host "- Direct path: $targetDir\KamiwazaGUIManager.exe" -ForegroundColor White
+Write-Host "Kamiwaza Managerrs now available:" -ForegroundColor Cyan
+Write-Host "- Start Menu: Start > Kamiwaza > Kamiwaza Managerr-ForegroundColor White
+Write-Host "- Direct path: $targetDir\KamiwazaManager.exeForegroundColor White
 Write-Host ""
 Write-Host "You can now use the GUI to manage your Kamiwaza installation!" -ForegroundColor Green

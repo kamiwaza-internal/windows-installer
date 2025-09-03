@@ -306,6 +306,7 @@ pause >nul
 - **NEVER assume** user has same environment as developer
 - **NEVER skip** error handling and logging
 - **NEVER assume** scripts run with expected permissions
+- DONT MAKE NEW SCRIPTS UNLESS PROMPTED TO! ALWAYS ASK BEFORE ADDING TO CLUTTERING THE REPO! 
 
 ### Common Mistakes to Avoid
 - Making changes without testing

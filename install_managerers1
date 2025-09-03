@@ -1,0 +1,48 @@
+@echo off
+REM Install Kamiwaza GUI Manager to AppData and Start Menu
+REM This script is called by the MSI installer
+
+setlocal enabledelayedexpansion
+
+echo Installing Kamiwaza GUI Manager...
+
+REM Get the source executable path (from MSI installer)
+set "SOURCE_EXE=%~dp0KamiwazaManager.exe
+set "TARGET_DIR=%LOCALAPPDATA%\Kamiwaza"
+set "START_MENU_DIR=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Kamiwaza"
+
+REM Create target directories
+if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"
+if not exist "%START_MENU_DIR%" mkdir "%START_MENU_DIR%"
+
+REM Copy the executable
+if exist "%SOURCE_EXE%" (
+    copy "%SOURCE_EXE%" "%TARGET_DIR%\" >nul
+    echo Copied GUI Manager to: %TARGET_DIR%
+    
+    REM Create Start Menu shortcut
+    echo @echo off > "%START_MENU_DIR%\Kamiwaza Managerlnk"
+    echo start "" "%TARGET_DIR%\KamiwazaManager.exe >> "%START_MENU_DIR%\Kamiwaza Managerlnk"
+    
+    REM Create desktop shortcut if requested
+    if "%1"=="--desktop" (
+        set "DESKTOP_DIR=%USERPROFILE%\Desktop"
+        if exist "%DESKTOP_DIR%" (
+            echo @echo off > "%DESKTOP_DIR%\Kamiwaza Managerlnk"
+            echo start "" "%TARGET_DIR%\KamiwazaManager.exe >> "%DESKTOP_DIR%\Kamiwaza Managerlnk"
+            echo Created desktop shortcut
+        )
+    )
+    
+    echo GUI Manager installation completed successfully!
+) else (
+    echo ERROR: Source executable not found: %SOURCE_EXE%
+    exit /b 1
+)
+
+echo.
+echo Kamiwaza Manageris now available:
+echo - Start Menu: Start > Kamiwaza > Kamiwaza Manager
+echo - Direct path: %TARGET_DIR%\KamiwazaManager.exee
+echo.
+echo You can now use the GUI to manage your Kamiwaza installation!

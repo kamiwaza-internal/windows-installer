@@ -144,7 +144,7 @@ if errorlevel 1 (
 
 REM Build the GUI executable for MSI installer
 echo [INFO] Building Kamiwaza GUI Manager executable...
-if exist "kamiwaza_gui_manager.py" (
+if exist "kamiwaza_manager.py" (
     echo [INFO] GUI source found, building executable...
     python build_gui_exe.py
     if errorlevel 1 (
@@ -157,8 +157,8 @@ if exist "kamiwaza_gui_manager.py" (
         echo [SUCCESS] GUI executable built successfully
         
         REM Copy executable to current directory for MSI installer
-        if exist "dist\KamiwazaGUIManager.exe" (
-            copy "dist\KamiwazaGUIManager.exe" "KamiwazaGUIManager.exe" >nul
+        if exist "dist\KamiwazaManager.exe" (
+            copy "dist\KamiwazaManager.exe" "KamiwazaManager.exe" >nul
             echo [SUCCESS] GUI executable copied to current directory
         ) else (
             echo [ERROR] GUI executable not found in dist folder after build!
@@ -168,7 +168,7 @@ if exist "kamiwaza_gui_manager.py" (
     )
 ) else (
     echo [WARN] GUI source not found - skipping GUI build
-    echo [INFO] If you want to include GUI, ensure kamiwaza_gui_manager.py exists
+    echo [INFO] If you want to include GUI, ensure kamiwaza_manager.py exists
     echo [INFO] You may need to remove GUI references from installer.wxs
 )
 
@@ -203,8 +203,8 @@ for /f "tokens=1,2,3 delims=.-" %%a in ("%KAMIWAZA_VERSION%") do (
 )
 
 REM Verify GUI executable exists if GUI was built
-if exist "KamiwazaGUIManager.exe" (
-    echo [INFO] GUI executable found: KamiwazaGUIManager.exe
+if exist "KamiwazaManager.exe" (
+    echo [INFO] GUI executable found: KamiwazaManager.exe
 ) else (
     echo [WARN] GUI executable not found - MSI build may fail if installer.wxs references it
     echo [INFO] Consider removing GUI references from installer.wxs or building the GUI first
@@ -355,8 +355,8 @@ if exist "kamiwaza_headless_installer_template.py.backup" (
 )
 
 REM Clean up GUI executable
-if exist "KamiwazaGUIManager.exe" (
-    del "KamiwazaGUIManager.exe" 2>nul
+if exist "KamiwazaManager.exe" (
+    del "KamiwazaManager.exe" 2>nul
     echo [SUCCESS] GUI executable cleaned up
 )
 

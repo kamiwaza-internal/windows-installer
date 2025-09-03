@@ -17,8 +17,8 @@ if errorlevel 1 (
 )
 
 REM Check if required files exist
-if not exist "kamiwaza_gui_manager.py" (
-    echo ERROR: kamiwaza_gui_manager.py not found!
+if not exist "kamiwaza_manager.py" (
+    echo ERROR: kamiwaza_manager.py not found!
     echo Please run this script from the project directory
     pause
     exit /b 1
@@ -46,15 +46,15 @@ echo ========================================
 echo.
 
 REM Check if executable was created
-if exist "dist\KamiwazaGUIManager.exe" (
-    echo Executable created: dist\KamiwazaGUIManager.exe
+if exist "dist\KamiwazaManager.exe" (
+    echo Executable created: dist\KamiwazaManager.exe
     
     REM Copy to current directory for MSI installer
-    copy "dist\KamiwazaGUIManager.exe" "KamiwazaGUIManager.exe" >nul
+    copy "dist\KamiwazaManager.exe" "KamiwazaManager.exe" >nul
     echo Copied to current directory for MSI installer
     
     REM Show file size
-    for %%A in ("KamiwazaGUIManager.exe") do (
+    for %%A in ("KamiwazaManager.exe") do (
         echo File size: %%~zA bytes
     )
     
@@ -66,8 +66,8 @@ if exist "dist\KamiwazaGUIManager.exe" (
     echo 4. Test the installation
     echo.
     echo The GUI will be installed to:
-    echo - %LOCALAPPDATA%\Kamiwaza\GUI\KamiwazaGUIManager.exe
-    echo - Start Menu: Start ^> Kamiwaza ^> Kamiwaza Monitor
+    echo - %LOCALAPPDATA%\Kamiwaza\KamiwazaManager.exe
+    echo - Start Menu: Start ^> Kamiwaza ^> Kamiwaza Manager
     echo.
     
 ) else (

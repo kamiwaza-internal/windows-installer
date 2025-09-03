@@ -23,7 +23,7 @@ def build_gui_exe():
         subprocess.run([sys.executable, "-m", "pip", "install", "pyinstaller"], check=True)
     
     # Source file
-    source_file = "kamiwaza_gui_manager.py"
+    source_file = "kamiwaza_manager.py"
     if not os.path.exists(source_file):
         print(f"ERROR: Source file {source_file} not found!")
         return False
@@ -38,7 +38,7 @@ def build_gui_exe():
         "pyinstaller",
         "--onefile",                    # Single executable
         "--windowed",                   # No console window
-        "--name=KamiwazaGUIManager",    # Executable name
+        "--name=KamiwazaManager",    # Executable name
         "--icon=kamiwaza.ico",          # Icon file
         "--add-data=kamiwaza.ico;.",    # Include icon
         "--add-data=detect_gpu.ps1;.",  # Include GPU detection script
@@ -63,7 +63,7 @@ def build_gui_exe():
         print(result.stdout)
         
         # Check if executable was created
-        exe_path = os.path.join(output_dir, "KamiwazaGUIManager.exe")
+        exe_path = os.path.join(output_dir, "KamiwazaManager.exe")
         if os.path.exists(exe_path):
             print(f"Executable created: {exe_path}")
             
@@ -99,8 +99,8 @@ setlocal enabledelayedexpansion
 echo Installing Kamiwaza GUI Manager...
 
 REM Get the source executable path (from MSI installer)
-set "SOURCE_EXE=%~dp0KamiwazaGUIManager.exe"
-set "TARGET_DIR=%LOCALAPPDATA%\\Kamiwaza\\GUI"
+set "SOURCE_EXE=%~dp0KamiwazaManager.exe
+set "TARGET_DIR=%LOCALAPPDATA%\\Kamiwaza"
 set "START_MENU_DIR=%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Kamiwaza"
 
 REM Create target directories
@@ -113,15 +113,15 @@ if exist "%SOURCE_EXE%" (
     echo Copied GUI Manager to: %TARGET_DIR%
     
     REM Create Start Menu shortcut
-    echo @echo off > "%START_MENU_DIR%\\Kamiwaza Monitor.lnk"
-    echo start "" "%TARGET_DIR%\\KamiwazaGUIManager.exe" >> "%START_MENU_DIR%\\Kamiwaza Monitor.lnk"
+    echo @echo off > "%START_MENU_DIR%\\Kamiwaza Managerlnk"
+    echo start "" "%TARGET_DIR%\\KamiwazaManager.exe >> "%START_MENU_DIR%\\Kamiwaza Managerlnk"
     
     REM Create desktop shortcut if requested
     if "%1"=="--desktop" (
         set "DESKTOP_DIR=%USERPROFILE%\\Desktop"
         if exist "%DESKTOP_DIR%" (
-            echo @echo off > "%DESKTOP_DIR%\\Kamiwaza Monitor.lnk"
-            echo start "" "%TARGET_DIR%\\KamiwazaGUIManager.exe" >> "%DESKTOP_DIR%\\Kamiwaza Monitor.lnk"
+            echo @echo off > "%DESKTOP_DIR%\\Kamiwaza Managerlnk"
+            echo start "" "%TARGET_DIR%\\KamiwazaManager.exe >> "%DESKTOP_DIR%\\Kamiwaza Managerlnk"
             echo Created desktop shortcut
         )
     )
@@ -133,17 +133,17 @@ if exist "%SOURCE_EXE%" (
 )
 
 echo.
-echo Kamiwaza Monitor is now available:
-echo - Start Menu: Start > Kamiwaza > Kamiwaza Monitor
-echo - Direct path: %TARGET_DIR%\\KamiwazaGUIManager.exe
+echo Kamiwaza Manageris now available:
+echo - Start Menu: Start > Kamiwaza > Kamiwaza Manager
+echo - Direct path: %TARGET_DIR%\\KamiwazaManager.exee
 echo.
 echo You can now use the GUI to manage your Kamiwaza installation!
 """
     
-    with open("install_gui_manager.ps1", "w") as f:
+    with open("install_managerers1", "w") as f:
         f.write(gui_install_script)
     
-    print("Created GUI installation script: install_gui_manager.ps1")
+    print("Created GUI installation script: install__managerer1")
     
     # Create PowerShell version for better integration
     ps_install_script = """# Install Kamiwaza GUI Manager to AppData and Start Menu
@@ -157,8 +157,7 @@ Write-Host "Installing Kamiwaza GUI Manager..." -ForegroundColor Green
 
 # Get the source executable path (from MSI installer)
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$sourceExe = Join-Path $scriptDir "KamiwazaGUIManager.exe"
-$targetDir = Join-Path $env:LOCALAPPDATA "Kamiwaza\\GUI"
+$sourceExe = Join-Path $scriptDir "KamiwazaManager.exexe$targetDir = Join-Path $env:LOCALAPPDATA "Kamiwaza"
 $startMenuDir = Join-Path $env:APPDATA "Microsoft\\Windows\\Start Menu\\Programs\\Kamiwaza"
 
 # Create target directories
@@ -177,11 +176,11 @@ if (Test-Path $sourceExe) {
     # Create Start Menu shortcut using WScript.Shell
     try {
         $WshShell = New-Object -ComObject WScript.Shell
-        $shortcut = $WshShell.CreateShortcut("$startMenuDir\\Kamiwaza Monitor.lnk")
-        $shortcut.TargetPath = "$targetDir\\KamiwazaGUIManager.exe"
+        $shortcut = $WshShell.CreateShortcut("$startMenuDir\\Kamiwaza Managerrnk")
+        $shortcut.TargetPath = "$targetDir\\KamiwazaManager.exe
         $shortcut.WorkingDirectory = $targetDir
-        $shortcut.Description = "Kamiwaza Monitor - GUI Management Tool"
-        $shortcut.IconLocation = "$targetDir\\KamiwazaGUIManager.exe,0"
+        $shortcut.Description = "Kamiwaza Managerr GUI Management Tool"
+        $shortcut.IconLocation = "$targetDir\\KamiwazaManager.exe
         $shortcut.Save()
         Write-Host "Created Start Menu shortcut" -ForegroundColor Green
         
@@ -189,11 +188,11 @@ if (Test-Path $sourceExe) {
         if ($CreateDesktopShortcut) {
             $desktopDir = [Environment]::GetFolderPath("Desktop")
             if (Test-Path $desktopDir) {
-                $desktopShortcut = $WshShell.CreateShortcut("$desktopDir\\Kamiwaza Monitor.lnk")
-                $desktopShortcut.TargetPath = "$targetDir\\KamiwazaGUIManager.exe"
+                $desktopShortcut = $WshShell.CreateShortcut("$desktopDir\\Kamiwaza Managerrnk")
+                $desktopShortcut.TargetPath = "$targetDir\\KamiwazaManager.exe               
                 $desktopShortcut.WorkingDirectory = $targetDir
-                $desktopShortcut.Description = "Kamiwaza Monitor - GUI Management Tool"
-                $desktopShortcut.IconLocation = "$targetDir\\KamiwazaGUIManager.exe,0"
+                $desktopShortcut.Description = "Kamiwaza Managerr GUI Management Tool"
+                $desktopShortcut.IconLocation = "$targetDir\\KamiwazaManager.exe
                 $desktopShortcut.Save()
                 Write-Host "Created desktop shortcut" -ForegroundColor Green
             }
@@ -202,8 +201,8 @@ if (Test-Path $sourceExe) {
     catch {
         Write-Warning "Could not create shortcuts: $_"
         # Fallback: create batch file shortcuts
-        $batchContent = "@echo off`nstart `"`" `"$targetDir\\KamiwazaGUIManager.exe`""
-        Set-Content -Path "$startMenuDir\\Kamiwaza Monitor.bat" -Value $batchContent
+        $batchContent = "@echo off`nstart `"`" `"$targetDir\\KamiwazaManager.exe
+        Set-Content -Path "$startMenuDir\\Kamiwaza Managerrat" -Value $batchContent
         Write-Host "Created batch file shortcut as fallback" -ForegroundColor Yellow
     }
     
@@ -214,17 +213,17 @@ if (Test-Path $sourceExe) {
 }
 
 Write-Host ""
-Write-Host "Kamiwaza Monitor is now available:" -ForegroundColor Cyan
-Write-Host "- Start Menu: Start > Kamiwaza > Kamiwaza Monitor" -ForegroundColor White
-Write-Host "- Direct path: $targetDir\\KamiwazaGUIManager.exe" -ForegroundColor White
+Write-Host "Kamiwaza Managerrs now available:" -ForegroundColor Cyan
+Write-Host "- Start Menu: Start > Kamiwaza > Kamiwaza Managerr-ForegroundColor White
+Write-Host "- Direct path: $targetDir\\KamiwazaManager.exeForegroundColor White
 Write-Host ""
 Write-Host "You can now use the GUI to manage your Kamiwaza installation!" -ForegroundColor Green
 """
     
-    with open("install_gui_manager.ps1", "w") as f:
+    with open("install_m_managerer", "w") as f:
         f.write(ps_install_script)
     
-    print("Created PowerShell GUI installation script: install_gui_manager.ps1")
+    print("Created PowerShell GUI installation script: install_manager.ps1")
 
 def main():
     """Main build process"""

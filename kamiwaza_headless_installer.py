@@ -1235,7 +1235,7 @@ class HeadlessKamiwazaInstaller:
                 self.log_output(f"[OK] Copied DPKG operations to: {dpkg_log}")
             
             # Create a master install log with key information
-            install_log = os.path.join(appdata_logs, 'kamiwaza_install_logs.txt')
+            install_log = os.path.join(appdata_logs, 'kamiwaza_about_install.txt')
             with open(install_log, 'w', encoding='utf-8') as f:
                 f.write(f"KAMIWAZA INSTALLATION LOG SUMMARY\n")
                 f.write(f"Installation Date: {timestamp}\n")
@@ -1971,7 +1971,7 @@ class HeadlessKamiwazaInstaller:
             # Show Windows log locations first (most accessible)
             appdata_logs = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'logs')
             self.log_output("WINDOWS LOG LOCATIONS (copied from WSL for easy access):")
-            self.log_output(f"  Installation logs: {appdata_logs}\\kamiwaza_install_logs.txt")
+            self.log_output(f"  Installation logs: {appdata_logs}\\kamiwaza_about_install.txt")
             self.log_output(f"  APT detailed logs: {appdata_logs}\\apt_term_log.txt")
             self.log_output(f"  APT history logs: {appdata_logs}\\apt_history_log.txt")
             self.log_output(f"  DPKG operations: {appdata_logs}\\dpkg_log.txt")
@@ -2938,11 +2938,11 @@ networkingMode=mirrored
             self.log_output(f"Warning: Error disabling IPv6: {e}")
             self.log_output("Continuing with installation anyway...")
 
-    def check_gui_manager_installed(self):
+    def check__manager_installed(self):
         """Check if GUI Manager is already installed"""
         try:
             # Check if GUI Manager EXE exists in AppData
-            appdata_gui = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'GUI', 'KamiwazaGUIManager.exe')
+            appdata_gui = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza', 'GUI', 'KamiwazaManager.exe')
             if os.path.exists(appdata_gui):
                 self.log_output("GUI Manager is already installed in AppData")
                 return True
