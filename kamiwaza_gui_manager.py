@@ -22,10 +22,11 @@ import json
 import datetime
 from pathlib import Path
 import webbrowser
+import time
 import pystray
 from PIL import Image, ImageDraw
 
-class KamiwazaGUIManager:
+class KamiwazaManager:
     def __init__(self, root):
         self.root = root
         self.root.title("Kamiwaza Manager")
@@ -51,6 +52,7 @@ class KamiwazaGUIManager:
         self.tray_icon = None
         self.status_timer = None
         self.is_minimized_to_tray = False
+        self.operation_in_progress = False  # Flag to prevent status monitoring override
         
         # Helper function for finding scripts in the correct location
         def find_script(script_name):
@@ -81,8 +83,8 @@ class KamiwazaGUIManager:
         # Auto-detect WSL distribution
         self.detect_wsl_distribution()
         
-        # Initial status check
-        self.check_kamiwaza_status()
+        # Initial status check (delayed to ensure GUI is ready)
+        self.root.after(500, self.check_kamiwaza_status)
 
     def create_widgets(self):
         """Create the main GUI widgets"""
@@ -619,8 +621,26 @@ class KamiwazaGUIManager:
     def start_kamiwaza(self):
         """Start Kamiwaza service"""
         def start_thread():
+            # Set operation in progress flag
+            self.operation_in_progress = True
+            
+            # Update tray icon title
+            if self.tray_icon:
+                self.tray_icon.title = "Kamiwaza Manager - Starting..."
+            
             self.switch_to_logs_tab()
-            self.run_wsl_command(['kamiwaza', 'start'], "Starting Kamiwaza service", 3600)
+            self.log_output("Starting Kamiwaza platform...", level="INFO")
+            success = self.run_wsl_command(['kamiwaza', 'start'], "Starting Kamiwaza service", 3600)
+            
+            # Update tray icon title based on result
+            if self.tray_icon:
+                if success:
+                    self.tray_icon.title = "Kamiwaza Manager - Running"
+                else:
+                    self.tray_icon.title = "Kamiwaza Manager - Stopped"
+            
+            # Clear operation in progress flag
+            self.operation_in_progress = False
             #self.check_kamiwaza_status()
         
         threading.Thread(target=start_thread, daemon=True).start()
@@ -628,8 +648,31 @@ class KamiwazaGUIManager:
     def stop_kamiwaza(self):
         """Stop Kamiwaza service"""
         def stop_thread():
+            # Set operation in progress flag
+            self.operation_in_progress = True
+            
+            # Update tray icon title
+            if self.tray_icon:
+                self.tray_icon.title = "Kamiwaza Manager - Stopping..."
+            
             self.switch_to_logs_tab()
-            self.run_wsl_command(['kamiwaza', 'stop'], "Stopping Kamiwaza service", 3600)
+            self.log_output("Stopping Kamiwaza platform...", level="INFO")
+            success = self.run_wsl_command(['kamiwaza', 'stop'], "Stopping Kamiwaza service", 3600)
+            
+            # Update tray icon title based on result
+            if self.tray_icon:
+                # Always wait a moment for processes to fully stop
+                time.sleep(2)
+                
+                # Check actual status to be sure
+                is_running = self.run_wsl_command_silent(['kamiwaza', 'status'])
+                if is_running:
+                    self.tray_icon.title = "Kamiwaza Manager - Running"
+                else:
+                    self.tray_icon.title = "Kamiwaza Manager - Stopped"
+            
+            # Clear operation in progress flag
+            self.operation_in_progress = False
             #self.check_kamiwaza_status()
         
         threading.Thread(target=stop_thread, daemon=True).start()
@@ -637,11 +680,30 @@ class KamiwazaGUIManager:
     def check_kamiwaza_status(self):
         """Check Kamiwaza service status"""
         def status_thread():
+            # Set operation in progress flag
+            self.operation_in_progress = True
+            
+            # Update tray icon title
+            if self.tray_icon:
+                self.tray_icon.title = "Kamiwaza Manager - Getting Status..."
+            
             self.switch_to_logs_tab()
+            self.log_output("Getting status...", level="INFO")
             self.run_wsl_command(['kamiwaza', 'status'], "Checking Kamiwaza status")
             
             # Check key Kamiwaza processes with better formatting
             self.check_kamiwaza_processes()
+            
+            # Update tray icon title based on actual status
+            if self.tray_icon:
+                is_running = self.run_wsl_command_silent(['kamiwaza', 'status'])
+                if is_running:
+                    self.tray_icon.title = "Kamiwaza Manager - Running"
+                else:
+                    self.tray_icon.title = "Kamiwaza Manager - Stopped"
+            
+            # Clear operation in progress flag
+            self.operation_in_progress = False
         
         threading.Thread(target=status_thread, daemon=True).start()
 
@@ -1124,8 +1186,8 @@ class KamiwazaGUIManager:
                     # Check status every 10 seconds
                     threading.Event().wait(10)
                     
-                    # Update tray icon tooltip based on status
-                    if self.tray_icon:
+                    # Only update tray icon if no operation is in progress
+                    if self.tray_icon and not self.operation_in_progress:
                         is_running = self.run_wsl_command_silent(['kamiwaza', 'status'])
                         if is_running:
                             self.tray_icon.title = "Kamiwaza Manager - Running"
@@ -1212,7 +1274,7 @@ def main():
     except:
         pass
     
-    app = KamiwazaGUIManager(root)
+    app = KamiwazaManager(root)
     
     # Center the window
     root.update_idletasks()
