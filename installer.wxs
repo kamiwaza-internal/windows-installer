@@ -38,8 +38,7 @@
         <Property Id="LICENSE_KEY" Secure="yes" />
         <Property Id="USAGE_REPORTING" Value="1" />
         <Property Id="INSTALL_MODE" Value="lite" />
-        <Property Id="LAUNCH_GUI" Value="0" />
-        <Property Id="AUTOSTART_TRAY" Value="1" />
+        <Property Id="LAUNCH_GUI" Value="1" />
         
         <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
         <WixVariable Id="WixUICostingPopupOptOut" Value="1" />
@@ -83,10 +82,9 @@
                         <File Id="KamiwazaStartBatch" Name="kamiwaza_start.bat" Source="kamiwaza_start.bat"/>
                         <File Id="KamiwazaStopBatch" Name="kamiwaza_stop.bat" Source="kamiwaza_stop.bat"/>
                         <File Id="CreateRunOnceBatch" Name="create_runonce.bat" Source="create_runonce.bat"/>
-
+                        <File Id="CreateAutostartRegistry" Name="create_autostart_registry.ps1" Source="create_autostart_registry.ps1"/>
                         <File Id="KamiwazaGUIManager" Name="KamiwazaGUIManager.exe" Source="KamiwazaGUIManager.exe"/>
                         <File Id="InstallGUIManager" Name="install_gui_manager.ps1" Source="install_gui_manager.ps1"/>
-
                         <RegistryValue Root="HKCU" Key="Software\Kamiwaza\Installer" Name="installed" Type="string" Value="1" KeyPath="yes"/>
                         <!-- Removes the entire Kamiwaza installation folder -->
                         <RemoveFolder Id="RemoveKamiwazaFolder" Directory="INSTALLFOLDER" On="uninstall"/>
@@ -161,11 +159,19 @@
                                  Icon="KamiwazaIcon"
                                  IconIndex="0" />
 
+                        <Shortcut Id="SetupAutostartShortcut" 
+                                 Name="Setup GPU Autostart" 
+                                 Description="Configure Kamiwaza to start automatically after system restart (for GPU acceleration)" 
+                                 Target="powershell.exe" 
+                                 Arguments="-ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]create_autostart_registry.ps1&quot;"
+                                 WorkingDirectory="INSTALLFOLDER"
+                                 Icon="KamiwazaIcon"
+                                 IconIndex="0" />
 
 
-                        <Shortcut Id="KamiwazaManagerShortcut" 
-                                 Name="Kamiwaza Manager" 
-                                 Description="Launch Kamiwaza Manager with System Tray" 
+                        <Shortcut Id="KamiwazaMonitorShortcut" 
+                                 Name="Kamiwaza Monitor" 
+                                 Description="Launch Kamiwaza Monitor - GUI Management Tool" 
                                  Target="[INSTALLFOLDER]KamiwazaGUIManager.exe"
                                  WorkingDirectory="INSTALLFOLDER"
                                  Icon="KamiwazaIcon"
@@ -218,33 +224,12 @@
                 
                 <!-- Installation Mode -->
                 <Control Id="ModeLabel" Type="Text" X="15" Y="140" Width="100" Height="12" NoPrefix="yes" Text="Installation Mode:" />
-                <Control Id="ModeCombo" Type="ComboBox" X="85" Y="140" Width="100" Height="18" Property="INSTALL_MODE" ComboList="yes">
-                    <ComboBox Property="INSTALL_MODE">
-                        <ListItem Text="Lite" Value="lite" />
-                        <ListItem Text="Full" Value="full" />
-                    </ComboBox>
-                </Control>
+                <Control Id="ModeCombo" Type="ComboBox" X="120" Y="140" Width="100" Height="18" Property="INSTALL_MODE" ComboList="yes" />
                 
                 <!-- Memory Configuration with Dropdown -->
-                <Control Id="MemoryLabel" Type="Text" X="15" Y="165" Width="140" Height="12" NoPrefix="yes" Text="Kamiwaza Dedicated Memory:" />
-                <Control Id="MemoryCombo" Type="ComboBox" X="160" Y="165" Width="100" Height="18" Property="WSLMEMORY" ComboList="yes" Sorted="no">
-                    <ComboBox Property="WSLMEMORY">
-                        <ListItem Text=" 4GB" Value="4GB" />
-                        <ListItem Text=" 6GB" Value="6GB" />
-                        <ListItem Text=" 8GB" Value="8GB" />
-                        <ListItem Text="10GB" Value="10GB" />
-                        <ListItem Text="12GB" Value="12GB" />
-                        <ListItem Text="14GB" Value="14GB" />
-                        <ListItem Text="16GB" Value="16GB" />
-                        <ListItem Text="20GB" Value="20GB" />
-                        <ListItem Text="24GB" Value="24GB" />
-                        <ListItem Text="28GB" Value="28GB" />
-                        <ListItem Text="32GB" Value="32GB" />
-                        <ListItem Text="48GB" Value="48GB" />
-                        <ListItem Text="64GB" Value="64GB" />
-                    </ComboBox>
-                </Control>
-                <Control Id="MemoryHelp" Type="Text" X="15" Y="185" Width="340" Height="24" NoPrefix="yes" Text="Select memory allocation for Kamiwaza. Higher values improve performance but use more system RAM. Your .wslconfig file will be automatically updated." />
+                <Control Id="MemoryLabel" Type="Text" X="15" Y="170" Width="140" Height="12" NoPrefix="yes" Text="Kamiwaza Dedicated Memory:" />
+                <Control Id="MemoryCombo" Type="ComboBox" X="160" Y="170" Width="100" Height="18" Property="WSLMEMORY" ComboList="yes" Sorted="no" />
+                <Control Id="MemoryHelp" Type="Text" X="15" Y="195" Width="340" Height="24" NoPrefix="yes" Text="Select memory allocation for Kamiwaza. Higher values improve performance but use more system RAM. Your .wslconfig file will be automatically updated." />
                 
                 <!-- Navigation buttons -->
                 <Control Id="Back" Type="PushButton" X="180" Y="273" Width="56" Height="17" Text="&amp;Back">
@@ -270,9 +255,6 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
                 
                 <!-- GUI Launch Checkbox -->
                 <Control Id="LaunchGUICheck" Type="CheckBox" X="15" Y="125" Width="340" Height="17" Property="LAUNCH_GUI" CheckBoxValue="1" Text="Launch Kamiwaza Diagnostic GUI when ready" />
-                
-                <!-- Tray Autostart Checkbox -->
-                <Control Id="TrayAutostartCheck" Type="CheckBox" X="15" Y="145" Width="340" Height="17" Property="AUTOSTART_TRAY" CheckBoxValue="1" Text="Start Kamiwaza System Tray automatically with Windows" />
                 
                 <Control Id="GUIHelp" Type="Text" X="15" Y="165" Width="340" Height="24" NoPrefix="yes" Text="The Diagnostic GUI will be installed by the Python installer. The System Tray provides quick access to Kamiwaza controls." />
                 
@@ -301,6 +283,28 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
             
             <!-- Require user confirmation for reboot - no automatic restarts -->
             <!-- Removed REBOOT and REBOOTPROMPT suppression to allow MSI to prompt when required -->
+            
+            <!-- ComboBox data definitions -->
+            <ComboBox Property="INSTALL_MODE">
+                <ListItem Text="Lite" Value="lite" />
+                <ListItem Text="Full" Value="full" />
+            </ComboBox>
+            
+            <ComboBox Property="WSLMEMORY">
+                <ListItem Text=" 4GB" Value="4GB" />
+                <ListItem Text=" 6GB" Value="6GB" />
+                <ListItem Text=" 8GB" Value="8GB" />
+                <ListItem Text="10GB" Value="10GB" />
+                <ListItem Text="12GB" Value="12GB" />
+                <ListItem Text="14GB" Value="14GB" />
+                <ListItem Text="16GB" Value="16GB" />
+                <ListItem Text="20GB" Value="20GB" />
+                <ListItem Text="24GB" Value="24GB" />
+                <ListItem Text="28GB" Value="28GB" />
+                <ListItem Text="32GB" Value="32GB" />
+                <ListItem Text="48GB" Value="48GB" />
+                <ListItem Text="64GB" Value="64GB" />
+            </ComboBox>
         </UI>
 
         <!-- Safety check to prevent automatic restarts -->
@@ -330,7 +334,12 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
         
         <!-- Reserve Kamiwaza ports on install -->
         <CustomAction Id="ReservePorts"
-                      ExeCommand='powershell.exe -Command "netsh int ipv4 add excludedportrange protocol=tcp startport=61100 numberofports=200 store=persistent 2>$null; if($?) { Write-Host \"Reserved ports 61100-61299\" } else { Write-Host \"Ports may already be reserved\" }"'
+                      ExeCommand='powershell.exe -Command "try { 
+        netsh int ipv4 add excludedportrange protocol=tcp startport=61100 numberofports=200 store=persistent | Out-Null
+        Write-Host \"Reserved ports 61100-61299 for Kamiwaza\"
+    } catch { 
+        Write-Host \"Warning: Could not reserve ports (may already be reserved)\"
+    }"'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="no"
@@ -346,29 +355,25 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
 
         <!-- Release Kamiwaza ports on uninstall -->
         <CustomAction Id="ReleasePorts"
-                      ExeCommand='powershell.exe -Command "netsh int ipv4 delete excludedportrange protocol=tcp startport=61100 numberofports=200 2>$null; if($?) { Write-Host \"Released ports 61100-61299\" } else { Write-Host \"Ports may not have been reserved\" }"'
+                      ExeCommand='powershell.exe -Command "try { 
+        netsh int ipv4 delete excludedportrange protocol=tcp startport=61100 numberofports=200 | Out-Null
+        Write-Host \"Released ports 61100-61299\"
+    } catch { 
+        Write-Host \"Warning: Could not release ports (may not have been reserved)\"
+    }"'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="no"
                       Return="ignore" />
 
-        <!-- Remove Kamiwaza Manager Autostart on uninstall -->
-        <CustomAction Id="RemoveManagerAutostart"
-                      ExeCommand='powershell.exe -Command "Remove-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"KamiwazaManager\" -ErrorAction SilentlyContinue; Write-Host \"Manager autostart removed\""'
+
+        <!-- Setup Autostart Registry Entry (alternative to Task Scheduler) -->
+        <CustomAction Id="SetupAutostartRegistry"
+                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "[INSTALLFOLDER]create_autostart_registry.ps1" ^> "$env:TEMP\kamiwaza_autostart.log" 2^>^&amp;1'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="yes"
                       Return="ignore" />
-
-        <!-- Remove RunOnce entry on uninstall -->
-        <CustomAction Id="RemoveRunOnce"
-                      ExeCommand='powershell.exe -Command "Remove-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce\" -Name \"KamiwazaContinueInstall\" -ErrorAction SilentlyContinue; Write-Host \"RunOnce entry removed\""'
-                      Directory="TARGETDIR"
-                      Execute="deferred"
-                      Impersonate="yes"
-                      Return="ignore" />
-
-
 
         <!-- Install Kamiwaza GUI Manager to AppData and Start Menu -->
         <CustomAction Id="InstallGUIManager"
@@ -378,29 +383,16 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
                       Impersonate="yes"
                       Return="ignore" />
 
-        <!-- Setup Kamiwaza Manager Autostart (Conditional) -->
-        <CustomAction Id="SetupManagerAutostart"
-                      ExeCommand='powershell.exe -Command "Set-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"KamiwazaManager\" -Value \"[INSTALLFOLDER]KamiwazaGUIManager.exe\" -Force; Write-Host \"Manager autostart configured\""'
-                      Directory="TARGETDIR"
-                      Execute="deferred"
-                      Impersonate="yes"
-                      Return="ignore" />
 
-        <!-- Setup RunOnce entry for continuing Kamiwaza installation after reboot -->
-        <CustomAction Id="SetupRunOnce"
-                      FileKey="CreateRunOnceBatch"
-                      ExeCommand="[INSTALLFOLDER] [WSLMEMORY] [USER_EMAIL] [LICENSE_KEY] [USAGE_REPORTING] [INSTALL_MODE]"
-                      Execute="deferred"
-                      Impersonate="yes"
-                      Return="ignore" />
-
-        <!-- Launch Kamiwaza Manager if requested -->
+        <!-- Launch Kamiwaza Diagnostic GUI if requested -->
         <CustomAction Id="LaunchDiagnosticGUI"
-                      ExeCommand='powershell.exe -Command "$p=Join-Path $env:LOCALAPPDATA \"Kamiwaza\\GUI\\KamiwazaGUIManager.exe\"; if (Test-Path $p) { Start-Process $p }"'
+                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -Command "try { $p=Join-Path $env:LOCALAPPDATA \"Kamiwaza\\GUI\\KamiwazaGUIManager.exe\"; if (Test-Path $p) { Start-Process $p } } catch { }"'
                       Directory="TARGETDIR"
                       Execute="immediate"
                       Impersonate="yes"
                       Return="ignore" />
+
+        <!-- Auto-launch is now always enabled -->
 
         <!-- Install Execute Sequence - automatically run Kamiwaza installation -->
         <InstallExecuteSequence>
@@ -409,19 +401,19 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
             <Custom Action="CheckRemotePC" After="ReservePorts">NOT REMOVE</Custom>
             <Custom Action="DetectGPUCmd" After="CheckRemotePC">NOT REMOVE</Custom>
             <Custom Action="RunKamiwazaInstaller" After="DetectGPUCmd">NOT REMOVE</Custom>
-            <Custom Action="InstallGUIManager" After="RunKamiwazaInstaller">NOT REMOVE</Custom>
-            <Custom Action="SetupRunOnce" After="InstallGUIManager">NOT REMOVE</Custom>
-            <Custom Action="SetupManagerAutostart" After="SetupRunOnce">NOT REMOVE AND AUTOSTART_TRAY = "1"</Custom>
-            <Custom Action="LaunchDiagnosticGUI" After="SetupManagerAutostart">NOT REMOVE AND LAUNCH_GUI = "1"</Custom>
-            <ScheduleReboot After="SetupManagerAutostart">NOT REMOVE</ScheduleReboot>
+            <Custom Action="SetupAutostartRegistry" After="RunKamiwazaInstaller">NOT REMOVE</Custom>
+            <Custom Action="InstallGUIManager" After="SetupAutostartRegistry">NOT REMOVE</Custom>
+            <Custom Action="LaunchDiagnosticGUI" After="InstallGUIManager">NOT REMOVE AND LAUNCH_GUI = "1"</Custom>
             
             <!-- Uninstall actions only -->
             <Custom Action="ComprehensiveCleanup" Before="RemoveFiles">Installed AND REMOVE</Custom>
-            <Custom Action="RemoveRunOnce" After="ComprehensiveCleanup">Installed AND REMOVE</Custom>
-            <Custom Action="RemoveManagerAutostart" After="RemoveRunOnce">Installed AND REMOVE</Custom>
-            <Custom Action="ReleasePorts" After="RemoveManagerAutostart">Installed AND REMOVE</Custom>
+            <Custom Action="ReleasePorts" After="RemoveFiles">Installed AND REMOVE</Custom>
             
             <!-- Note: Reboot is handled by user after complete installation -->
         </InstallExecuteSequence>
+
+
+        
+        <!-- Persistent autostart now handled by SetupAutostartRegistry (HKCU Run). Removing one-time RunOnce CA. -->
     </Product>
 </Wix> 

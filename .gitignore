@@ -30,4 +30,3 @@ nul
 embedded_python/
 kamiwaza_headless_installer_template.py.backup
 *.bmp
-test_installer.py

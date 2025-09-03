@@ -20,7 +20,7 @@ if "%1"=="--mock" (
 if "%1"=="--test-url" (
     if "%2"=="" (
         echo [ERROR] --test-url requires a URL parameter
-        echo Usage: build-test.bat --test-url https://example.com/test.deb
+        echo Usage: tests/build-test.bat --test-url https://example.com/test.deb
         exit /b 1
     )
     set TEST_DEB_URL=%2
