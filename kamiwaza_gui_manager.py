@@ -22,11 +22,13 @@ import json
 import datetime
 from pathlib import Path
 import webbrowser
+import pystray
+from PIL import Image, ImageDraw
 
 class KamiwazaGUIManager:
     def __init__(self, root):
         self.root = root
-        self.root.title("Kamiwaza GUI Manager")
+        self.root.title("Kamiwaza Manager")
         self.root.geometry("1000x800")  # Increased window size
         self.root.resizable(True, True)
         
@@ -44,6 +46,11 @@ class KamiwazaGUIManager:
         self.output_text = None
         self.all_buttons = []
         self._busy_count = 0
+        
+        # Tray icon variables
+        self.tray_icon = None
+        self.status_timer = None
+        self.is_minimized_to_tray = False
         
         # Helper function for finding scripts in the correct location
         def find_script(script_name):
@@ -65,6 +72,12 @@ class KamiwazaGUIManager:
         # Create the main interface
         self.create_widgets()
         
+        # Setup tray icon
+        self.setup_tray_icon()
+        
+        # Override window close behavior
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
         # Auto-detect WSL distribution
         self.detect_wsl_distribution()
         
@@ -84,7 +97,7 @@ class KamiwazaGUIManager:
         main_frame.rowconfigure(1, weight=1)
         
         # Title
-        title_label = ttk.Label(main_frame, text="Kamiwaza GUI Manager", 
+        title_label = ttk.Label(main_frame, text="Kamiwaza Manager", 
 						   style="Title.TLabel")
         title_label.grid(row=0, column=0, pady=(0, 12), sticky=tk.W)
         
@@ -1031,6 +1044,161 @@ class KamiwazaGUIManager:
         except Exception as e:
             self.log_output(f"Error testing WSL distribution: {e}", level="ERROR")
             self.status_var.set("WSL test failed")
+
+    # === TRAY ICON FUNCTIONALITY ===
+    
+    def setup_tray_icon(self):
+        """Setup system tray icon"""
+        try:
+            # Create icon image
+            icon_image = self.create_tray_icon_image()
+            
+            # Create menu items
+            menu = pystray.Menu(
+                pystray.MenuItem("Show Kamiwaza Manager", self.show_window),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Kamiwaza Status", self.tray_show_status),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Start Kamiwaza", self.tray_start_kamiwaza),
+                pystray.MenuItem("Stop Kamiwaza", self.tray_stop_kamiwaza),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Open Kamiwaza", self.tray_open_kamiwaza),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Exit", self.tray_quit)
+            )
+            
+            # Create tray icon
+            self.tray_icon = pystray.Icon(
+                "Kamiwaza",
+                icon_image,
+                "Kamiwaza Manager",
+                menu
+            )
+            
+            # Start tray icon in separate thread
+            tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
+            tray_thread.start()
+            
+            # Start status monitoring
+            self.start_status_monitoring()
+            
+        except Exception as e:
+            print(f"Failed to setup tray icon: {e}")
+    
+    def create_tray_icon_image(self):
+        """Create tray icon image"""
+        try:
+            # Try to load existing icon
+            icon_path = os.path.join(os.path.dirname(__file__), 'kamiwaza.ico')
+            if os.path.exists(icon_path):
+                return Image.open(icon_path)
+        except:
+            pass
+        
+        # Create simple fallback icon
+        try:
+            # Create a 64x64 image
+            image = Image.new('RGB', (64, 64), color='white')
+            draw = ImageDraw.Draw(image)
+            
+            # Draw blue circle
+            draw.ellipse([8, 8, 56, 56], fill='#2563eb')
+            
+            # Draw white "K"
+            try:
+                # Simple text drawing
+                draw.text((20, 20), "K", fill='white')
+            except:
+                pass
+            
+            return image
+        except:
+            # Ultimate fallback
+            return Image.new('RGB', (64, 64), color='blue')
+    
+    def start_status_monitoring(self):
+        """Start monitoring Kamiwaza status in background"""
+        def monitor():
+            while True:
+                try:
+                    # Check status every 10 seconds
+                    threading.Event().wait(10)
+                    
+                    # Update tray icon tooltip based on status
+                    if self.tray_icon:
+                        is_running = self.run_wsl_command_silent(['kamiwaza', 'status'])
+                        if is_running:
+                            self.tray_icon.title = "Kamiwaza Manager - Running"
+                        else:
+                            self.tray_icon.title = "Kamiwaza Manager - Stopped"
+                            
+                except Exception:
+                    pass
+        
+        monitor_thread = threading.Thread(target=monitor, daemon=True)
+        monitor_thread.start()
+    
+    def on_closing(self):
+        """Handle window close - minimize to tray instead of closing"""
+        self.minimize_to_tray()
+    
+    def minimize_to_tray(self):
+        """Minimize window to tray"""
+        self.root.withdraw()  # Hide window
+        self.is_minimized_to_tray = True
+        
+        # Show notification
+        if self.tray_icon:
+            self.tray_icon.notify("Kamiwaza Manager minimized to tray", "Click the tray icon to restore")
+    
+    def show_window(self, icon=None, item=None):
+        """Show the main window"""
+        self.root.deiconify()  # Show window
+        self.root.lift()  # Bring to front
+        self.root.focus_force()  # Focus
+        self.is_minimized_to_tray = False
+    
+    def tray_show_status(self, icon=None, item=None):
+        """Show status from tray"""
+        self.show_window()
+        self.check_kamiwaza_status()
+    
+    def tray_start_kamiwaza(self, icon=None, item=None):
+        """Start Kamiwaza from tray"""
+        self.start_kamiwaza()
+        if self.tray_icon:
+            self.tray_icon.notify("Starting Kamiwaza...", "Kamiwaza is starting up")
+    
+    def tray_stop_kamiwaza(self, icon=None, item=None):
+        """Stop Kamiwaza from tray"""
+        self.stop_kamiwaza()
+        if self.tray_icon:
+            self.tray_icon.notify("Stopping Kamiwaza...", "Kamiwaza is shutting down")
+    
+    def tray_open_kamiwaza(self, icon=None, item=None):
+        """Open Kamiwaza in browser from tray"""
+        self.go_to_ui()
+    
+    def tray_quit(self, icon=None, item=None):
+        """Quit application from tray"""
+        self.quit_application()
+    
+    def quit_application(self):
+        """Quit the application completely"""
+        try:
+            if self.tray_icon:
+                self.tray_icon.stop()
+        except:
+            pass
+        
+        try:
+            self.root.quit()
+            self.root.destroy()
+        except:
+            pass
+        
+        # Force exit
+        os._exit(0)
 
 def main():
     """Main entry point"""

@@ -62,7 +62,6 @@ try {
         if ($LASTEXITCODE -eq 0) {
             Write-Host "Successfully removed kamiwaza package from kamiwaza" -ForegroundColor Green
         } else {
-            Write-Host "Warning: Could not remove kamiwaza package from kamiwaza (may not be installed or instance not accessible)" -ForegroundColor Yellow
             Write-Verbose "Remove command output: $removeResult"
             
             # Try alternative package removal methods
