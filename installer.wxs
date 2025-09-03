@@ -83,7 +83,7 @@
                         <File Id="KamiwazaStartBatch" Name="kamiwaza_start.bat" Source="kamiwaza_start.bat"/>
                         <File Id="KamiwazaStopBatch" Name="kamiwaza_stop.bat" Source="kamiwaza_stop.bat"/>
                         <File Id="CreateRunOnceBatch" Name="create_runonce.bat" Source="create_runonce.bat"/>
-                        <File Id="CreateAutostartRegistry" Name="create_autostart_registry.ps1" Source="create_autostart_registry.ps1"/>
+
                         <File Id="KamiwazaGUIManager" Name="KamiwazaGUIManager.exe" Source="KamiwazaGUIManager.exe"/>
                         <File Id="InstallGUIManager" Name="install_gui_manager.ps1" Source="install_gui_manager.ps1"/>
 
@@ -161,14 +161,7 @@
                                  Icon="KamiwazaIcon"
                                  IconIndex="0" />
 
-                        <Shortcut Id="SetupAutostartShortcut" 
-                                 Name="Setup GPU Autostart" 
-                                 Description="Configure Kamiwaza to start automatically after system restart (for GPU acceleration)" 
-                                 Target="powershell.exe" 
-                                 Arguments="-ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]create_autostart_registry.ps1&quot;"
-                                 WorkingDirectory="INSTALLFOLDER"
-                                 Icon="KamiwazaIcon"
-                                 IconIndex="0" />
+
 
                         <Shortcut Id="KamiwazaManagerShortcut" 
                                  Name="Kamiwaza Manager" 
@@ -337,12 +330,7 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
         
         <!-- Reserve Kamiwaza ports on install -->
         <CustomAction Id="ReservePorts"
-                      ExeCommand='powershell.exe -Command "try { 
-        netsh int ipv4 add excludedportrange protocol=tcp startport=61100 numberofports=200 store=persistent | Out-Null
-        Write-Host \"Reserved ports 61100-61299 for Kamiwaza\"
-    } catch { 
-        Write-Host \"Warning: Could not reserve ports (may already be reserved)\"
-    }"'
+                      ExeCommand='powershell.exe -Command "netsh int ipv4 add excludedportrange protocol=tcp startport=61100 numberofports=200 store=persistent 2>$null; if($?) { Write-Host \"Reserved ports 61100-61299\" } else { Write-Host \"Ports may already be reserved\" }"'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="no"
@@ -358,12 +346,7 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
 
         <!-- Release Kamiwaza ports on uninstall -->
         <CustomAction Id="ReleasePorts"
-                      ExeCommand='powershell.exe -Command "try { 
-        netsh int ipv4 delete excludedportrange protocol=tcp startport=61100 numberofports=200 | Out-Null
-        Write-Host \"Released ports 61100-61299\"
-    } catch { 
-        Write-Host \"Warning: Could not release ports (may not have been reserved)\"
-    }"'
+                      ExeCommand='powershell.exe -Command "netsh int ipv4 delete excludedportrange protocol=tcp startport=61100 numberofports=200 2>$null; if($?) { Write-Host \"Released ports 61100-61299\" } else { Write-Host \"Ports may not have been reserved\" }"'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="no"
@@ -371,19 +354,21 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
 
         <!-- Remove Kamiwaza Manager Autostart on uninstall -->
         <CustomAction Id="RemoveManagerAutostart"
-                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -Command "try { Remove-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"KamiwazaManager\" -ErrorAction SilentlyContinue; echo \"Manager autostart removed\" } catch { echo \"Error removing manager autostart: $_\" }"'
+                      ExeCommand='powershell.exe -Command "Remove-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"KamiwazaManager\" -ErrorAction SilentlyContinue; Write-Host \"Manager autostart removed\""'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="yes"
                       Return="ignore" />
 
-        <!-- Setup Autostart Registry Entry (alternative to Task Scheduler) -->
-        <CustomAction Id="SetupAutostartRegistry"
-                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "[INSTALLFOLDER]create_autostart_registry.ps1" ^> "$env:TEMP\kamiwaza_autostart.log" 2^>^&amp;1'
+        <!-- Remove RunOnce entry on uninstall -->
+        <CustomAction Id="RemoveRunOnce"
+                      ExeCommand='powershell.exe -Command "Remove-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce\" -Name \"KamiwazaContinueInstall\" -ErrorAction SilentlyContinue; Write-Host \"RunOnce entry removed\""'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="yes"
                       Return="ignore" />
+
+
 
         <!-- Install Kamiwaza GUI Manager to AppData and Start Menu -->
         <CustomAction Id="InstallGUIManager"
@@ -395,21 +380,27 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
 
         <!-- Setup Kamiwaza Manager Autostart (Conditional) -->
         <CustomAction Id="SetupManagerAutostart"
-                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "try { $RegPath = \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\"; $RegName = \"KamiwazaManager\"; $RegValue = \"[INSTALLFOLDER]KamiwazaGUIManager.exe\"; Set-ItemProperty -Path $RegPath -Name $RegName -Value $RegValue -Force; Write-Host \"Manager autostart configured\" } catch { Write-Host \"Error configuring manager autostart: $_\" }"'
+                      ExeCommand='powershell.exe -Command "Set-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"KamiwazaManager\" -Value \"[INSTALLFOLDER]KamiwazaGUIManager.exe\" -Force; Write-Host \"Manager autostart configured\""'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="yes"
                       Return="ignore" />
 
-        <!-- Launch Kamiwaza Diagnostic GUI if requested -->
+        <!-- Setup RunOnce entry for continuing Kamiwaza installation after reboot -->
+        <CustomAction Id="SetupRunOnce"
+                      FileKey="CreateRunOnceBatch"
+                      ExeCommand="[INSTALLFOLDER] [WSLMEMORY] [USER_EMAIL] [LICENSE_KEY] [USAGE_REPORTING] [INSTALL_MODE]"
+                      Execute="deferred"
+                      Impersonate="yes"
+                      Return="ignore" />
+
+        <!-- Launch Kamiwaza Manager if requested -->
         <CustomAction Id="LaunchDiagnosticGUI"
-                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -Command "try { $p=Join-Path $env:LOCALAPPDATA \"Kamiwaza\\GUI\\KamiwazaGUIManager.exe\"; if (Test-Path $p) { Start-Process $p } } catch { }"'
+                      ExeCommand='powershell.exe -Command "$p=Join-Path $env:LOCALAPPDATA \"Kamiwaza\\GUI\\KamiwazaGUIManager.exe\"; if (Test-Path $p) { Start-Process $p }"'
                       Directory="TARGETDIR"
                       Execute="immediate"
                       Impersonate="yes"
                       Return="ignore" />
-
-        <!-- Auto-launch is now always enabled -->
 
         <!-- Install Execute Sequence - automatically run Kamiwaza installation -->
         <InstallExecuteSequence>
@@ -418,22 +409,19 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
             <Custom Action="CheckRemotePC" After="ReservePorts">NOT REMOVE</Custom>
             <Custom Action="DetectGPUCmd" After="CheckRemotePC">NOT REMOVE</Custom>
             <Custom Action="RunKamiwazaInstaller" After="DetectGPUCmd">NOT REMOVE</Custom>
-            <Custom Action="SetupAutostartRegistry" After="RunKamiwazaInstaller">NOT REMOVE</Custom>
-            <Custom Action="InstallGUIManager" After="SetupAutostartRegistry">NOT REMOVE</Custom>
-            <Custom Action="SetupManagerAutostart" After="InstallGUIManager">NOT REMOVE AND AUTOSTART_TRAY = "1"</Custom>
+            <Custom Action="InstallGUIManager" After="RunKamiwazaInstaller">NOT REMOVE</Custom>
+            <Custom Action="SetupRunOnce" After="InstallGUIManager">NOT REMOVE</Custom>
+            <Custom Action="SetupManagerAutostart" After="SetupRunOnce">NOT REMOVE AND AUTOSTART_TRAY = "1"</Custom>
             <Custom Action="LaunchDiagnosticGUI" After="SetupManagerAutostart">NOT REMOVE AND LAUNCH_GUI = "1"</Custom>
             <ScheduleReboot After="SetupManagerAutostart">NOT REMOVE</ScheduleReboot>
             
             <!-- Uninstall actions only -->
             <Custom Action="ComprehensiveCleanup" Before="RemoveFiles">Installed AND REMOVE</Custom>
-            <Custom Action="RemoveManagerAutostart" After="ComprehensiveCleanup">Installed AND REMOVE</Custom>
+            <Custom Action="RemoveRunOnce" After="ComprehensiveCleanup">Installed AND REMOVE</Custom>
+            <Custom Action="RemoveManagerAutostart" After="RemoveRunOnce">Installed AND REMOVE</Custom>
             <Custom Action="ReleasePorts" After="RemoveManagerAutostart">Installed AND REMOVE</Custom>
             
             <!-- Note: Reboot is handled by user after complete installation -->
         </InstallExecuteSequence>
-
-
-        
-        <!-- Persistent autostart now handled by SetupAutostartRegistry (HKCU Run). Removing one-time RunOnce CA. -->
     </Product>
 </Wix> 
