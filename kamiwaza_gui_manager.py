@@ -22,11 +22,14 @@ import json
 import datetime
 from pathlib import Path
 import webbrowser
+import time
+import pystray
+from PIL import Image, ImageDraw
 
-class KamiwazaGUIManager:
+class KamiwazaManager:
     def __init__(self, root):
         self.root = root
-        self.root.title("Kamiwaza GUI Manager")
+        self.root.title("Kamiwaza Manager")
         self.root.geometry("1000x800")  # Increased window size
         self.root.resizable(True, True)
         
@@ -44,6 +47,12 @@ class KamiwazaGUIManager:
         self.output_text = None
         self.all_buttons = []
         self._busy_count = 0
+        
+        # Tray icon variables
+        self.tray_icon = None
+        self.status_timer = None
+        self.is_minimized_to_tray = False
+        self.operation_in_progress = False  # Flag to prevent status monitoring override
         
         # Helper function for finding scripts in the correct location
         def find_script(script_name):
@@ -65,11 +74,17 @@ class KamiwazaGUIManager:
         # Create the main interface
         self.create_widgets()
         
+        # Setup tray icon
+        self.setup_tray_icon()
+        
+        # Override window close behavior
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
         # Auto-detect WSL distribution
         self.detect_wsl_distribution()
         
-        # Initial status check
-        self.check_kamiwaza_status()
+        # Initial status check (delayed to ensure GUI is ready)
+        self.root.after(500, self.check_kamiwaza_status)
 
     def create_widgets(self):
         """Create the main GUI widgets"""
@@ -80,22 +95,38 @@ class KamiwazaGUIManager:
         # Configure grid weights
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(6, weight=1)
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(1, weight=1)
         
         # Title
-        title_label = ttk.Label(main_frame, text="Kamiwaza GUI Manager", 
+        title_label = ttk.Label(main_frame, text="Kamiwaza Manager", 
 						   style="Title.TLabel")
-        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 12), sticky=tk.W)
+        title_label.grid(row=0, column=0, pady=(0, 12), sticky=tk.W)
+        
+        # Notebook with tabs
+        self.notebook = ttk.Notebook(main_frame)
+        self.notebook.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        tab_home = ttk.Frame(self.notebook, padding=10)
+        tab_advanced = ttk.Frame(self.notebook, padding=10)
+        tab_logs = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(tab_home, text="Home")
+        self.notebook.add(tab_advanced, text="Advanced")
+        self.notebook.add(tab_logs, text="Logs")
+        
+        # Home tab layout
+        tab_home.columnconfigure(0, weight=1)
+        tab_home.rowconfigure(3, weight=1)
         
         # WSL Distribution Selection
-        dist_frame = ttk.LabelFrame(main_frame, text="WSL Distribution", padding="10", style="Card.TLabelframe")
-        dist_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        dist_frame = ttk.LabelFrame(tab_home, text="WSL Distribution", padding="10", style="Card.TLabelframe")
+        dist_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         
         ttk.Label(dist_frame, text="Distribution:").grid(row=0, column=0, padx=(0, 10))
         self.dist_var = tk.StringVar(value=self.wsl_distribution)
-        dist_entry = ttk.Entry(dist_frame, textvariable=self.dist_var, width=24)
-        dist_entry.grid(row=0, column=1, padx=(0, 10))
+        # Modern dropdown (read-only) for distro selection
+        self.dist_combo = ttk.Combobox(dist_frame, textvariable=self.dist_var, width=24, state="readonly", values=[])
+        self.dist_combo.grid(row=0, column=1, padx=(0, 10))
         
         btn_detect = ttk.Button(dist_frame, text="Detect", command=self.detect_wsl_distribution)
         btn_detect.grid(row=0, column=2, padx=(0, 10))
@@ -109,12 +140,17 @@ class KamiwazaGUIManager:
         btn_test.grid(row=0, column=4)
         self.all_buttons.append(btn_test)
         
+        # Access WSL visible terminal
+        btn_access_wsl = ttk.Button(dist_frame, text="Access WSL", command=self.access_wsl_terminal)
+        btn_access_wsl.grid(row=0, column=5, padx=(10, 0))
+        self.all_buttons.append(btn_access_wsl)
+        
         # Distribution validation
         self.dist_var.trace('w', self.validate_distribution)
         
         # Quick Actions
-        quick_frame = ttk.LabelFrame(main_frame, text="Quick Actions", padding="10", style="Card.TLabelframe")
-        quick_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        quick_frame = ttk.LabelFrame(tab_home, text="Quick Actions", padding="10", style="Card.TLabelframe")
+        quick_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         
         btn_start = ttk.Button(quick_frame, text="Start Kamiwaza", command=self.start_kamiwaza)
         btn_start.grid(row=0, column=0, padx=6, pady=6, sticky=(tk.W, tk.E))
@@ -127,25 +163,49 @@ class KamiwazaGUIManager:
         btn_status = ttk.Button(quick_frame, text="Kamiwaza Status", command=self.check_kamiwaza_status)
         btn_status.grid(row=0, column=2, padx=6, pady=6, sticky=(tk.W, tk.E))
         self.all_buttons.append(btn_status)
-        btn_go_ui = ttk.Button(quick_frame, text="Go to UI", command=self.go_to_ui)
-        btn_go_ui.grid(row=0, column=4, padx=6, pady=6, sticky=(tk.W, tk.E))
-        self.all_buttons.append(btn_go_ui)
-        
-        btn_go_api = ttk.Button(quick_frame, text="Go to API", command=self.go_to_api)
-        btn_go_api.grid(row=0, column=5, padx=6, pady=6, sticky=(tk.W, tk.E))
-        self.all_buttons.append(btn_go_api)
         
         btn_logs = ttk.Button(quick_frame, text="View Logs", command=self.view_kamiwaza_logs)
         btn_logs.grid(row=0, column=3, padx=6, pady=6, sticky=(tk.W, tk.E))
         self.all_buttons.append(btn_logs)
         
-        
-        for i in range(6):
+        for i in range(4):
             quick_frame.columnconfigure(i, weight=1)
         
+        # Web Navigation row
+        web_frame = ttk.LabelFrame(tab_home, text="Web Access", padding="10", style="Card.TLabelframe")
+        web_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        btn_go_ui = ttk.Button(web_frame, text="Go to UI", command=self.go_to_ui)
+        btn_go_ui.grid(row=0, column=0, padx=6, pady=6, sticky=(tk.W, tk.E))
+        self.all_buttons.append(btn_go_ui)
+        
+        btn_go_api = ttk.Button(web_frame, text="Go to API", command=self.go_to_api)
+        btn_go_api.grid(row=0, column=1, padx=6, pady=6, sticky=(tk.W, tk.E))
+        self.all_buttons.append(btn_go_api)
+        
+        for i in range(2):
+            web_frame.columnconfigure(i, weight=1)
+        
+        # Advanced tab
+        tab_advanced.columnconfigure(0, weight=1)
+        
+        advanced_frame = ttk.LabelFrame(tab_advanced, text="Advanced", padding="10", style="Card.TLabelframe")
+        advanced_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        btn_fix = ttk.Button(advanced_frame, text="Fix WSL Issues", command=self.fix_wsl_issues)
+        btn_fix.grid(row=0, column=0, padx=6, pady=6, sticky=(tk.W, tk.E))
+        self.all_buttons.append(btn_fix)
+        
+        btn_open_appdata = ttk.Button(advanced_frame, text="Open AppData", command=self.open_appdata_folder)
+        btn_open_appdata.grid(row=0, column=1, padx=6, pady=6, sticky=(tk.W, tk.E))
+        self.all_buttons.append(btn_open_appdata)
+        
+        for i in range(2):
+            advanced_frame.columnconfigure(i, weight=1)
+        
         # GPU & WSL
-        gpu_frame = ttk.LabelFrame(main_frame, text="GPU & WSL", padding="10", style="Card.TLabelframe")
-        gpu_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        gpu_frame = ttk.LabelFrame(tab_advanced, text="GPU & WSL", padding="10", style="Card.TLabelframe")
+        gpu_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         
         btn_gpu_detect = ttk.Button(gpu_frame, text="GPU Detection & Status", command=self.run_gpu_detection)
         btn_gpu_detect.grid(row=0, column=0, padx=6, pady=6, sticky=(tk.W, tk.E))
@@ -162,24 +222,8 @@ class KamiwazaGUIManager:
         for i in range(3):
             gpu_frame.columnconfigure(i, weight=1)
         
-        # Advanced
-        advanced_frame = ttk.LabelFrame(main_frame, text="Advanced", padding="10", style="Card.TLabelframe")
-        advanced_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
-        
-        btn_fix = ttk.Button(advanced_frame, text="Fix WSL Issues", command=self.fix_wsl_issues)
-        btn_fix.grid(row=0, column=0, padx=6, pady=6, sticky=(tk.W, tk.E))
-        self.all_buttons.append(btn_fix)
-        
-        btn_open_appdata = ttk.Button(advanced_frame, text="Open AppData", command=self.open_appdata_folder)
-        btn_open_appdata.grid(row=0, column=1, padx=6, pady=6, sticky=(tk.W, tk.E))
-        self.all_buttons.append(btn_open_appdata)
-        
-        for i in range(2):
-            advanced_frame.columnconfigure(i, weight=1)
-        
-        # Danger Zone (Destructive)
-        danger_frame = ttk.LabelFrame(main_frame, text="Danger Zone (Destructive)", padding="10", style="Card.TLabelframe")
-        danger_frame.grid(row=5, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        danger_frame = ttk.LabelFrame(tab_advanced, text="Danger Zone (Destructive)", padding="10", style="Card.TLabelframe")
+        danger_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         
         btn_reinstall = ttk.Button(danger_frame, text="Reinstall Kamiwaza", command=self.reinstall_kamiwaza)
         btn_reinstall.grid(row=0, column=0, padx=6, pady=6, sticky=(tk.W, tk.E))
@@ -192,9 +236,12 @@ class KamiwazaGUIManager:
         for i in range(2):
             danger_frame.columnconfigure(i, weight=1)
         
-        # Output area
-        output_frame = ttk.LabelFrame(main_frame, text="Output & Logs", padding="10", style="Card.TLabelframe")
-        output_frame.grid(row=6, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
+        # Logs tab
+        tab_logs.columnconfigure(0, weight=1)
+        tab_logs.rowconfigure(0, weight=1)
+        
+        output_frame = ttk.LabelFrame(tab_logs, text="Output & Logs", padding="10", style="Card.TLabelframe")
+        output_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         output_frame.columnconfigure(0, weight=1)
         output_frame.rowconfigure(0, weight=1)
         
@@ -231,7 +278,7 @@ class KamiwazaGUIManager:
         # Status bar with progress indicator
         self.status_var = tk.StringVar(value="Ready")
         status_bar = ttk.Frame(main_frame)
-        status_bar.grid(row=7, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(10, 0))
+        status_bar.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(10, 0))
         
         lbl_status = ttk.Label(status_bar, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
         lbl_status.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -256,9 +303,25 @@ class KamiwazaGUIManager:
         except Exception:
             pass
         
+        # Palette
+        accent = "#2563eb"
+        accent_active = "#1d4ed8"
+        danger = "#b91c1c"
+        danger_active = "#991b1b"
+        secondary_bg = "#e5e7eb"
+        secondary_active = "#d1d5db"
+        text_dark = "#111827"
+        
         style.configure("Title.TLabel", font=("Segoe UI", 16, "bold"))
         style.configure("Card.TLabelframe", padding=12)
         style.configure("Card.TLabelframe.Label", font=("Segoe UI", 10, "bold"))
+
+    def switch_to_logs_tab(self):
+        """Switch to the logs tab to monitor results"""
+        try:
+            self.notebook.select(2)  # Select the logs tab (index 2)
+        except Exception:
+            pass
 
     def _enter_busy(self, message):
         self._busy_count += 1
@@ -307,7 +370,8 @@ class KamiwazaGUIManager:
         
         try:
             # Use utf-8 encoding to avoid Unicode decode errors
-            result = subprocess.run(command, capture_output=True, text=True, timeout=timeout, encoding='utf-8', errors='replace')
+            kwargs = self._get_subprocess_kwargs(visible=False)
+            result = subprocess.run(command, capture_output=True, text=True, timeout=timeout, encoding='utf-8', errors='replace', **kwargs)
             
             if result.stdout:
                 for line in result.stdout.strip().split('\n'):
@@ -354,10 +418,78 @@ class KamiwazaGUIManager:
                 return False
             
             wsl_cmd = ['wsl', '-d', clean_dist, '--'] + command
-            result = subprocess.run(wsl_cmd, capture_output=True, text=True, timeout=timeout, encoding='utf-8', errors='replace')
+            kwargs = self._get_subprocess_kwargs(visible=False)
+            result = subprocess.run(wsl_cmd, capture_output=True, text=True, timeout=timeout, encoding='utf-8', errors='replace', **kwargs)
             return result.returncode == 0
         except Exception:
             return False
+
+    # Helpers for Windows subprocess window behavior and WSL shell pipelines
+    def _get_subprocess_kwargs(self, visible=False, new_console=False):
+        kwargs = {}
+        if os.name == 'nt':
+            try:
+                startupinfo = subprocess.STARTUPINFO()
+                if not visible:
+                    # Hide window
+                    startupinfo.dwFlags |= getattr(subprocess, 'STARTF_USESHOWWINDOW', 1)
+                    startupinfo.wShowWindow = 0  # SW_HIDE
+                kwargs['startupinfo'] = startupinfo
+                creationflags = 0
+                if not visible:
+                    creationflags |= getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+                if new_console:
+                    creationflags |= getattr(subprocess, 'CREATE_NEW_CONSOLE', 0x00000010)
+                if creationflags:
+                    kwargs['creationflags'] = creationflags
+            except Exception:
+                pass
+        return kwargs
+
+    def run_wsl_shell_command(self, cmd_str, description, timeout=60):
+        """Run a WSL command string through bash -lc so pipes, redirects work"""
+        clean_dist = self.wsl_distribution.strip()
+        if not clean_dist or len(clean_dist) < 2:
+            self.log_output(f"Invalid WSL distribution name: '{clean_dist}'", level="ERROR")
+            return False
+        wsl_cmd = ['wsl', '-d', clean_dist, '--', 'bash', '-lc', cmd_str]
+        return self.run_command(wsl_cmd, description, timeout)
+
+    def run_wsl_shell_command_silent(self, cmd_str, timeout=30):
+        """Run a WSL shell command silently and return True/False"""
+        try:
+            clean_dist = self.wsl_distribution.strip()
+            if not clean_dist or len(clean_dist) < 2:
+                return False
+            wsl_cmd = ['wsl', '-d', clean_dist, '--', 'bash', '-lc', cmd_str]
+            kwargs = self._get_subprocess_kwargs(visible=False)
+            result = subprocess.run(wsl_cmd, capture_output=True, text=True, timeout=timeout, encoding='utf-8', errors='replace', **kwargs)
+            return result.returncode == 0
+        except Exception:
+            return False
+
+    def access_wsl_terminal(self):
+        """Open a visible terminal for the selected WSL distribution"""
+        clean_dist = self.wsl_distribution.strip()
+        if not clean_dist or len(clean_dist) < 2:
+            self.log_output("Invalid WSL distribution name", level="ERROR")
+            return
+        self._enter_busy("Opening WSL terminal")
+        try:
+            # Prefer Windows Terminal if available
+            try:
+                kwargs = self._get_subprocess_kwargs(visible=True, new_console=True)
+                subprocess.Popen(['wt.exe', '-w', 0, 'wsl', '-d', clean_dist], **kwargs)
+                self.log_output("Opened Windows Terminal for WSL", level="SUCCESS")
+            except Exception:
+                # Fallback to PowerShell
+                kwargs = self._get_subprocess_kwargs(visible=True, new_console=True)
+                subprocess.Popen(['powershell.exe', '-NoExit', '-Command', f"wsl -d {clean_dist}"], **kwargs)
+                self.log_output("Opened PowerShell for WSL", level="SUCCESS")
+        except Exception as e:
+            self.log_output(f"Failed to open WSL terminal: {e}", level="ERROR")
+        finally:
+            self._leave_busy()
 
     def detect_wsl_distribution(self):
         """Auto-detect available WSL distributions"""
@@ -397,6 +529,11 @@ class KamiwazaGUIManager:
                     self.detect_wsl_distribution_verbose()
                     return
                 
+                # Update dropdown values and selection
+                try:
+                    self.dist_combo['values'] = distributions
+                except Exception:
+                    pass
                 self.dist_var.set(self.wsl_distribution)
                 self.log_output(f"Selected distribution: {self.wsl_distribution}", level="SUCCESS")
                 
@@ -453,6 +590,11 @@ class KamiwazaGUIManager:
                 else:
                     self.wsl_distribution = 'kamiwaza'  # Default
                 
+                # Update dropdown values and selection
+                try:
+                    self.dist_combo['values'] = distributions
+                except Exception:
+                    pass
                 self.dist_var.set(self.wsl_distribution)
                 self.log_output(f"Selected distribution: {self.wsl_distribution}", level="SUCCESS")
                 
@@ -479,7 +621,26 @@ class KamiwazaGUIManager:
     def start_kamiwaza(self):
         """Start Kamiwaza service"""
         def start_thread():
-            self.run_wsl_command(['kamiwaza', 'start'], "Starting Kamiwaza service")
+            # Set operation in progress flag
+            self.operation_in_progress = True
+            
+            # Update tray icon title
+            if self.tray_icon:
+                self.tray_icon.title = "Kamiwaza Manager - Starting..."
+            
+            self.switch_to_logs_tab()
+            self.log_output("Starting Kamiwaza platform...", level="INFO")
+            success = self.run_wsl_command(['kamiwaza', 'start'], "Starting Kamiwaza service", 3600)
+            
+            # Update tray icon title based on result
+            if self.tray_icon:
+                if success:
+                    self.tray_icon.title = "Kamiwaza Manager - Running"
+                else:
+                    self.tray_icon.title = "Kamiwaza Manager - Stopped"
+            
+            # Clear operation in progress flag
+            self.operation_in_progress = False
             #self.check_kamiwaza_status()
         
         threading.Thread(target=start_thread, daemon=True).start()
@@ -487,7 +648,31 @@ class KamiwazaGUIManager:
     def stop_kamiwaza(self):
         """Stop Kamiwaza service"""
         def stop_thread():
-            self.run_wsl_command(['kamiwaza', 'stop'], "Stopping Kamiwaza service")
+            # Set operation in progress flag
+            self.operation_in_progress = True
+            
+            # Update tray icon title
+            if self.tray_icon:
+                self.tray_icon.title = "Kamiwaza Manager - Stopping..."
+            
+            self.switch_to_logs_tab()
+            self.log_output("Stopping Kamiwaza platform...", level="INFO")
+            success = self.run_wsl_command(['kamiwaza', 'stop'], "Stopping Kamiwaza service", 3600)
+            
+            # Update tray icon title based on result
+            if self.tray_icon:
+                # Always wait a moment for processes to fully stop
+                time.sleep(2)
+                
+                # Check actual status to be sure
+                is_running = self.run_wsl_command_silent(['kamiwaza', 'status'])
+                if is_running:
+                    self.tray_icon.title = "Kamiwaza Manager - Running"
+                else:
+                    self.tray_icon.title = "Kamiwaza Manager - Stopped"
+            
+            # Clear operation in progress flag
+            self.operation_in_progress = False
             #self.check_kamiwaza_status()
         
         threading.Thread(target=stop_thread, daemon=True).start()
@@ -495,10 +680,30 @@ class KamiwazaGUIManager:
     def check_kamiwaza_status(self):
         """Check Kamiwaza service status"""
         def status_thread():
+            # Set operation in progress flag
+            self.operation_in_progress = True
+            
+            # Update tray icon title
+            if self.tray_icon:
+                self.tray_icon.title = "Kamiwaza Manager - Getting Status..."
+            
+            self.switch_to_logs_tab()
+            self.log_output("Getting status...", level="INFO")
             self.run_wsl_command(['kamiwaza', 'status'], "Checking Kamiwaza status")
             
             # Check key Kamiwaza processes with better formatting
             self.check_kamiwaza_processes()
+            
+            # Update tray icon title based on actual status
+            if self.tray_icon:
+                is_running = self.run_wsl_command_silent(['kamiwaza', 'status'])
+                if is_running:
+                    self.tray_icon.title = "Kamiwaza Manager - Running"
+                else:
+                    self.tray_icon.title = "Kamiwaza Manager - Stopped"
+            
+            # Clear operation in progress flag
+            self.operation_in_progress = False
         
         threading.Thread(target=status_thread, daemon=True).start()
 
@@ -545,22 +750,22 @@ class KamiwazaGUIManager:
             # Show a summary of key processes
             self.run_wsl_command(['ps', 'h', '-o', 'pid,ppid,cmd', '-C', 'python'], "Python processes summary")
             
-            # Check if specific ports are listening
-            https_result = self.run_wsl_command_silent(['netstat', '-tlnp', '2>/dev/null', '|', 'grep', ':443'])
+            # Check if specific ports are listening (via shell so pipes work)
+            https_result = self.run_wsl_shell_command_silent('netstat -tlnp 2>/dev/null | grep :443')
             results['https'] = https_result
             if https_result:
                 self.log_output("[OK] HTTPS port (443) is listening", level="SUCCESS")
             else:
                 self.log_output("✗ HTTPS port (443) not listening", level="ERROR")
             
-            api_result = self.run_wsl_command_silent(['netstat', '-tlnp', '2>/dev/null', '|', 'grep', ':7777'])
+            api_result = self.run_wsl_shell_command_silent('netstat -tlnp 2>/dev/null | grep :7777')
             results['api'] = api_result
             if api_result:
                 self.log_output("[OK] API port (7777) is listening", level="SUCCESS")
             else:
                 self.log_output("✗ API port (7777) not listening", level="ERROR")
             
-            ray_dashboard_result = self.run_wsl_command_silent(['netstat', '-tlnp', '2>/dev/null', '|', 'grep', ':8265'])
+            ray_dashboard_result = self.run_wsl_shell_command_silent('netstat -tlnp 2>/dev/null | grep :8265')
             results['ray_dashboard'] = ray_dashboard_result
             if ray_dashboard_result:
                 self.log_output("[OK] Ray dashboard port (8265) is listening", level="SUCCESS")
@@ -641,6 +846,7 @@ class KamiwazaGUIManager:
     def run_gpu_detection(self):
         """Run GPU detection and show status"""
         def gpu_thread():
+            self.switch_to_logs_tab()
             self.log_output("Running GPU detection and status check...", level="INFO")
             
             # Check if PowerShell script exists using helper function
@@ -659,7 +865,7 @@ class KamiwazaGUIManager:
             else:
                 self.log_output("GPU detection script not found", level="WARN")
                 self.log_output("Running basic GPU detection in WSL...", level="INFO")
-                self.run_wsl_command(['lspci', '|', 'grep', '-i', 'vga'], "Basic GPU detection")
+                self.run_wsl_shell_command('lspci | grep -i vga', "Basic GPU detection")
                 
                 # Also check GPU status
                 self.check_gpu_status()
@@ -688,6 +894,7 @@ class KamiwazaGUIManager:
     def check_wsl_status(self):
         """Check WSL status and health"""
         def wsl_status_thread():
+            self.switch_to_logs_tab()
             self.run_command(['wsl', '--status'], "WSL status check")
             self.run_command(['wsl', '--list', '--verbose'], "WSL distribution list")
             
@@ -699,6 +906,7 @@ class KamiwazaGUIManager:
     def fix_wsl_issues(self):
         """Attempt to fix common WSL issues"""
         def fix_thread():
+            self.switch_to_logs_tab()
             self.log_output("Attempting to fix WSL issues...", level="INFO")
             
             # Shutdown all WSL instances
@@ -723,6 +931,7 @@ class KamiwazaGUIManager:
                               "This will remove the Kamiwaza WSL instance and all data.\n\n"
                               "Are you sure you want to continue?"):
             def clean_thread():
+                self.switch_to_logs_tab()
                 self.log_output("Cleaning WSL environment...", level="WARN")
                 
                 # Run cleanup PowerShell script using helper function
@@ -743,6 +952,7 @@ class KamiwazaGUIManager:
     def show_system_info(self):
         """Show system information"""
         def info_thread():
+            self.switch_to_logs_tab()
             self.log_output("=== SYSTEM INFORMATION ===", level="INFO")
             
             # Windows system info
@@ -773,6 +983,7 @@ class KamiwazaGUIManager:
                               "Are you sure you want to continue?"):
             
             def reinstall_thread():
+                self.switch_to_logs_tab()
                 self.log_output("Starting Kamiwaza reinstallation...", level="WARN")
                 
                 # Check if headless installer exists
@@ -896,8 +1107,171 @@ class KamiwazaGUIManager:
             self.log_output(f"Error testing WSL distribution: {e}", level="ERROR")
             self.status_var.set("WSL test failed")
 
+    # === TRAY ICON FUNCTIONALITY ===
+    
+    def setup_tray_icon(self):
+        """Setup system tray icon"""
+        try:
+            # Create icon image
+            icon_image = self.create_tray_icon_image()
+            
+            # Create menu items
+            menu = pystray.Menu(
+                pystray.MenuItem("Show Kamiwaza Manager", self.show_window),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Kamiwaza Status", self.tray_show_status),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Start Kamiwaza", self.tray_start_kamiwaza),
+                pystray.MenuItem("Stop Kamiwaza", self.tray_stop_kamiwaza),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Open Kamiwaza", self.tray_open_kamiwaza),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Exit", self.tray_quit)
+            )
+            
+            # Create tray icon
+            self.tray_icon = pystray.Icon(
+                "Kamiwaza",
+                icon_image,
+                "Kamiwaza Manager",
+                menu
+            )
+            
+            # Start tray icon in separate thread
+            tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
+            tray_thread.start()
+            
+            # Start status monitoring
+            self.start_status_monitoring()
+            
+        except Exception as e:
+            print(f"Failed to setup tray icon: {e}")
+    
+    def create_tray_icon_image(self):
+        """Create tray icon image"""
+        try:
+            # Try to load existing icon
+            icon_path = os.path.join(os.path.dirname(__file__), 'kamiwaza.ico')
+            if os.path.exists(icon_path):
+                return Image.open(icon_path)
+        except:
+            pass
+        
+        # Create simple fallback icon
+        try:
+            # Create a 64x64 image
+            image = Image.new('RGB', (64, 64), color='white')
+            draw = ImageDraw.Draw(image)
+            
+            # Draw blue circle
+            draw.ellipse([8, 8, 56, 56], fill='#2563eb')
+            
+            # Draw white "K"
+            try:
+                # Simple text drawing
+                draw.text((20, 20), "K", fill='white')
+            except:
+                pass
+            
+            return image
+        except:
+            # Ultimate fallback
+            return Image.new('RGB', (64, 64), color='blue')
+    
+    def start_status_monitoring(self):
+        """Start monitoring Kamiwaza status in background"""
+        def monitor():
+            while True:
+                try:
+                    # Check status every 10 seconds
+                    threading.Event().wait(10)
+                    
+                    # Only update tray icon if no operation is in progress
+                    if self.tray_icon and not self.operation_in_progress:
+                        is_running = self.run_wsl_command_silent(['kamiwaza', 'status'])
+                        if is_running:
+                            self.tray_icon.title = "Kamiwaza Manager - Running"
+                        else:
+                            self.tray_icon.title = "Kamiwaza Manager - Stopped"
+                            
+                except Exception:
+                    pass
+        
+        monitor_thread = threading.Thread(target=monitor, daemon=True)
+        monitor_thread.start()
+    
+    def on_closing(self):
+        """Handle window close - minimize to tray instead of closing"""
+        self.minimize_to_tray()
+    
+    def minimize_to_tray(self):
+        """Minimize window to tray"""
+        self.root.withdraw()  # Hide window
+        self.is_minimized_to_tray = True
+        
+        # Show notification
+        if self.tray_icon:
+            self.tray_icon.notify("Kamiwaza Manager minimized to tray", "Click the tray icon to restore")
+    
+    def show_window(self, icon=None, item=None):
+        """Show the main window"""
+        self.root.deiconify()  # Show window
+        self.root.lift()  # Bring to front
+        self.root.focus_force()  # Focus
+        self.is_minimized_to_tray = False
+    
+    def tray_show_status(self, icon=None, item=None):
+        """Show status from tray"""
+        self.show_window()
+        self.check_kamiwaza_status()
+    
+    def tray_start_kamiwaza(self, icon=None, item=None):
+        """Start Kamiwaza from tray"""
+        self.start_kamiwaza()
+        if self.tray_icon:
+            self.tray_icon.notify("Starting Kamiwaza...", "Kamiwaza is starting up")
+    
+    def tray_stop_kamiwaza(self, icon=None, item=None):
+        """Stop Kamiwaza from tray"""
+        self.stop_kamiwaza()
+        if self.tray_icon:
+            self.tray_icon.notify("Stopping Kamiwaza...", "Kamiwaza is shutting down")
+    
+    def tray_open_kamiwaza(self, icon=None, item=None):
+        """Open Kamiwaza in browser from tray"""
+        self.go_to_ui()
+    
+    def tray_quit(self, icon=None, item=None):
+        """Quit application from tray"""
+        self.quit_application()
+    
+    def quit_application(self):
+        """Quit the application completely"""
+        try:
+            if self.tray_icon:
+                self.tray_icon.stop()
+        except:
+            pass
+        
+        try:
+            self.root.quit()
+            self.root.destroy()
+        except:
+            pass
+        
+        # Force exit
+        os._exit(0)
+
 def main():
     """Main entry point"""
+    import argparse
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Kamiwaza Manager')
+    parser.add_argument('--minimized', action='store_true', 
+                       help='Start minimized to system tray')
+    args = parser.parse_args()
+    
     root = tk.Tk()
     
     # Set application icon if available
@@ -908,13 +1282,22 @@ def main():
     except:
         pass
     
-    app = KamiwazaGUIManager(root)
+    app = KamiwazaManager(root)
     
     # Center the window
     root.update_idletasks()
     x = (root.winfo_screenwidth() // 2) - (root.winfo_width() // 2)
     y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
     root.geometry(f"+{x}+{y}")
+    
+    # Start minimized if requested
+    if args.minimized:
+        # Hide window immediately and minimize to tray
+        root.withdraw()
+        app.is_minimized_to_tray = True
+        # Show notification that it's running in tray
+        if app.tray_icon:
+            app.tray_icon.notify("Kamiwaza Manager started", "Running in system tray")
     
     # Start the GUI
     root.mainloop()

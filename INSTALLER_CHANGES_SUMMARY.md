@@ -55,7 +55,7 @@ This document summarizes the changes made to the Kamiwaza MSI installer based on
 <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Setup is complete! The Kamiwaza installation will continue in a separate 'Kamiwaza Installer' window when you click Finish.
 
 After installation completes:
-• Access your deployment at http://localhost (or the URL shown in the installer output)
+• Access your deployment at https://localhost (or the URL shown in the installer output)
 • For troubleshooting, run: wsl -d kamiwaza
 • Use Start Menu shortcuts to manage your Kamiwaza platform" />
 ```

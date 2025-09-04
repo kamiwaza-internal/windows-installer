@@ -44,119 +44,106 @@ if (-not $Force) {
 
 try {
     Write-Host "Starting WSL cleanup for Kamiwaza uninstallation..." -ForegroundColor Green
-    
-    # Check if kamiwaza WSL instance exists
-    Write-Verbose "Checking if kamiwaza WSL instance exists..."
-    $wslListOutput = & wsl --list --verbose 2>$null
-    Start-Sleep -Seconds 5
-    
-    if ($wslListOutput -and $wslListOutput -match "kamiwaza") {
-        Write-Host "Found Kamiwaza WSL instance: kamiwaza" -ForegroundColor Green
         
-        Write-Host "Processing WSL instance: kamiwaza" -ForegroundColor Cyan
+    try {
+        # Stop the instance first
+        Write-Verbose "Stopping WSL instance: kamiwaza"
+        Write-Verbose "Running: wsl --terminate kamiwaza"
+        $terminateResult = & wsl --terminate kamiwaza 2>&1
+        Write-Verbose "Terminate result: $terminateResult"
+        Start-Sleep -Seconds 3
         
-        try {
-            # Stop the instance first
-            Write-Verbose "Stopping WSL instance: kamiwaza"
-            Write-Verbose "Running: wsl --terminate kamiwaza"
-            $terminateResult = & wsl --terminate kamiwaza 2>&1
-            Write-Verbose "Terminate result: $terminateResult"
-            Start-Sleep -Seconds 3
+        # IMPORTANT: Remove kamiwaza package BEFORE unregistering the instance
+        Write-Host "Removing Kamiwaza package from WSL instance: kamiwaza" -ForegroundColor Yellow
+        Write-Verbose "Running: wsl -d kamiwaza sudo apt remove --purge -y kamiwaza"
+        
+        # Try to remove kamiwaza package if instance is still accessible
+        $removeResult = & wsl -d kamiwaza sudo apt remove --purge -y kamiwaza 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Successfully removed kamiwaza package from kamiwaza" -ForegroundColor Green
+        } else {
+            Write-Verbose "Remove command output: $removeResult"
             
-            # IMPORTANT: Remove kamiwaza package BEFORE unregistering the instance
-            Write-Host "Removing Kamiwaza package from WSL instance: kamiwaza" -ForegroundColor Yellow
-            Write-Verbose "Running: wsl -d kamiwaza sudo apt remove --purge -y kamiwaza"
+            # Try alternative package removal methods
+            Write-Verbose "Trying alternative package removal methods..."
             
-            # Try to remove kamiwaza package if instance is still accessible
-            $removeResult = & wsl -d kamiwaza sudo apt remove --purge -y kamiwaza 2>&1
+            # Try with dpkg directly
+            $dpkgResult = & wsl -d kamiwaza sudo dpkg --remove --force-all kamiwaza 2>&1
             if ($LASTEXITCODE -eq 0) {
-                Write-Host "Successfully removed kamiwaza package from kamiwaza" -ForegroundColor Green
+                Write-Host "Successfully removed kamiwaza package using dpkg from kamiwaza" -ForegroundColor Green
             } else {
-                Write-Host "Warning: Could not remove kamiwaza package from kamiwaza (may not be installed or instance not accessible)" -ForegroundColor Yellow
-                Write-Verbose "Remove command output: $removeResult"
+                Write-Verbose "dpkg removal also failed: $dpkgResult"
                 
-                # Try alternative package removal methods
-                Write-Verbose "Trying alternative package removal methods..."
-                
-                # Try with dpkg directly
-                $dpkgResult = & wsl -d kamiwaza sudo dpkg --remove --force-all kamiwaza 2>&1
+                # Try to clean up any remaining files manually
+                Write-Verbose "Attempting manual cleanup of kamiwaza files..."
+                $manualCleanupResult = & wsl -d kamiwaza sudo find /usr -name "*kamiwaza*" -delete 2>&1
                 if ($LASTEXITCODE -eq 0) {
-                    Write-Host "Successfully removed kamiwaza package using dpkg from kamiwaza" -ForegroundColor Green
+                    Write-Host "Manually cleaned up some kamiwaza files from kamiwaza" -ForegroundColor Green
                 } else {
-                    Write-Verbose "dpkg removal also failed: $dpkgResult"
-                    
-                    # Try to clean up any remaining files manually
-                    Write-Verbose "Attempting manual cleanup of kamiwaza files..."
-                    $manualCleanupResult = & wsl -d kamiwaza sudo find /usr -name "*kamiwaza*" -delete 2>&1
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Host "Manually cleaned up some kamiwaza files from kamiwaza" -ForegroundColor Green
-                    } else {
-                        Write-Verbose "Manual cleanup failed: $manualCleanupResult"
-                    }
+                    Write-Verbose "Manual cleanup failed: $manualCleanupResult"
                 }
             }
-            
-            # Also try to remove any remaining kamiwaza-related packages
-            Write-Verbose "Checking for other kamiwaza-related packages..."
-            $relatedPackages = & wsl -d kamiwaza dpkg -l | Select-String "kamiwaza" 2>$null
-            if ($relatedPackages) {
-                Write-Host "Found additional kamiwaza-related packages, attempting removal..." -ForegroundColor Yellow
-                foreach ($package in $relatedPackages) {
-                    $pkgName = ($package -split "\s+")[1]
-                    if ($pkgName -and $pkgName -like "*kamiwaza*") {
-                        Write-Verbose "Removing related package: $pkgName"
-                        & wsl -d kamiwaza sudo apt remove --purge -y $pkgName 2>$null
-                    }
+        }
+        
+        # Also try to remove any remaining kamiwaza-related packages
+        Write-Verbose "Checking for other kamiwaza-related packages..."
+        $relatedPackages = & wsl -d kamiwaza dpkg -l | Select-String "kamiwaza" 2>$null
+        if ($relatedPackages) {
+            Write-Host "Found additional kamiwaza-related packages, attempting removal..." -ForegroundColor Yellow
+            foreach ($package in $relatedPackages) {
+                $pkgName = ($package -split "\s+")[1]
+                if ($pkgName -and $pkgName -like "*kamiwaza*") {
+                    Write-Verbose "Removing related package: $pkgName"
+                    & wsl -d kamiwaza sudo apt remove --purge -y $pkgName 2>$null
                 }
             }
+        }
+        
+        Start-Sleep -Seconds 2
+        
+        # Now unregister the instance completely
+        Write-Verbose "Unregistering WSL instance: kamiwaza"
+        $unregisterResult = & wsl --unregister kamiwaza 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Successfully unregistered: kamiwaza" -ForegroundColor Green
+        } else {
+            Write-Host "Warning: Could not unregister kamiwaza - $unregisterResult" -ForegroundColor Yellow
             
-            Start-Sleep -Seconds 2
-            
-            # Now unregister the instance completely
-            Write-Verbose "Unregistering WSL instance: kamiwaza"
-            $unregisterResult = & wsl --unregister kamiwaza 2>&1
+            # Try alternative unregister method
+            Write-Verbose "Trying alternative unregister method..."
+            $altUnregisterResult = & wsl --unregister kamiwaza 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "Successfully unregistered: kamiwaza" -ForegroundColor Green
             } else {
-                Write-Host "Warning: Could not unregister kamiwaza - $unregisterResult" -ForegroundColor Yellow
-                
-                # Try alternative unregister method
-                Write-Verbose "Trying alternative unregister method..."
-                $altUnregisterResult = & wsl --unregister kamiwaza 2>&1
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Host "Successfully unregistered: kamiwaza" -ForegroundColor Green
-                } else {
-                    Write-Host "Warning: Alternative unregister also failed: $altUnregisterResult" -ForegroundColor Yellow
-                }
-            }
-            
-        } catch {
-            Write-Host "Warning: Could not fully clean up kamiwaza - attempting force unregister" -ForegroundColor Yellow
-            try {
-                $forceResult = & wsl --unregister kamiwaza 2>&1
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Host "Force unregistered: kamiwaza" -ForegroundColor Green
-                } else {
-                    Write-Host "Error: Could not unregister kamiwaza - $forceResult" -ForegroundColor Red
-                    
-                    # Final attempt with shutdown and unregister
-                    Write-Verbose "Final attempt: shutting down WSL and then unregistering..."
-                    & wsl --shutdown 2>$null
-                    Start-Sleep -Seconds 3
-                    $finalResult = & wsl --unregister kamiwaza 2>&1
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Host "Successfully unregistered kamiwaza after WSL shutdown" -ForegroundColor Green
-                    } else {
-                        Write-Host "Error: Final unregister attempt failed: $finalResult" -ForegroundColor Red
-                    }
-                }
-            } catch {
-                Write-Host "Error: Could not unregister kamiwaza - $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "Warning: Alternative unregister also failed: $altUnregisterResult" -ForegroundColor Yellow
             }
         }
-    } else {
-        Write-Host "No Kamiwaza WSL instance found" -ForegroundColor Yellow
+        
+    } catch {
+        Write-Host "Warning: Could not fully clean up kamiwaza - attempting force unregister" -ForegroundColor Yellow
+        try {
+            $forceResult = & wsl --unregister kamiwaza 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "Force unregistered: kamiwaza" -ForegroundColor Green
+            } else {
+                Write-Host "Error: Could not unregister kamiwaza - $forceResult" -ForegroundColor Red
+                
+                # Final attempt with shutdown and unregister
+                Write-Verbose "Final attempt: shutting down WSL and then unregistering..."
+                & wsl --shutdown 2>$null
+                Start-Sleep -Seconds 3
+                $finalResult = & wsl --unregister kamiwaza 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "Successfully unregistered kamiwaza after WSL shutdown" -ForegroundColor Green
+                } else {
+                    Write-Host "Error: Final unregister attempt failed: $finalResult" -ForegroundColor Red
+                }
+            }
+        } catch {
+            Write-Host "Error: Could not unregister kamiwaza - $($_.Exception.Message)" -ForegroundColor Red
+        }
     }
+ 
     
     # Clean up WSL data directory for kamiwaza
     $wslDataPath = Join-Path $env:LOCALAPPDATA "WSL\kamiwaza"
@@ -306,11 +293,14 @@ try {
                 # Remove Kamiwaza-specific RunOnce entries
                 if ($regKey -like "*RunOnce*") {
                     try {
-                        $runOnceEntries = Get-ItemProperty -Path $regKey -ErrorAction SilentlyContinue | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -like "*Kamiwaza*" }
-                        if ($runOnceEntries) {
-                            foreach ($entry in $runOnceEntries) {
-                                Write-Host "Removing RunOnce entry: $($entry.Name)" -ForegroundColor Yellow
-                                Remove-ItemProperty -Path $regKey -Name $entry.Name -ErrorAction SilentlyContinue
+                        $runOnceProperties = Get-ItemProperty -Path $regKey -ErrorAction SilentlyContinue
+                        if ($runOnceProperties) {
+                            $runOnceEntries = $runOnceProperties | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -like "*Kamiwaza*" }
+                            if ($runOnceEntries) {
+                                foreach ($entry in $runOnceEntries) {
+                                    Write-Host "Removing RunOnce entry: $($entry.Name)" -ForegroundColor Yellow
+                                    Remove-ItemProperty -Path $regKey -Name $entry.Name -ErrorAction SilentlyContinue
+                                }
                             }
                         }
                     } catch {

@@ -1,0 +1,4 @@
+---
+description: Our application, kamiwaza (the codebase) has an error. In this chat, we'll provide the error and you need to respond with a bug of the following format: ## What happened? <!-- Clear description of the bug -->  ## What did you expect? <!-- What should have happened instead? -->  ## Steps to reproduce 1. Go to '...' 2. Click on '....' 3. See error  ## Impact - [ ] Blocking - Can't continue work - [ ] High - Major functionality affected - [ ] Medium - Workaround available - [ ] Low - Minor inconvenience  ## Environment - Browser: [e.g. Chrome, Safari, Firefox] - OS: [e.g. macOS, Windows, Linux] - Version/Build:   ## Additional context <!-- Screenshots, error logs, etc. -->
+alwaysApply: false
+---

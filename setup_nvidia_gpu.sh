@@ -67,88 +67,45 @@ detect_gpu() {
     log "Detected GPU: $GPU_NAME"
     log "GPU Memory: $GPU_MEMORY MB"
     log "Driver Version: $DRIVER_VERSION"
-    
+
+    CUDA_VERSION="12.8"
+    PYTORCH_CUDA="cu128"
+    PERFORMANCE_MODE="STANDARD"
+    DRIVER_VERSION="575"
+    MEMORY_OPTIMIZATION="DEFAULT"
+
     # Determine GPU type and set configuration
     if echo "$GPU_NAME" | grep -qi "RTX 5090"; then
         success "RTX 5090 detected! Configuring for maximum performance..."
         GPU_TYPE="RTX_5090"
-        CUDA_VERSION="12.8"
-        PYTORCH_CUDA="cu128"
-        MEMORY_OPTIMIZATION="24GB"
-        PERFORMANCE_MODE="MAXIMUM"
-        DRIVER_VERSION="575"
     elif echo "$GPU_NAME" | grep -qi "RTX 5080"; then
         success "RTX 5080 detected! Configuring for optimal performance..."
         GPU_TYPE="RTX_5080"
-        CUDA_VERSION="12.8"
-        PYTORCH_CUDA="cu128"
-        MEMORY_OPTIMIZATION="16GB"
-        PERFORMANCE_MODE="OPTIMAL"
-        DRIVER_VERSION="575"
     elif echo "$GPU_NAME" | grep -qi "RTX 4090"; then
         success "RTX 4090 detected! Configuring for high performance..."
         GPU_TYPE="RTX_4090"
-        CUDA_VERSION="12.4"
-        PYTORCH_CUDA="cu124"
-        MEMORY_OPTIMIZATION="24GB"
-        PERFORMANCE_MODE="HIGH"
-        DRIVER_VERSION="550"
     elif echo "$GPU_NAME" | grep -qi "RTX 4080"; then
         success "RTX 4080 detected! Configuring for optimal performance..."
         GPU_TYPE="RTX_4080"
-        CUDA_VERSION="12.4"
-        PYTORCH_CUDA="cu124"
-        MEMORY_OPTIMIZATION="16GB"
-        PERFORMANCE_MODE="OPTIMAL"
-        DRIVER_VERSION="550"
     elif echo "$GPU_NAME" | grep -qi "RTX 4070"; then
         success "RTX 4070 detected! Configuring for balanced performance..."
         GPU_TYPE="RTX_4070"
-        CUDA_VERSION="12.4"
-        PYTORCH_CUDA="cu124"
-        MEMORY_OPTIMIZATION="12GB"
-        PERFORMANCE_MODE="BALANCED"
-        DRIVER_VERSION="550"
     elif echo "$GPU_NAME" | grep -qi "RTX 3090"; then
         success "RTX 3090 detected! Configuring for high performance..."
         GPU_TYPE="RTX_3090"
-        CUDA_VERSION="12.2"
-        PYTORCH_CUDA="cu122"
-        MEMORY_OPTIMIZATION="24GB"
-        PERFORMANCE_MODE="HIGH"
-        DRIVER_VERSION="525"
     elif echo "$GPU_NAME" | grep -qi "RTX 3080"; then
         success "RTX 3080 detected! Configuring for optimal performance..."
         GPU_TYPE="RTX_3080"
-        CUDA_VERSION="12.2"
-        PYTORCH_CUDA="cu122"
-        MEMORY_OPTIMIZATION="10GB"
-        PERFORMANCE_MODE="OPTIMAL"
-        DRIVER_VERSION="525"
     elif echo "$GPU_NAME" | grep -qi "RTX 3070"; then
         success "RTX 3070 detected! Configuring for balanced performance..."
         GPU_TYPE="RTX_3070"
-        CUDA_VERSION="12.2"
-        PYTORCH_CUDA="cu122"
-        MEMORY_OPTIMIZATION="8GB"
-        PERFORMANCE_MODE="BALANCED"
-        DRIVER_VERSION="525"
     elif echo "$GPU_NAME" | grep -qi "RTX 3060"; then
         success "RTX 3060 detected! Configuring for standard performance..."
         GPU_TYPE="RTX_3060"
-        CUDA_VERSION="12.2"
-        PYTORCH_CUDA="cu122"
-        MEMORY_OPTIMIZATION="12GB"
-        PERFORMANCE_MODE="STANDARD"
-        DRIVER_VERSION="525"
     else
         warn "Unknown RTX GPU detected. Using default configuration..."
         GPU_TYPE="RTX_GENERIC"
-        CUDA_VERSION="12.4"
-        PYTORCH_CUDA="cu124"
-        MEMORY_OPTIMIZATION="DEFAULT"
-        PERFORMANCE_MODE="DEFAULT"
-        DRIVER_VERSION="550"
+        DRIVER_VERSION="575"
     fi
     
     echo
@@ -366,9 +323,68 @@ verify_installation() {
     dpkg -l | grep -E "(nvidia|cuda)" | head -10
     
     echo
+    log "Checking container runtime setup..."
+    
+    # Check runc symlinks
+    if [ -L "/usr/bin/runc" ]; then
+        RUNC_TARGET=$(readlink /usr/bin/runc)
+        log "runc symlink found: /usr/bin/runc -> $RUNC_TARGET"
+        
+        if /usr/bin/runc --version >/dev/null 2>&1; then
+            log "Symlinked runc is working"
+        else
+            warn "Symlinked runc exists but not responding"
+        fi
+    else
+        warn "runc symlink not found in /usr/bin"
+    fi
+    
+    # Check nvidia-container-runtime
+    if command -v nvidia-container-runtime >/dev/null 2>&1; then
+        log "nvidia-container-runtime found - testing..."
+        if nvidia-container-runtime --version >/dev/null 2>&1; then
+            log "nvidia-container-runtime is working properly"
+        else
+            warn "nvidia-container-runtime has configuration issues"
+        fi
+    else
+        warn "nvidia-container-runtime not found"
+    fi
+    
+    echo
     log "Checking NVIDIA GPU detection..."
+    
+    # Check nvidia-smi symlinks
+    if [ -L "/usr/local/bin/nvidia-smi" ]; then
+        SYMLINK_TARGET=$(readlink /usr/local/bin/nvidia-smi)
+        log "nvidia-smi symlink found: /usr/local/bin/nvidia-smi -> $SYMLINK_TARGET"
+        
+        if /usr/local/bin/nvidia-smi --version >/dev/null 2>&1; then
+            log "Symlinked nvidia-smi (/usr/local/bin) is working"
+        else
+            warn "Symlinked nvidia-smi (/usr/local/bin) exists but not responding"
+        fi
+    else
+        warn "nvidia-smi symlink not found in /usr/local/bin"
+    fi
+    
+    if [ -L "/usr/bin/nvidia-smi" ]; then
+        SYMLINK_TARGET=$(readlink /usr/bin/nvidia-smi)
+        log "nvidia-smi symlink found: /usr/bin/nvidia-smi -> $SYMLINK_TARGET"
+        
+        if /usr/bin/nvidia-smi --version >/dev/null 2>&1; then
+            log "Symlinked nvidia-smi (/usr/bin) is working"
+        else
+            warn "Symlinked nvidia-smi (/usr/bin) exists but not responding"
+        fi
+    else
+        log "nvidia-smi symlink not found in /usr/bin (may be the actual binary)"
+    fi
+    
+    # Check standard nvidia-smi command
     if command -v nvidia-smi >/dev/null 2>&1; then
-        log "nvidia-smi command found - testing GPU detection..."
+        NVIDIA_SMI_LOCATION=$(which nvidia-smi)
+        log "nvidia-smi command found at: $NVIDIA_SMI_LOCATION"
         echo "Running: nvidia-smi --query-gpu=name,driver_version --format=csv,noheader"
         nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null || warn "nvidia-smi failed to detect GPU"
     else
@@ -400,6 +416,8 @@ verify_installation() {
         warn "CUDA compiler not found - CUDA may not be properly installed"
     fi
 }
+
+
 
 # Main execution
 main() {
@@ -438,9 +456,11 @@ main() {
     
     # 3. Install CUDA repository and key
     log "3. Installing CUDA repository and key..."
-    if sudo apt-get install -y wget gpg && \
+    if sudo apt-get install -y wget curl ca-certificates gnupg && \
+       sudo update-ca-certificates || true && \
        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb && \
-       sudo dpkg -i --force-confdef cuda-keyring_1.1-1_all.deb && \
+       (sudo apt-get -y install ./cuda-keyring_1.1-1_all.deb || sudo dpkg -i --force-confdef cuda-keyring_1.1-1_all.deb) && \
+       rm -f cuda-keyring_1.1-1_all.deb && \
        sudo apt-get update; then
         log "  [OK] CUDA repository and key installed"
     else
@@ -459,12 +479,98 @@ main() {
     
     # 5. Configure environment variables
     log "5. Configuring environment variables..."
-    if echo 'export PATH=/usr/local/cuda-12.4/bin:$PATH' >> ~/.bashrc && \
-       echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.4/lib64:$LD_LIBRARY_PATH' >> ~/.bashrc; then
+    if echo 'export PATH=/usr/local/cuda-12.8/bin:$PATH' >> ~/.bashrc && \
+       echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64:$LD_LIBRARY_PATH' >> ~/.bashrc; then
         log "  [OK] Environment variables configured"
         source ~/.bashrc
     else
         warn "  [WARN] Failed to configure environment variables - continuing anyway"
+    fi
+    
+    # 5.5. Create symlinks for container runtime and nvidia-smi
+    log "5.5. Setting up container runtime and nvidia-smi symlinks..."
+    
+    # Ensure /usr/local/bin exists and is writable
+    sudo mkdir -p /usr/local/bin
+    
+    # Fix runc symlink for nvidia-container-runtime
+    log "  Setting up runc symlink for nvidia-container-runtime..."
+    if [ -f "/usr/local/bin/runc" ]; then
+        # Create symlink in /usr/bin so nvidia-container-runtime can find it
+        sudo rm -f /usr/bin/runc
+        if sudo ln -sf /usr/local/bin/runc /usr/bin/runc; then
+            log "  [OK] runc symlink created: /usr/bin/runc -> /usr/local/bin/runc"
+            
+            # Verify nvidia-container-runtime can now find runc
+            if /usr/bin/nvidia-container-runtime --version >/dev/null 2>&1; then
+                log "  [OK] nvidia-container-runtime can now find runc"
+            else
+                warn "  [WARN] nvidia-container-runtime still has issues - may need restart"
+            fi
+        else
+            warn "  [WARN] Failed to create runc symlink in /usr/bin"
+        fi
+    else
+        warn "  [WARN] runc not found in /usr/local/bin"
+    fi
+    
+    # Find nvidia-smi in common locations and create symlinks in both places
+    log "  Setting up nvidia-smi symlinks for consistent access..."
+    NVIDIA_SMI_PATH=""
+    for path in /usr/bin/nvidia-smi /usr/lib/wsl/lib/nvidia-smi /usr/local/cuda/bin/nvidia-smi; do
+        if [ -f "$path" ]; then
+            NVIDIA_SMI_PATH="$path"
+            log "  Found nvidia-smi at: $path"
+            break
+        fi
+    done
+    
+    if [ -n "$NVIDIA_SMI_PATH" ]; then
+        # Create symlink in /usr/local/bin (for script consistency)
+        sudo rm -f /usr/local/bin/nvidia-smi
+        if sudo ln -sf "$NVIDIA_SMI_PATH" /usr/local/bin/nvidia-smi; then
+            log "  [OK] nvidia-smi symlink created: /usr/local/bin/nvidia-smi -> $NVIDIA_SMI_PATH"
+        else
+            warn "  [WARN] Failed to create nvidia-smi symlink in /usr/local/bin"
+        fi
+        
+        # Also ensure it's available in standard location if needed
+        if [ "$NVIDIA_SMI_PATH" != "/usr/bin/nvidia-smi" ] && [ ! -f "/usr/bin/nvidia-smi" ]; then
+            sudo rm -f /usr/bin/nvidia-smi
+            if sudo ln -sf "$NVIDIA_SMI_PATH" /usr/bin/nvidia-smi; then
+                log "  [OK] nvidia-smi symlink created: /usr/bin/nvidia-smi -> $NVIDIA_SMI_PATH"
+            else
+                warn "  [WARN] Failed to create nvidia-smi symlink in /usr/bin"
+            fi
+        fi
+        
+        # Verify symlinks work
+        if /usr/local/bin/nvidia-smi --version >/dev/null 2>&1; then
+            log "  [OK] /usr/local/bin/nvidia-smi working"
+        else
+            warn "  [WARN] /usr/local/bin/nvidia-smi not responding - may need restart"
+        fi
+        
+        if /usr/bin/nvidia-smi --version >/dev/null 2>&1; then
+            log "  [OK] /usr/bin/nvidia-smi working"
+        else
+            warn "  [WARN] /usr/bin/nvidia-smi not responding - may need restart"
+        fi
+    else
+        warn "  [WARN] nvidia-smi not found in expected locations - will be available after restart"
+        # Create placeholders that will work after restart
+        sudo rm -f /usr/local/bin/nvidia-smi /usr/bin/nvidia-smi
+        if sudo ln -sf /usr/bin/nvidia-smi /usr/local/bin/nvidia-smi; then
+            log "  [OK] Created placeholder nvidia-smi symlink for post-restart access"
+        fi
+    fi
+    
+    # Add /usr/local/bin to PATH in bashrc if not already there
+    if ! grep -q '/usr/local/bin' ~/.bashrc; then
+        echo 'export PATH=/usr/local/bin:$PATH' >> ~/.bashrc
+        log "  [OK] Added /usr/local/bin to PATH in ~/.bashrc"
+    else
+        log "  [OK] /usr/local/bin already in PATH"
     fi
     
     # 6. Install NVIDIA Container Toolkit for Docker GPU access
@@ -530,6 +636,9 @@ main() {
     echo
     log "Useful debugging commands:"
     echo "  - nvidia-smi                    # Check NVIDIA GPU status"
+    echo "  - /usr/local/bin/nvidia-smi     # Check symlinked nvidia-smi"
+    echo "  - ls -la /usr/local/bin/nvidia-smi # Check nvidia-smi symlink"
+    echo "  - which nvidia-smi             # Find nvidia-smi location"
     echo "  - nvcc --version               # Check CUDA compiler version"
     echo "  - dpkg -l | grep nvidia       # Check installed NVIDIA packages"
     echo "  - ls -la /dev/nvidia*         # Check NVIDIA device files"

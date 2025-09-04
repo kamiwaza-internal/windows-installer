@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
     <Product Id="*" 
              Name="Kamiwaza" 
              Language="1033" 
@@ -38,8 +39,6 @@
         <Property Id="LICENSE_KEY" Secure="yes" />
         <Property Id="USAGE_REPORTING" Value="1" />
         <Property Id="INSTALL_MODE" Value="lite" />
-        <Property Id="LAUNCH_GUI" Value="0" />
-        <Property Id="AUTOSTART_TRAY" Value="0" />
         
         <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
         <WixVariable Id="WixUICostingPopupOptOut" Value="1" />
@@ -83,10 +82,9 @@
                         <File Id="KamiwazaStartBatch" Name="kamiwaza_start.bat" Source="kamiwaza_start.bat"/>
                         <File Id="KamiwazaStopBatch" Name="kamiwaza_stop.bat" Source="kamiwaza_stop.bat"/>
                         <File Id="CreateRunOnceBatch" Name="create_runonce.bat" Source="create_runonce.bat"/>
-
-                        <File Id="KamiwazaGUIManager" Name="KamiwazaGUIManager.exe" Source="KamiwazaGUIManager.exe"/>
-                        <File Id="InstallGUIManager" Name="install_gui_manager.ps1" Source="install_gui_manager.ps1"/>
-
+                        <File Id="CreateAutostartRegistry" Name="create_autostart_registry.ps1" Source="create_autostart_registry.ps1"/>
+                        <File Id="KamiwazaManager" Name="KamiwazaManager.exe" Source="KamiwazaManager.exe"/>
+                        <File Id="InstallGUIManager" Name="install_manager.ps1" Source="install_manager.ps1"/>
                         <RegistryValue Root="HKCU" Key="Software\Kamiwaza\Installer" Name="installed" Type="string" Value="1" KeyPath="yes"/>
                         <!-- Removes the entire Kamiwaza installation folder -->
                         <RemoveFolder Id="RemoveKamiwazaFolder" Directory="INSTALLFOLDER" On="uninstall"/>
@@ -161,12 +159,20 @@
                                  Icon="KamiwazaIcon"
                                  IconIndex="0" />
 
+                        <Shortcut Id="SetupAutostartShortcut" 
+                                 Name="Setup GPU Autostart" 
+                                 Description="Configure Kamiwaza to start automatically after system restart (for GPU acceleration)" 
+                                 Target="powershell.exe" 
+                                 Arguments="-ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]create_autostart_registry.ps1&quot;"
+                                 WorkingDirectory="INSTALLFOLDER"
+                                 Icon="KamiwazaIcon"
+                                 IconIndex="0" />
 
 
-                        <Shortcut Id="KamiwazaManagerShortcut" 
+                        <Shortcut Id="KamiwazaMonitorShortcut" 
                                  Name="Kamiwaza Manager" 
                                  Description="Launch Kamiwaza Manager" 
-                                 Target="[INSTALLFOLDER]KamiwazaGUIManager.exe"
+                                 Target="[INSTALLFOLDER]KamiwazaManager.exe"
                                  WorkingDirectory="INSTALLFOLDER"
                                  Icon="KamiwazaIcon"
                                  IconIndex="0" />
@@ -237,7 +243,7 @@
                 </Control>
             </Dialog>
 
-            <!-- Custom Exit Dialog with GUI Launch Option -->
+            <!-- Custom Exit Dialog -->
             <Dialog Id="KamiwazaExitDlg" Width="370" Height="300" Title="Kamiwaza Setup Complete!">
                 <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Setup Complete!" />
                 
@@ -245,15 +251,9 @@
 
 The Kamiwaza installation will continue in a separate 'Kamiwaza Installer' window when you click Finish.
 
-IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to activate after the complete installation." />
-                
-                <!-- GUI Launch Checkbox -->
-                <Control Id="LaunchGUICheck" Type="CheckBox" X="15" Y="125" Width="340" Height="17" Property="LAUNCH_GUI" CheckBoxValue="1" Text="Launch Kamiwaza Diagnostic GUI when ready" />
-                
-                <!-- Tray Autostart Checkbox -->
-                <Control Id="TrayAutostartCheck" Type="CheckBox" X="15" Y="145" Width="340" Height="17" Property="AUTOSTART_TRAY" CheckBoxValue="0" Text="Start Kamiwaza System Tray automatically with Windows (minimized)" />
-                
-                <Control Id="GUIHelp" Type="Text" X="15" Y="165" Width="340" Height="24" NoPrefix="yes" Text="The Diagnostic GUI will be installed by the Python installer. The System Tray provides quick access to Kamiwaza controls and starts minimized to the tray." />
+IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to activate after the complete installation.
+
+The Kamiwaza Manager will launch automatically after the system restart." />
                 
                 <!-- Navigation buttons -->
                 <Control Id="Finish" Type="PushButton" X="236" Y="253" Width="56" Height="17" Default="yes" Text="&amp;Finish">
@@ -306,19 +306,25 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
 
         <!-- Safety check to prevent automatic restarts -->
         <CustomAction Id="CheckRemotePC"
-                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -Command "try { $isRemote = (Get-WmiObject -Class Win32_ComputerSystem).PrimaryOwnerName -ne $env:USERNAME; if ($isRemote) { Write-Output \"Remote PC detected\" | Out-File -FilePath \"$env:TEMP\\kamiwaza_remote_warn.log\" -Encoding utf8 -Append } } catch { }"'
+                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -Command "try { $isRemote = (Get-WmiObject -Class Win32_ComputerSystem).PrimaryOwnerName -ne $env:USERNAME; if ($isRemote) { Write-Output \"Remote PC detected\" | Out-File -FilePath \"$env:TEMP\\kamiwaza_remote_warn.log\" -Encoding utf8 -Append } } catch { }" 2&gt;$null'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="yes"
                       Return="ignore" />
                       
         <!-- Custom Actions -->
+        <!-- Hidden GPU Detection using WixQuietExec -->
+        <Property Id="DetectGPUCmdLine" Value='cmd.exe /c ""[INSTALLFOLDER]detect_gpu_cmd.bat""' />
         <CustomAction Id="DetectGPUCmd"
-                      FileKey="GPUDetectionCMDScript"
-                      ExeCommand=""
+                      Property="WixQuietExecCmdLine"
+                      Value='cmd.exe /c ""[INSTALLFOLDER]detect_gpu_cmd.bat""'
+                      Execute="immediate" />
+        <CustomAction Id="DetectGPUCmdExec"
+                      BinaryKey="WixCA"
+                      DllEntry="WixQuietExec"
                       Execute="deferred"
-                      Impersonate="yes"
-                      Return="ignore" />
+                      Return="ignore"
+                      Impersonate="yes" />
                       
 
                       
@@ -331,7 +337,7 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
         
         <!-- Reserve Kamiwaza ports on install -->
         <CustomAction Id="ReservePorts"
-                      ExeCommand='powershell.exe -Command "netsh int ipv4 add excludedportrange protocol=tcp startport=61100 numberofports=200 store=persistent 2>$null; if($?) { Write-Host \"Reserved ports 61100-61299\" } else { Write-Host \"Ports may already be reserved\" }"'
+                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -Command "try { netsh int ipv4 add excludedportrange protocol=tcp startport=61100 numberofports=200 store=persistent | Out-Null; Write-Host \"Reserved ports 61100-61299 for Kamiwaza\" } catch { Write-Host \"Warning: Could not reserve ports (may already be reserved)\" }" &gt; $null 2&gt;&amp;1'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="no"
@@ -339,67 +345,131 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
 
         <!-- Comprehensive Cleanup Action for Uninstall - Complete removal of all Kamiwaza traces -->
         <CustomAction Id="ComprehensiveCleanup"
-                      ExeCommand='"[INSTALLFOLDER]cleanup_installs.bat"'
-                      Directory="TARGETDIR"
-                      Execute="immediate"
-                      Impersonate="yes"
-                      Return="ignore" />
+                      Property="WixQuietExecCmdLine"
+                      Value='cmd.exe /c ""[INSTALLFOLDER]cleanup_installs.bat""'
+                      Execute="immediate" />
+        <CustomAction Id="ComprehensiveCleanupExec"
+                      BinaryKey="WixCA"
+                      DllEntry="WixQuietExec"
+                      Execute="deferred"
+                      Return="ignore"
+                      Impersonate="yes" />
 
         <!-- Release Kamiwaza ports on uninstall -->
         <CustomAction Id="ReleasePorts"
-                      ExeCommand='powershell.exe -Command "netsh int ipv4 delete excludedportrange protocol=tcp startport=61100 numberofports=200 2>$null; if($?) { Write-Host \"Released ports 61100-61299\" } else { Write-Host \"Ports may not have been reserved\" }"'
+                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -Command "try { netsh int ipv4 delete excludedportrange protocol=tcp startport=61100 numberofports=200 | Out-Null } catch { }" 2&gt;$null'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="no"
                       Return="ignore" />
 
-        <!-- Remove Kamiwaza Manager Autostart on uninstall -->
-        <CustomAction Id="RemoveManagerAutostart"
-                      ExeCommand='powershell.exe -Command "Remove-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"KamiwazaManager\" -ErrorAction SilentlyContinue; Write-Host \"Manager autostart removed\""'
-                      Directory="TARGETDIR"
+        <!-- Remove Kamiwaza startup registry entry on uninstall -->
+        <CustomAction Id="RemoveKamiwazaStartupApp"
+                      Property="WixQuietExecCmdLine"
+                      Value='cmd.exe /c "reg delete \"HKCU\Software\Microsoft\Windows\CurrentVersion\Run\" /v \"Kamiwaza\" /f"'
+                      Execute="immediate" />
+        <CustomAction Id="RemoveKamiwazaStartupAppExec"
+                      BinaryKey="WixCA"
+                      DllEntry="WixQuietExec"
                       Execute="deferred"
-                      Impersonate="yes"
-                      Return="ignore" />
+                      Return="ignore"
+                      Impersonate="yes" />
 
-        <!-- Remove RunOnce entry on uninstall -->
-        <CustomAction Id="RemoveRunOnce"
-                      ExeCommand='powershell.exe -Command "Remove-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce\" -Name \"KamiwazaContinueInstall\" -ErrorAction SilentlyContinue; Write-Host \"RunOnce entry removed\""'
-                      Directory="TARGETDIR"
+        <CustomAction Id="RemoveKamiwazaStartupApproved"
+                      Property="WixQuietExecCmdLine"
+                      Value='cmd.exe /c "reg delete \"HKCU\Software\Microsoft\Windows\CurrentVersion\StartupApproved\" /v \"Kamiwaza\" /f"'
+                      Execute="immediate" />
+        <CustomAction Id="RemoveKamiwazaStartupApprovedExec"
+                      BinaryKey="WixCA"
+                      DllEntry="WixQuietExec"
                       Execute="deferred"
-                      Impersonate="yes"
-                      Return="ignore" />
+                      Return="ignore"
+                      Impersonate="yes" />
+
+        <!-- Remove scheduled tasks on uninstall -->
+        <CustomAction Id="RemoveScheduledTask"
+                      Property="WixQuietExecCmdLine"
+                      Value='cmd.exe /c "schtasks /delete /tn \"KamiwazaAutostart\" /f"'
+                      Execute="immediate" />
+        <CustomAction Id="RemoveScheduledTaskExec"
+                      BinaryKey="WixCA"
+                      DllEntry="WixQuietExec"
+                      Execute="deferred"
+                      Return="ignore"
+                      Impersonate="no" />
+
+        <CustomAction Id="RemoveLogonTask"
+                      Property="WixQuietExecCmdLine"
+                      Value='cmd.exe /c "schtasks /delete /tn \"KamiwazaLogon\" /f"'
+                      Execute="immediate" />
+        <CustomAction Id="RemoveLogonTaskExec"
+                      BinaryKey="WixCA"
+                      DllEntry="WixQuietExec"
+                      Execute="deferred"
+                      Return="ignore"
+                      Impersonate="yes" />
+
+
+        <!-- Setup Simple Kamiwaza Startup App Registry Entry -->
+        <CustomAction Id="SetupKamiwazaStartupApp"
+                      Property="WixQuietExecCmdLine"
+                      Value='cmd.exe /c "reg add \"HKCU\Software\Microsoft\Windows\CurrentVersion\Run\" /v \"Kamiwaza\" /t REG_SZ /d \"\\\"%LOCALAPPDATA%\Kamiwaza\KamiwazaManager.exe\\\"\" /f"'
+                      Execute="immediate" />
+        <CustomAction Id="SetupKamiwazaStartupAppExec"
+                      BinaryKey="WixCA"
+                      DllEntry="WixQuietExec"
+                      Execute="deferred"
+                      Return="ignore"
+                      Impersonate="yes" />
+
+        <!-- Enable Kamiwaza Startup App in Task Manager (StartupApproved registry entry) -->
+        <CustomAction Id="EnableKamiwazaStartupApp"
+                      Property="WixQuietExecCmdLine"
+                      Value='cmd.exe /c "reg add \"HKCU\Software\Microsoft\Windows\CurrentVersion\StartupApproved\" /v \"Kamiwaza\" /t REG_BINARY /d \"02000000\" /f"'
+                      Execute="immediate" />
+        <CustomAction Id="EnableKamiwazaStartupAppExec"
+                      BinaryKey="WixCA"
+                      DllEntry="WixQuietExec"
+                      Execute="deferred"
+                      Return="ignore"
+                      Impersonate="yes" />
 
         <!-- Install Kamiwaza GUI Manager to AppData and Start Menu -->
         <CustomAction Id="InstallGUIManager"
-                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "[INSTALLFOLDER]install_gui_manager.ps1" ^> "$env:TEMP\kamiwaza_gui_install.log" 2^>^&amp;1'
+                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "[INSTALLFOLDER]install_manager.ps1" &gt; "$env:TEMP\kamiwaza_gui_install.log" 2&gt;&amp;1'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="yes"
                       Return="ignore" />
 
-        <!-- Setup Kamiwaza Manager Autostart (Conditional) -->
-        <CustomAction Id="SetupManagerAutostart"
-                      ExeCommand='powershell.exe -Command "Set-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"KamiwazaManager\" -Value \"[INSTALLFOLDER]KamiwazaGUIManager.exe --minimized\" -Force; Write-Host \"Manager autostart configured (minimized)\""'
-                      Directory="TARGETDIR"
-                      Execute="deferred"
-                      Impersonate="yes"
-                      Return="ignore" />
 
-        <!-- Setup RunOnce entry for continuing Kamiwaza installation after reboot -->
-        <CustomAction Id="SetupRunOnce"
-                      FileKey="CreateRunOnceBatch"
-                      ExeCommand="[INSTALLFOLDER] [WSLMEMORY] [USER_EMAIL] [LICENSE_KEY] [USAGE_REPORTING] [INSTALL_MODE]"
-                      Execute="deferred"
-                      Impersonate="yes"
-                      Return="ignore" />
+        <!-- KamiwazaManager.exe will launch automatically after reboot via registry/scheduled tasks -->
 
-        <!-- Launch Kamiwaza Manager if requested -->
-        <CustomAction Id="LaunchDiagnosticGUI"
-                      ExeCommand='powershell.exe -Command "$p=Join-Path $env:LOCALAPPDATA \"Kamiwaza\\GUI\\KamiwazaGUIManager.exe\"; if (Test-Path $p) { Start-Process $p }"'
-                      Directory="TARGETDIR"
-                      Execute="immediate"
-                      Impersonate="yes"
-                      Return="ignore" />
+        <!-- Create scheduled task for system startup -->
+        <CustomAction Id="CreateScheduledTask"
+                      Property="WixQuietExecCmdLine"
+                      Value='cmd.exe /c "schtasks /create /tn \"KamiwazaAutostart\" /tr \"\\\"%LOCALAPPDATA%\Kamiwaza\KamiwazaManager.exe\\\"\" /sc onstart /ru \"%USERNAME%\" /rl highest /f"'
+                      Execute="immediate" />
+        <CustomAction Id="CreateScheduledTaskExec"
+                      BinaryKey="WixCA"
+                      DllEntry="WixQuietExec"
+                      Execute="deferred"
+                      Return="ignore"
+                      Impersonate="no" />
+
+        <!-- Create scheduled task for user logon -->
+        <CustomAction Id="CreateLogonTask"
+                      Property="WixQuietExecCmdLine"
+                      Value='cmd.exe /c "schtasks /create /tn \"KamiwazaLogon\" /tr \"\\\"%LOCALAPPDATA%\Kamiwaza\KamiwazaManager.exe\\\"\" /sc onlogon /ru \"%USERNAME%\" /rl highest /delay 0:30 /f"'
+                      Execute="immediate" />
+        <CustomAction Id="CreateLogonTaskExec"
+                      BinaryKey="WixCA"
+                      DllEntry="WixQuietExec"
+                      Execute="deferred"
+                      Return="ignore"
+                      Impersonate="yes" />
+
+        <!-- Auto-launch is now always enabled -->
 
         <!-- Install Execute Sequence - automatically run Kamiwaza installation -->
         <InstallExecuteSequence>
@@ -407,20 +477,37 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
             <Custom Action="ReservePorts" After="InstallFiles">NOT REMOVE</Custom>
             <Custom Action="CheckRemotePC" After="ReservePorts">NOT REMOVE</Custom>
             <Custom Action="DetectGPUCmd" After="CheckRemotePC">NOT REMOVE</Custom>
-            <Custom Action="RunKamiwazaInstaller" After="DetectGPUCmd">NOT REMOVE</Custom>
-            <Custom Action="InstallGUIManager" After="RunKamiwazaInstaller">NOT REMOVE</Custom>
-            <Custom Action="SetupRunOnce" After="InstallGUIManager">NOT REMOVE</Custom>
-            <Custom Action="SetupManagerAutostart" After="SetupRunOnce">NOT REMOVE AND AUTOSTART_TRAY = "1"</Custom>
-            <Custom Action="LaunchDiagnosticGUI" After="SetupManagerAutostart">NOT REMOVE AND LAUNCH_GUI = "1"</Custom>
-            <ScheduleReboot After="SetupManagerAutostart">NOT REMOVE</ScheduleReboot>
+            <Custom Action="DetectGPUCmdExec" After="DetectGPUCmd">NOT REMOVE</Custom>
+            <Custom Action="InstallGUIManager" After="DetectGPUCmdExec">NOT REMOVE</Custom>
+            <Custom Action="SetupKamiwazaStartupApp" After="InstallGUIManager">NOT REMOVE</Custom>
+            <Custom Action="SetupKamiwazaStartupAppExec" After="SetupKamiwazaStartupApp">NOT REMOVE</Custom>
+            <Custom Action="EnableKamiwazaStartupApp" After="SetupKamiwazaStartupAppExec">NOT REMOVE</Custom>
+            <Custom Action="EnableKamiwazaStartupAppExec" After="EnableKamiwazaStartupApp">NOT REMOVE</Custom>
+            <Custom Action="CreateScheduledTask" After="EnableKamiwazaStartupAppExec">NOT REMOVE</Custom>
+            <Custom Action="CreateScheduledTaskExec" After="CreateScheduledTask">NOT REMOVE</Custom>
+            <Custom Action="CreateLogonTask" After="CreateScheduledTaskExec">NOT REMOVE</Custom>
+            <Custom Action="CreateLogonTaskExec" After="CreateLogonTask">NOT REMOVE</Custom>
+            <Custom Action="RunKamiwazaInstaller" After="CreateLogonTaskExec">NOT REMOVE</Custom>
+            <!-- KamiwazaManager.exe will launch automatically after reboot via registry/scheduled tasks -->
             
             <!-- Uninstall actions only -->
             <Custom Action="ComprehensiveCleanup" Before="RemoveFiles">Installed AND REMOVE</Custom>
-            <Custom Action="RemoveRunOnce" After="ComprehensiveCleanup">Installed AND REMOVE</Custom>
-            <Custom Action="RemoveManagerAutostart" After="RemoveRunOnce">Installed AND REMOVE</Custom>
-            <Custom Action="ReleasePorts" After="RemoveManagerAutostart">Installed AND REMOVE</Custom>
+            <Custom Action="ComprehensiveCleanupExec" After="ComprehensiveCleanup">Installed AND REMOVE</Custom>
+            <Custom Action="RemoveKamiwazaStartupApp" After="ComprehensiveCleanupExec">Installed AND REMOVE</Custom>
+            <Custom Action="RemoveKamiwazaStartupAppExec" After="RemoveKamiwazaStartupApp">Installed AND REMOVE</Custom>
+            <Custom Action="RemoveKamiwazaStartupApproved" After="RemoveKamiwazaStartupAppExec">Installed AND REMOVE</Custom>
+            <Custom Action="RemoveKamiwazaStartupApprovedExec" After="RemoveKamiwazaStartupApproved">Installed AND REMOVE</Custom>
+            <Custom Action="RemoveScheduledTask" After="RemoveKamiwazaStartupApprovedExec">Installed AND REMOVE</Custom>
+            <Custom Action="RemoveScheduledTaskExec" After="RemoveScheduledTask">Installed AND REMOVE</Custom>
+            <Custom Action="RemoveLogonTask" After="RemoveScheduledTaskExec">Installed AND REMOVE</Custom>
+            <Custom Action="RemoveLogonTaskExec" After="RemoveLogonTask">Installed AND REMOVE</Custom>
+            <Custom Action="ReleasePorts" After="RemoveFiles">Installed AND REMOVE</Custom>
             
             <!-- Note: Reboot is handled by user after complete installation -->
         </InstallExecuteSequence>
+
+
+        
+        <!-- Persistent autostart now handled by SetupAutostartRegistry (HKCU Run). Removing one-time RunOnce CA. -->
     </Product>
 </Wix> 

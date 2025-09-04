@@ -882,7 +882,6 @@ class HeadlessKamiwazaInstaller:
             self.log_output("Step 3: Cleaning up existing WSL distributions...")
             cleanup_commands = [
                 ['wsl', '--unregister', 'Ubuntu'],
-                ['wsl', '--unregister', 'Ubuntu-24.04'],
                 ['wsl', '--unregister', 'kamiwaza']
             ]
             
@@ -2027,168 +2026,7 @@ class HeadlessKamiwazaInstaller:
             self.log_output("3. All GPU features will be fully functional")
             self.log_output("4. Package installation will be complete and active")
             self.log_output("")
-            
-            # Register Windows autostart for after the restart
-            self.log_output("=== REGISTERING WINDOWS AUTOSTART ===")
-            try:
-                import subprocess
-                # Ensure autostart script exists in a stable per-user location
-                src_start_bat = os.path.join(os.path.dirname(__file__), 'kamiwaza_start.bat')
-                dest_dir = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Kamiwaza')
-                os.makedirs(dest_dir, exist_ok=True)
-                dest_start_bat = os.path.join(dest_dir, 'kamiwaza_start.bat')
-                
-                # Check if source autostart script exists
-                if not os.path.exists(src_start_bat):
-                    self.log_output(f"ERROR: Source start script not found: {src_start_bat}")
-                    self.log_output("This file is required for autostart functionality")
-                    self.log_output("Please ensure kamiwaza_start.bat is in the same directory as this installer")
-                    self.log_output("Continuing with installation but autostart will not work")
-                    return  # Skip autostart registration if source script is missing
-                
-                # Only copy if source and destination are different
-                if os.path.exists(src_start_bat) and os.path.abspath(src_start_bat) != os.path.abspath(dest_start_bat):
-                    try:
-                        shutil.copy2(src_start_bat, dest_start_bat)
-                        self.log_output(f"Copied start script to: {dest_start_bat}")
-                    except Exception as copy_err:
-                        self.log_output(f"Warning: Failed to copy autostart script: {copy_err}")
-                elif os.path.exists(dest_start_bat):
-                    self.log_output(f"Using existing start script at: {dest_start_bat}")
-                else:
-                    self.log_output("Warning: Autostart script not found; autostart registration may be skipped")
-                
-                # Verify we have a valid autostart script before proceeding with registration
-                if not os.path.exists(dest_start_bat):
-                    self.log_output("ERROR: No autostart script available - cannot register autostart mechanisms")
-                    self.log_output("This may prevent Kamiwaza from starting automatically after restart")
-                    self.log_output("Continuing with installation but autostart will not work")
-                    return  # Skip autostart registration if no script exists
-                
-                # Verify the autostart script is valid and readable
-                try:
-                    with open(dest_start_bat, 'r', encoding='utf-8', errors='ignore') as f:
-                        script_content = f.read()
-                    if not script_content.strip():
-                        self.log_output("ERROR: Autostart script is empty - cannot register autostart mechanisms")
-                        return
-                    if 'kamiwaza' not in script_content.lower():
-                        self.log_output("WARNING: Autostart script content doesn't appear to be for Kamiwaza")
-                        self.log_output("Script content preview: " + script_content[:100] + "...")
-                    else:
-                        self.log_output("Autostart script content verified successfully")
-                    
-                    # Check file permissions and ensure it's executable
-                    try:
-                        import stat
-                        current_mode = os.stat(dest_start_bat).st_mode
-                        if not (current_mode & stat.S_IXUSR):  # Check if user executable bit is set
-                            # Make the file executable for the current user
-                            os.chmod(dest_start_bat, current_mode | stat.S_IXUSR)
-                            self.log_output("Made autostart script executable for current user")
-                    except Exception as perm_err:
-                        self.log_output(f"Warning: Could not set executable permissions: {perm_err}")
-                        
-                except Exception as script_err:
-                    self.log_output(f"ERROR: Cannot read autostart script: {script_err}")
-                    return
-                
-                # Prefer a Scheduled Task with a short delay to avoid races with WSL/GPU init
-                # The task is self-deleting in the autostart script after successful start
-                try:
-                    autostart_task_cmd = (
-                        'schtasks /Create /TN "KamiwazaAutostart" '
-                        '/SC ONLOGON /DELAY 0000:15 /RL HIGHEST '
-                        f'/TR "cmd.exe /c \"{dest_start_bat}\"" /F'
-                    )
-                    autostart_result = subprocess.run(autostart_task_cmd, shell=True, check=False, capture_output=True, text=True)
-                    if autostart_result.returncode == 0:
-                        self.log_output("Registered Scheduled Task for autostart at next logon with 15s delay")
-                    else:
-                        self.log_output(f"Warning: Failed to create autostart scheduled task (exit code: {autostart_result.returncode})")
-                        if autostart_result.stderr:
-                            self.log_output(f"  Error: {autostart_result.stderr.strip()}")
-                        if autostart_result.stdout:
-                            self.log_output(f"  Output: {autostart_result.stdout.strip()}")
-                except Exception as task_reg_err:
-                    self.log_output(f"Warning: Failed to create autostart scheduled task: {task_reg_err}")
-                
-                # Legacy/backup: also set HKCU RunOnce if possible (runs once for current user on next logon)
-                # This doesn't require admin privileges and is more reliable
-                try:
-                    ps_cmd = (
-                        "$runOnceKey = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce'; "
-                        "$runOnceName = 'KamiwazaGPUAutostart'; "
-                        f"$runOnceValue = '\"{dest_start_bat}\"'; "
-                        "New-Item -Path $runOnceKey -Force | Out-Null; "
-                        "Set-ItemProperty -Path $runOnceKey -Name $runOnceName -Value $runOnceValue -Type String -Force"
-                    )
-                    hkcu_result = subprocess.run(['powershell.exe', '-ExecutionPolicy', 'Bypass', '-Command', ps_cmd], 
-                                               check=False, capture_output=True, text=True)
-                    if hkcu_result.returncode == 0:
-                        self.log_output("Registered HKCU RunOnce backup entry for autostart")
-                    else:
-                        self.log_output(f"Warning: Failed to register HKCU RunOnce backup (exit code: {hkcu_result.returncode})")
-                        if hkcu_result.stderr:
-                            self.log_output(f"  Error: {hkcu_result.stderr.strip()}")
-                except Exception as runonce_err:
-                    self.log_output(f"Warning: Failed to register HKCU RunOnce backup: {runonce_err}")
-                
-                # Note: HKLM RunOnce registration removed - script never runs as administrator
-                
-                # Provide summary of autostart registration
-                self.log_output("=== AUTOSTART REGISTRATION SUMMARY ===")
-                self.log_output("Successfully registered autostart mechanisms:")
-                self.log_output("  [OK] Scheduled Task: KamiwazaAutostart (15s delay)")
-                self.log_output("  [OK] Scheduled Task: KamiwazaWSLPreWarm (5s delay)")
-                self.log_output("  [OK] HKCU RunOnce: KamiwazaGPUAutostart")
-                self.log_output("After restart, Kamiwaza will start automatically with GPU acceleration ready")
-                
-                # Final verification of autostart mechanisms
-                self.log_output("=== VERIFYING AUTOSTART MECHANISMS ===")
-                try:
-                    # Check if scheduled tasks exist
-                    task_check_cmd = 'schtasks /Query /TN "KamiwazaAutostart" 2>nul & if %errorlevel% equ 0 (echo EXISTS) else (echo MISSING)'
-                    task_result = subprocess.run(task_check_cmd, shell=True, capture_output=True, text=True)
-                    if 'EXISTS' in task_result.stdout:
-                        self.log_output("  [OK] Scheduled Task KamiwazaAutostart: VERIFIED")
-                    else:
-                        self.log_output("  [WARNING] Scheduled Task KamiwazaAutostart: NOT FOUND")
-                    
-                    # Check if RunOnce registry entries exist
-                    reg_check_cmd = 'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce" /v "KamiwazaGPUAutostart" 2>nul & if %errorlevel% equ 0 (echo EXISTS) else (echo MISSING)'
-                    reg_result = subprocess.run(reg_check_cmd, shell=True, capture_output=True, text=True)
-                    if 'EXISTS' in reg_result.stdout:
-                        self.log_output("  [OK] HKCU RunOnce: VERIFIED")
-                    else:
-                        self.log_output("  [WARNING] HKCU RunOnce: NOT FOUND")
-                        
-                except Exception as verify_err:
-                    self.log_output(f"  [WARNING] Verification failed: {verify_err}")
-                
-                self.log_output("=== AUTOSTART REGISTRATION COMPLETE ===")
-                    
-            except Exception as task_err:
-                self.log_output(f"Warning: Failed to register autostart mechanisms: {task_err}")
-            
-            # Register a Scheduled Task to pre-warm WSL at user logon (reduces cold-start delay before RunOnce)
-            try:
-                # Trigger at user logon with a small delay; run with highest privileges, target kamiwaza distro
-                warm_cmd = (
-                    'schtasks /Create /TN "KamiwazaWSLPreWarm" '
-                    '/SC ONLOGON /DELAY 0000:05 /RL HIGHEST '
-                    '/TR "wsl -d kamiwaza -u root -e true" /F'
-                )
-                warm_result = subprocess.run(warm_cmd, shell=True, check=False, capture_output=True, text=True)
-                if warm_result.returncode == 0:
-                    self.log_output("Registered Scheduled Task to pre-warm WSL at user logon")
-                else:
-                    self.log_output(f"Warning: Failed to register WSL pre-warm task (exit code: {warm_result.returncode})")
-                    if warm_result.stderr:
-                        self.log_output(f"  Error: {warm_result.stderr.strip()}")
-            except Exception as warm_err:
-                self.log_output(f"Warning: Failed to register WSL pre-warm task: {warm_err}")
-            
+ 
             # Request reboot via MSI (no automatic restart)
             self.log_output("")
             self.log_output("=== REBOOT REQUIRED ===", progress=100)
@@ -2240,9 +2078,7 @@ class HeadlessKamiwazaInstaller:
         # If dedicated instance creation failed, attempt automatic repair
         self.log_output("Dedicated kamiwaza instance creation failed - attempting automatic repair...")
         
-        # Only check for existing kamiwaza instance or Ubuntu-24.04
-        # User explicitly requested: "We should only use the existing wsl if its name is KAMIWAZA - nothing else"
-        # and "We NEVER want 22.04 - only 24.04"
+        # Only check for existing kamiwaza instance - NO fallback to Ubuntu-24.04
         ret, out, _ = self.run_command(['wsl', '--list', '--quiet'])
         if ret != 0:
             self.log_output("ERROR: WSL is not available")
@@ -2307,17 +2143,19 @@ class HeadlessKamiwazaInstaller:
         if ret == 0:
             wsl_instances = out.replace('\x00', '').replace(' ', '').replace('\r', '').replace('\n', ' ').split()
             wsl_instances = [name.strip() for name in wsl_instances if name.strip()]  # Remove empty entries
-            if 'Ubuntu-24.04' in wsl_instances:
-                self.log_output("Existing Ubuntu-24.04 WSL instance found")
+            
+            # Check ONLY for existing kamiwaza instance - no fallback to Ubuntu-24.04
+            if 'kamiwaza' in wsl_instances:
+                self.log_output("Existing kamiwaza WSL instance found")
                 self.log_output("Restarting WSL to ensure clean state for installation...")
                 
-                # Stop the existing Ubuntu-24.04 instance
-                self.log_output("Stopping Ubuntu-24.04 WSL instance...")
-                stop_ret, stop_out, stop_err = self.run_command(['wsl', '--terminate', 'Ubuntu-24.04'])
+                # Stop the existing kamiwaza instance
+                self.log_output("Stopping kamiwaza WSL instance...")
+                stop_ret, stop_out, stop_err = self.run_command(['wsl', '--terminate', 'kamiwaza'])
                 if stop_ret == 0:
-                    self.log_output("Successfully stopped Ubuntu-24.04 instance")
+                    self.log_output("Successfully stopped kamiwaza instance")
                 else:
-                    self.log_output(f"Warning: Could not stop Ubuntu-24.04 instance: {stop_err}")
+                    self.log_output(f"Warning: Could not stop kamiwaza instance: {stop_err}")
                 
                 # Shutdown all WSL instances to ensure clean restart (WSL ONLY - not the entire device)
                 self.log_output("Shutting down all WSL instances for clean restart...")
@@ -2334,65 +2172,71 @@ class HeadlessKamiwazaInstaller:
                 time.sleep(3)
                 
                 # Verify the instance is accessible after restart
-                self.log_output("Verifying Ubuntu-24.04 instance accessibility after restart...")
-                test_ret, test_out, test_err = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'echo', 'restart_test'])
+                self.log_output("Verifying kamiwaza instance accessibility after restart...")
+                test_ret, test_out, test_err = self.run_command(['wsl', '-d', 'kamiwaza', 'echo', 'restart_test'])
                 if test_ret == 0:
-                    self.log_output("Successfully restarted and verified Ubuntu-24.04 instance")
+                    self.log_output("Successfully restarted and verified kamiwaza instance")
                     self.log_output(f"Test output: {test_out.strip()}")
                 else:
-                    self.log_output(f"ERROR: Could not access Ubuntu-24.04 instance after restart: {test_err}")
+                    self.log_output(f"ERROR: Could not access kamiwaza instance after restart: {test_err}")
                     
-                                    # Check if it's a disk attachment issue (recoverable)
-                if "Failed to attach disk" in test_err or "ERROR_PATH_NOT_FOUND" in test_err:
-                    self.log_output("DETECTED: WSL disk attachment issue - this is recoverable!")
-                    self.log_output("The WSL service is having trouble mounting the disk, but this can be fixed.")
-                    self.log_output("Attempting automatic recovery...")
-                    
-                    # Try to recover the WSL service
-                    if self.recover_wsl_disk_attachment():
-                        self.log_output("WSL disk attachment recovered successfully!")
-                        self.log_output("Retrying instance access...")
+                    # Check if it's a disk attachment issue (recoverable)
+                    if "Failed to attach disk" in test_err or "ERROR_PATH_NOT_FOUND" in test_err:
+                        self.log_output("DETECTED: WSL disk attachment issue - this is recoverable!")
+                        self.log_output("The WSL service is having trouble mounting the disk, but this can be fixed.")
+                        self.log_output("Attempting automatic recovery...")
                         
-                        # Wait a moment for recovery to take effect
-                        import time
-                        time.sleep(5)
-                        
-                        # Test access again
-                        retry_ret, retry_out, retry_err = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'echo', 'recovery_test'])
-                        if retry_ret == 0:
-                            self.log_output("SUCCESS: Ubuntu-24.04 instance accessible after recovery!")
-                            self.log_output(f"Recovery test output: {retry_out.strip()}")
-                            return ['wsl', '-d', 'Ubuntu-24.04']
+                        # Try to recover the WSL service
+                        if self.recover_wsl_disk_attachment():
+                            self.log_output("WSL disk attachment recovered successfully!")
+                            self.log_output("Retrying instance access...")
+                            
+                            # Wait a moment for recovery to take effect
+                            import time
+                            time.sleep(5)
+                            
+                            # Test access again
+                            retry_ret, retry_out, retry_err = self.run_command(['wsl', '-d', 'kamiwaza', 'echo', 'recovery_test'])
+                            if retry_ret == 0:
+                                self.log_output("SUCCESS: kamiwaza instance accessible after recovery!")
+                                self.log_output(f"Recovery test output: {retry_out.strip()}")
+                                return ['wsl', '-d', 'kamiwaza']
+                            else:
+                                self.log_output(f"Recovery attempt failed - instance still not accessible: {retry_err}")
+                                self.log_output("This indicates a deeper issue that may require manual intervention")
+                                return None
                         else:
-                            self.log_output(f"Recovery attempt failed - instance still not accessible: {retry_err}")
-                            self.log_output("This indicates a deeper issue that may require manual intervention")
+                            self.log_output("WSL disk attachment recovery failed")
+                            self.log_output("This may require manual intervention or system restart")
                             return None
                     else:
-                        self.log_output("WSL disk attachment recovery failed")
-                        self.log_output("This may require manual intervention or system restart")
+                        self.log_output("This may indicate a different WSL issue. Please check WSL configuration.")
                         return None
-                else:
-                    self.log_output("This may indicate a different WSL issue. Please check WSL configuration.")
-                    return None
                 
-                # Ensure Ubuntu-24.04 also uses kamiwaza as default user
-                self.log_output("Verifying default user for Ubuntu-24.04...")
-                ret, whoami_out, _ = self.run_command(['wsl', '-d', 'Ubuntu-24.04', 'whoami'])
+                # Ensure kamiwaza uses kamiwaza as default user
+                self.log_output("Verifying default user for kamiwaza instance...")
+                ret, whoami_out, _ = self.run_command(['wsl', '-d', 'kamiwaza', 'whoami'])
                 if ret == 0:
                     current_user = whoami_out.strip()
-                    self.log_output(f"Current Ubuntu-24.04 default user: {current_user}")
+                    self.log_output(f"Current kamiwaza default user: {current_user}")
                     if current_user != 'kamiwaza':
-                        self.log_output("Configuring Ubuntu-24.04 to use kamiwaza as default user...")
-                        ret, _, err = self.run_command(['wsl', '--set-default-user', 'Ubuntu-24.04', 'kamiwaza'])
+                        self.log_output("Configuring kamiwaza to use kamiwaza as default user...")
+                        ret, _, err = self.run_command(['wsl', '--set-default-user', 'kamiwaza', 'kamiwaza'])
                         if ret != 0:
-                            self.log_output(f"WARNING: Failed to set Ubuntu-24.04 default user: {err}")
+                            self.log_output(f"WARNING: Failed to set kamiwaza default user: {err}")
                         else:
-                            self.log_output("Successfully configured Ubuntu-24.04 default user to kamiwaza")
-                return ['wsl', '-d', 'Ubuntu-24.04']
+                            self.log_output("Successfully configured kamiwaza default user to kamiwaza")
+                return ['wsl', '-d', 'kamiwaza']
         
-        self.log_output("ERROR: No suitable WSL distribution found. Only 'kamiwaza' or 'Ubuntu-24.04' are supported.")
-        self.log_output("All automatic repair attempts have been exhausted.")
-        self.log_output("System restart required to resolve WSL service issues.")
+        # NO FALLBACK - only kamiwaza is supported
+        self.log_output("ERROR: No 'kamiwaza' WSL distribution found.")
+        self.log_output("This installer ONLY works with the 'kamiwaza' WSL distribution.")
+        self.log_output("No fallback distributions are supported to prevent conflicts.")
+        self.log_output("")
+        self.log_output("SOLUTION:")
+        self.log_output("1. Run this installer again - it will create the 'kamiwaza' instance automatically")
+        self.log_output("2. If WSL issues persist, restart your system and try again")
+        self.log_output("3. Ensure WSL is properly installed and functional")
         
         return None
 
@@ -3192,14 +3036,7 @@ def main():
             print("1. Restart your computer")
             print("2. Run Windows Update")
             print("3. Run this installer as Administrator")
-        
-        # Only wait for user input in interactive mode
-        if sys.stdin.isatty() and hasattr(sys.stdin, 'readline'):
-            try:
-                input("Press Enter to exit...")
-            except:
-                pass
-        
+                
         sys.exit(exit_code)
         
     except Exception as e:

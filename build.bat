@@ -283,9 +283,22 @@ for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File a
             set MSI_SUCCESS=0
         )
     )
+    if "%%A"=="GENERIC_MSI_SUCCESS" (
+        if "%%B"=="True" (
+            set GENERIC_MSI_SUCCESS=1
+            set UPLOAD_SUCCESS=1
+            echo [SUCCESS] Generic MSI uploaded successfully
+        ) else (
+            set GENERIC_MSI_SUCCESS=0
+        )
+    )
     if "%%A"=="MSI_NAME" (
         set MSI_NAME=%%B
         echo [DEBUG] MSI_NAME set to: %%B
+    )
+    if "%%A"=="GENERIC_MSI_NAME" (
+        set GENERIC_MSI_NAME=%%B
+        echo [DEBUG] GENERIC_MSI_NAME set to: %%B
     )
 )
 
@@ -303,9 +316,22 @@ if "%UPLOAD_SUCCESS%"=="0" (
                 echo [ERROR] MSI upload failed even with fallback method!
             )
         )
+        if "%%A"=="GENERIC_MSI_SUCCESS" (
+            if "%%B"=="True" (
+                set GENERIC_MSI_SUCCESS=1
+                echo [SUCCESS] Generic MSI uploaded successfully via fallback method
+            ) else (
+                set GENERIC_MSI_SUCCESS=0
+                echo [ERROR] Generic MSI upload failed even with fallback method!
+            )
+        )
         if "%%A"=="MSI_NAME" (
             set MSI_NAME=%%B
             echo [DEBUG] MSI_NAME set to: %%B
+        )
+        if "%%A"=="GENERIC_MSI_NAME" (
+            set GENERIC_MSI_NAME=%%B
+            echo [DEBUG] GENERIC_MSI_NAME set to: %%B
         )
     )
 )
@@ -314,16 +340,27 @@ REM Only show URL if upload was successful
 if "%MSI_SUCCESS%"=="1" (
     echo.
     echo ===============================================
-    echo LATEST BUILD URL
+    echo LATEST BUILD URLS
     echo ===============================================
     echo [DEBUG] MSI_NAME variable: !MSI_NAME!
-    set MSI_URL=https://pub-3feaeada14ef4a368ea38717abd3cf7e.r2.dev/!MSI_NAME!
+    set MSI_URL=https://packages.kamiwaza.ai/win/!MSI_NAME!
     echo [DEBUG] MSI_URL constructed: !MSI_URL!
-    echo [SUCCESS] MSI: !MSI_URL!
+    echo [SUCCESS] Build-numbered MSI: !MSI_URL!
+    
+    if "%GENERIC_MSI_SUCCESS%"=="1" (
+        set GENERIC_MSI_URL=https://packages.kamiwaza.ai/win/!GENERIC_MSI_NAME!
+        echo [SUCCESS] Generic MSI: !GENERIC_MSI_URL!
+    ) else (
+        echo [WARN] Generic MSI upload failed
+    )
+    
     echo ===============================================
     echo.
-    echo [INFO] Copy this URL for reference:
-    echo        MSI: !MSI_URL!
+    echo [INFO] Copy these URLs for reference:
+    echo        Build-numbered MSI: !MSI_URL!
+    if "%GENERIC_MSI_SUCCESS%"=="1" (
+        echo        Generic MSI: !GENERIC_MSI_URL!
+    )
     echo ===============================================
 ) else (
     echo.
