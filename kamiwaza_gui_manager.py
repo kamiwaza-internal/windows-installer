@@ -1264,6 +1264,14 @@ class KamiwazaManager:
 
 def main():
     """Main entry point"""
+    import argparse
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Kamiwaza Manager')
+    parser.add_argument('--minimized', action='store_true', 
+                       help='Start minimized to system tray')
+    args = parser.parse_args()
+    
     root = tk.Tk()
     
     # Set application icon if available
@@ -1281,6 +1289,15 @@ def main():
     x = (root.winfo_screenwidth() // 2) - (root.winfo_width() // 2)
     y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
     root.geometry(f"+{x}+{y}")
+    
+    # Start minimized if requested
+    if args.minimized:
+        # Hide window immediately and minimize to tray
+        root.withdraw()
+        app.is_minimized_to_tray = True
+        # Show notification that it's running in tray
+        if app.tray_icon:
+            app.tray_icon.notify("Kamiwaza Manager started", "Running in system tray")
     
     # Start the GUI
     root.mainloop()
