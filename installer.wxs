@@ -281,14 +281,10 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
             <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="KamiwazaConfigDlg" Order="2">LicenseAccepted = "1"</Publish>
             <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="KamiwazaConfigDlg">1</Publish>
             
-            <!-- Navigate to custom exit dialog after installation -->
-            <Publish Dialog="ExitDialog" Control="Finish" Event="NewDialog" Value="KamiwazaExitDlg">1</Publish>
-            
-            <!-- Customize the exit dialog title and message -->
-            <Property Id="WIXUI_EXITDIALOGTITLE" Value="Kamiwaza Setup Complete!" />
-            <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Setup is complete! The Kamiwaza installation will continue in a separate 'Kamiwaza Installer' window when you click Finish.
-
-IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to activate after the complete installation." />
+            <!-- Override the default ExitDialog to show our custom dialog instead -->
+            <!-- Suppress the default ExitDialog and show our custom one after installation -->
+            <Publish Dialog="ExitDialog" Control="Finish" Event="NewDialog" Value="KamiwazaExitDlg" Order="1">1</Publish>
+            <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="2">0</Publish>
             
             <!-- Require user confirmation for reboot - no automatic restarts -->
             <!-- Removed REBOOT and REBOOTPROMPT suppression to allow MSI to prompt when required -->
@@ -330,8 +326,7 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
                       ExeCommand=""
                       Execute="deferred"
                       Impersonate="yes"
-                      Return="ignore" />
-                      
+                      Return="ignore" />                    
 
                       
         <CustomAction Id="RunKamiwazaInstaller" 
@@ -413,8 +408,7 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
             <Custom Action="DetectGPUCmd" After="CheckRemotePC">NOT REMOVE</Custom>
             <Custom Action="RunKamiwazaInstaller" After="DetectGPUCmd">NOT REMOVE</Custom>
             <Custom Action="InstallGUIManager" After="RunKamiwazaInstaller">NOT REMOVE</Custom>
-            <Custom Action="SetupRunOnce" After="InstallGUIManager">NOT REMOVE</Custom>
-            <Custom Action="SetupManagerAutostart" After="SetupRunOnce">NOT REMOVE AND AUTOSTART_TRAY = "1"</Custom>
+            <Custom Action="SetupManagerAutostart" After="InstallGUIManager">NOT REMOVE AND AUTOSTART_TRAY = "1"</Custom>
             <Custom Action="LaunchDiagnosticGUI" After="SetupManagerAutostart">NOT REMOVE AND LAUNCH_GUI = "1"</Custom>
             <ScheduleReboot After="SetupManagerAutostart">NOT REMOVE</ScheduleReboot>
             
