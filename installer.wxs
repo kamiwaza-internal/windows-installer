@@ -39,7 +39,7 @@
         <Property Id="USAGE_REPORTING" Value="1" />
         <Property Id="INSTALL_MODE" Value="lite" />
         <Property Id="LAUNCH_GUI" Value="0" />
-        <Property Id="AUTOSTART_TRAY" Value="1" />
+        <Property Id="AUTOSTART_TRAY" Value="0" />
         
         <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
         <WixVariable Id="WixUICostingPopupOptOut" Value="1" />
@@ -251,9 +251,9 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
                 <Control Id="LaunchGUICheck" Type="CheckBox" X="15" Y="125" Width="340" Height="17" Property="LAUNCH_GUI" CheckBoxValue="1" Text="Launch Kamiwaza Diagnostic GUI when ready" />
                 
                 <!-- Tray Autostart Checkbox -->
-                <Control Id="TrayAutostartCheck" Type="CheckBox" X="15" Y="145" Width="340" Height="17" Property="AUTOSTART_TRAY" CheckBoxValue="1" Text="Start Kamiwaza System Tray automatically with Windows" />
+                <Control Id="TrayAutostartCheck" Type="CheckBox" X="15" Y="145" Width="340" Height="17" Property="AUTOSTART_TRAY" CheckBoxValue="0" Text="Start Kamiwaza System Tray automatically with Windows (minimized)" />
                 
-                <Control Id="GUIHelp" Type="Text" X="15" Y="165" Width="340" Height="24" NoPrefix="yes" Text="The Diagnostic GUI will be installed by the Python installer. The System Tray provides quick access to Kamiwaza controls." />
+                <Control Id="GUIHelp" Type="Text" X="15" Y="165" Width="340" Height="24" NoPrefix="yes" Text="The Diagnostic GUI will be installed by the Python installer. The System Tray provides quick access to Kamiwaza controls and starts minimized to the tray." />
                 
                 <!-- Navigation buttons -->
                 <Control Id="Finish" Type="PushButton" X="236" Y="253" Width="56" Height="17" Default="yes" Text="&amp;Finish">
@@ -369,8 +369,6 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
                       Impersonate="yes"
                       Return="ignore" />
 
-
-
         <!-- Install Kamiwaza GUI Manager to AppData and Start Menu -->
         <CustomAction Id="InstallGUIManager"
                       ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "[INSTALLFOLDER]install_gui_manager.ps1" ^> "$env:TEMP\kamiwaza_gui_install.log" 2^>^&amp;1'
@@ -381,7 +379,7 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
 
         <!-- Setup Kamiwaza Manager Autostart (Conditional) -->
         <CustomAction Id="SetupManagerAutostart"
-                      ExeCommand='powershell.exe -Command "Set-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"KamiwazaManager\" -Value \"[INSTALLFOLDER]KamiwazaGUIManager.exe\" -Force; Write-Host \"Manager autostart configured\""'
+                      ExeCommand='powershell.exe -Command "Set-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"KamiwazaManager\" -Value \"[INSTALLFOLDER]KamiwazaGUIManager.exe --minimized\" -Force; Write-Host \"Manager autostart configured (minimized)\""'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="yes"
