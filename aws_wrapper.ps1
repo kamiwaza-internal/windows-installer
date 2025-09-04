@@ -3,7 +3,8 @@ param(
     [string]$Version,
     [string]$Arch,
     [int]$StartBuild,
-    [string]$EndpointUrl
+    [string]$EndpointUrl,
+    [switch]$SkipGeneric
 )
 
 # Set environment variables to help with SSL/TLS issues
@@ -26,7 +27,7 @@ function Test-BuildExists {
 
 # Function to upload files
 function Upload-Files {
-    param([int]$BuildNumber)
+    param([int]$BuildNumber, [switch]$SkipGeneric)
     
     $exeName = "kamiwaza_installer_${Version}_${Arch}_build${BuildNumber}.exe"
     $msiName = "kamiwaza_installer_${Version}_${Arch}_build${BuildNumber}.msi"
@@ -40,9 +41,14 @@ function Upload-Files {
     & "venv\Scripts\aws.cmd" s3 cp "kamiwaza_installer.msi" "s3://packages/win/$msiName" --endpoint-url $EndpointUrl --no-verify-ssl
     $msiSuccess = $LASTEXITCODE -eq 0
     
-    Write-Host "[INFO] Uploading generic MSI: $genericMsiName"
-    & "venv\Scripts\aws.cmd" s3 cp "kamiwaza_installer.msi" "s3://packages/win/$genericMsiName" --endpoint-url $EndpointUrl --no-verify-ssl
-    $genericMsiSuccess = $LASTEXITCODE -eq 0
+    if ($SkipGeneric) {
+        Write-Host "[INFO] Skipping generic MSI upload as requested"
+        $genericMsiSuccess = $true  # Set to true since we're intentionally skipping
+    } else {
+        Write-Host "[INFO] Uploading generic MSI: $genericMsiName"
+        & "venv\Scripts\aws.cmd" s3 cp "kamiwaza_installer.msi" "s3://packages/win/$genericMsiName" --endpoint-url $EndpointUrl --no-verify-ssl
+        $genericMsiSuccess = $LASTEXITCODE -eq 0
+    }
     
     # Output results for batch script to read
     Write-Host "EXE_SUCCESS=$exeSuccess"
@@ -70,6 +76,6 @@ switch ($Operation) {
     }
     
     "upload" {
-        Upload-Files -BuildNumber $StartBuild
+        Upload-Files -BuildNumber $StartBuild -SkipGeneric:$SkipGeneric
     }
 } 

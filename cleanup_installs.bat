@@ -81,13 +81,63 @@ if errorlevel 1 (
     echo Kamiwaza registry keys removed.
 )
 
+@REM Clean up incorrect machine-wide autostart entry (32-bit view)
+echo Cleaning up incorrect machine-wide autostart entries...
+reg delete "HKLM\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run" /v "KamiwazaAutoStart" /f 2>nul
+if errorlevel 1 (
+    echo No incorrect machine-wide autostart entry found.
+) else (
+    echo Incorrect machine-wide autostart entry removed.
+)
+
+@REM Clean up per-user autostart entry
+echo Cleaning up per-user autostart entries...
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "KamiwazaAutoStart" /f 2>nul
+if errorlevel 1 (
+    echo No per-user autostart entry found.
+) else (
+    echo Per-user autostart entry removed.
+)
+
+@REM Clean up stray system profile entries
+echo Cleaning up stray system profile entries...
+reg delete "HKU\.DEFAULT\Software\Microsoft\Windows\CurrentVersion\Run" /v "Kamiwaza" /f 2>nul
+if errorlevel 1 (
+    echo No .DEFAULT profile entry found.
+) else (
+    echo .DEFAULT profile entry removed.
+)
+
+reg delete "HKU\S-1-5-18\Software\Microsoft\Windows\CurrentVersion\Run" /v "Kamiwaza" /f 2>nul
+if errorlevel 1 (
+    echo No LocalSystem profile entry found.
+) else (
+    echo LocalSystem profile entry removed.
+)
+
+@REM Clean up Kamiwaza Manager autostart entries
+echo Cleaning up Kamiwaza Manager autostart entries...
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "KamiwazaManager" /f 2>nul
+if errorlevel 1 (
+    echo No Kamiwaza Manager autostart entry found.
+) else (
+    echo Kamiwaza Manager autostart entry removed.
+)
+
 @REM Clean up RunOnce entries
 echo Cleaning up RunOnce entries...
 reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "KamiwazaGPUAutostart" /f 2>nul
 if errorlevel 1 (
-    echo No Kamiwaza RunOnce entries found.
+    echo No Kamiwaza GPU autostart RunOnce entry found.
 ) else (
-    echo Kamiwaza RunOnce entries removed.
+    echo Kamiwaza GPU autostart RunOnce entry removed.
+)
+
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "KamiwazaContinueInstall" /f 2>nul
+if errorlevel 1 (
+    echo No Kamiwaza continue install RunOnce entry found.
+) else (
+    echo Kamiwaza continue install RunOnce entry removed.
 )
 
 @REM Unregister WSL instance named "kamiwaza" if it exists

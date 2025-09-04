@@ -103,6 +103,18 @@
                         <RemoveFile Id="RemoveConfigFiles" Directory="INSTALLFOLDER" Name=".wslconfig*" On="uninstall"/>
                         <RemoveFile Id="RemoveDownloadLogs" Directory="INSTALLFOLDER" Name="download*.log" On="uninstall"/>
                     </Component>
+                    
+                    <!-- Machine-wide autostart component for all users -->
+                    <Component Id="AutoStartMachine" Guid="*">
+                        <!-- Machine-wide startup registry entry -->
+                        <RegistryValue
+                            Root="HKLM"
+                            Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                            Name="KamiwazaAutoStart"
+                            Type="string"
+                            Value="&quot;[INSTALLFOLDER]kamiwaza_start.bat&quot;"
+                            KeyPath="yes" />
+                    </Component>
                 </Directory>
             </Directory>
             <!-- Start Menu -->
@@ -178,7 +190,7 @@
                                      Key="Software\Kamiwaza\KamiwazaInstaller" 
                                      Name="installed" 
                                      Type="integer" 
-                                     Value="1" 
+                                     Value="2" 
                                      KeyPath="yes" />
                         <!-- Clean up registry entries on uninstall -->
                         <RegistryKey Root="HKCU" Key="Software\Kamiwaza" ForceDeleteOnUninstall="yes" />
@@ -193,6 +205,7 @@
         <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
             <ComponentGroupRef Id="EmbeddedPythonFiles" />
             <ComponentRef Id="KamiwazaInstallerFiles" />
+            <ComponentRef Id="AutoStartMachine" />
             <ComponentRef Id="ApplicationShortcut" />
         </ComponentGroup>
 
