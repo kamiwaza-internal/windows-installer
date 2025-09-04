@@ -17,6 +17,38 @@ if "%1"=="--no-upload" (
     echo [INFO] Upload to AWS will be skipped
 )
 
+REM Check for --no-generic-msi flag
+set SKIP_GENERIC_MSI=0
+if "%1"=="--no-generic-msi" (
+    set SKIP_GENERIC_MSI=1
+    echo [INFO] Generic MSI upload will be skipped
+)
+if "%2"=="--no-generic-msi" (
+    set SKIP_GENERIC_MSI=1
+    echo [INFO] Generic MSI upload will be skipped
+)
+
+REM Check for --help flag
+if "%1"=="--help" (
+    echo.
+    echo Kamiwaza Build Script Usage:
+    echo.
+    echo build.bat [options]
+    echo.
+    echo Options:
+    echo   --clean              Clean up log files and exit
+    echo   --no-upload          Skip AWS upload entirely
+    echo   --no-generic-msi     Upload versioned MSI but skip generic MSI upload
+    echo   --help               Show this help message
+    echo.
+    echo Examples:
+    echo   build.bat                    # Normal build and upload
+    echo   build.bat --no-upload        # Build only, no upload
+    echo   build.bat --no-generic-msi   # Upload versioned MSI only
+    echo.
+    exit /b 0
+)
+
 echo ===============================================
 echo Kamiwaza Build Script
 echo ===============================================
@@ -272,7 +304,13 @@ echo [INFO] Uploading files to AWS...
 
 REM Try the regular AWS wrapper first
 set UPLOAD_SUCCESS=0
-for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%" 2^>nul') do (
+REM Build the PowerShell command with conditional SkipGeneric parameter
+set PS_CMD=powershell -ExecutionPolicy Bypass -File aws_wrapper.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%"
+if "%SKIP_GENERIC_MSI%"=="1" (
+    set PS_CMD=%PS_CMD% -SkipGeneric
+)
+
+for /f "tokens=1,2 delims==" %%A in ('%PS_CMD% 2^>nul') do (
     echo [DEBUG] Parsing output: %%A=%%B
     if "%%A"=="MSI_SUCCESS" (
         if "%%B"=="True" (
@@ -305,7 +343,13 @@ for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File a
 REM If regular upload failed, try the fallback wrapper
 if "%UPLOAD_SUCCESS%"=="0" (
     echo [WARN] Regular upload failed, trying fallback method...
-    for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper_fallback.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%"') do (
+    REM Build the fallback PowerShell command with conditional SkipGeneric parameter
+    set PS_CMD_FALLBACK=powershell -ExecutionPolicy Bypass -File aws_wrapper_fallback.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%"
+    if "%SKIP_GENERIC_MSI%"=="1" (
+        set PS_CMD_FALLBACK=!PS_CMD_FALLBACK! -SkipGeneric
+    )
+
+    for /f "tokens=1,2 delims==" %%A in ('!PS_CMD_FALLBACK!') do (
         echo [DEBUG] Fallback parsing output: %%A=%%B
         if "%%A"=="MSI_SUCCESS" (
             if "%%B"=="True" (
@@ -347,7 +391,9 @@ if "%MSI_SUCCESS%"=="1" (
     echo [DEBUG] MSI_URL constructed: !MSI_URL!
     echo [SUCCESS] Build-numbered MSI: !MSI_URL!
     
-    if "%GENERIC_MSI_SUCCESS%"=="1" (
+    if "%SKIP_GENERIC_MSI%"=="1" (
+        echo [INFO] Generic MSI upload was skipped as requested
+    ) else if "%GENERIC_MSI_SUCCESS%"=="1" (
         set GENERIC_MSI_URL=https://packages.kamiwaza.ai/win/!GENERIC_MSI_NAME!
         echo [SUCCESS] Generic MSI: !GENERIC_MSI_URL!
     ) else (
@@ -358,7 +404,9 @@ if "%MSI_SUCCESS%"=="1" (
     echo.
     echo [INFO] Copy these URLs for reference:
     echo        Build-numbered MSI: !MSI_URL!
-    if "%GENERIC_MSI_SUCCESS%"=="1" (
+    if "%SKIP_GENERIC_MSI%"=="1" (
+        echo        Generic MSI: Skipped as requested
+    ) else if "%GENERIC_MSI_SUCCESS%"=="1" (
         echo        Generic MSI: !GENERIC_MSI_URL!
     )
     echo ===============================================

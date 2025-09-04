@@ -190,7 +190,7 @@
                                      Key="Software\Kamiwaza\KamiwazaInstaller" 
                                      Name="installed" 
                                      Type="integer" 
-                                     Value="1" 
+                                     Value="2" 
                                      KeyPath="yes" />
                         <!-- Clean up registry entries on uninstall -->
                         <RegistryKey Root="HKCU" Key="Software\Kamiwaza" ForceDeleteOnUninstall="yes" />

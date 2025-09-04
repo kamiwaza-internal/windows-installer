@@ -3,7 +3,8 @@ param(
     [string]$Version,
     [string]$Arch,
     [int]$StartBuild,
-    [string]$EndpointUrl
+    [string]$EndpointUrl,
+    [switch]$SkipGeneric
 )
 
 # Enhanced SSL configuration for PowerShell
@@ -183,8 +184,11 @@ function Upload-Files {
         Write-Host "[WARN] MSI file not found at kamiwaza_installer.msi"
     }
     
-    # Upload generic MSI (if MSI exists)
-    if (Test-Path "kamiwaza_installer.msi") {
+    # Upload generic MSI (if MSI exists and not skipped)
+    if ($SkipGeneric) {
+        Write-Host "[INFO] Skipping generic MSI upload as requested"
+        $genericMsiSuccess = $true  # Set to true since we're intentionally skipping
+    } elseif (Test-Path "kamiwaza_installer.msi") {
         Write-Host "[INFO] Uploading generic MSI: $genericMsiName"
         
         # Method 1: AWS CLI with SSL bypass
