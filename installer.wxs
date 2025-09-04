@@ -82,7 +82,6 @@
                         <File Id="IntelArcSetupScript" Name="setup_intel_arc_gpu.sh" Source="setup_intel_arc_gpu.sh"/>
                         <File Id="KamiwazaStartBatch" Name="kamiwaza_start.bat" Source="kamiwaza_start.bat"/>
                         <File Id="KamiwazaStopBatch" Name="kamiwaza_stop.bat" Source="kamiwaza_stop.bat"/>
-                        <File Id="CreateRunOnceBatch" Name="create_runonce.bat" Source="create_runonce.bat"/>
 
                         <File Id="KamiwazaGUIManager" Name="KamiwazaGUIManager.exe" Source="KamiwazaGUIManager.exe"/>
                         <File Id="InstallGUIManager" Name="install_gui_manager.ps1" Source="install_gui_manager.ps1"/>
@@ -394,14 +393,6 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
         <CustomAction Id="SetupManagerAutostart"
                       ExeCommand='powershell.exe -Command "Set-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"KamiwazaManager\" -Value \"[INSTALLFOLDER]KamiwazaGUIManager.exe --minimized\" -Force; Write-Host \"Manager autostart configured (minimized)\""'
                       Directory="TARGETDIR"
-                      Execute="deferred"
-                      Impersonate="yes"
-                      Return="ignore" />
-
-        <!-- Setup RunOnce entry for continuing Kamiwaza installation after reboot -->
-        <CustomAction Id="SetupRunOnce"
-                      FileKey="CreateRunOnceBatch"
-                      ExeCommand="[INSTALLFOLDER] [WSLMEMORY] [USER_EMAIL] [LICENSE_KEY] [USAGE_REPORTING] [INSTALL_MODE]"
                       Execute="deferred"
                       Impersonate="yes"
                       Return="ignore" />
