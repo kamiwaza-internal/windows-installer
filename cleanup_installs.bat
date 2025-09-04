@@ -90,6 +90,15 @@ if errorlevel 1 (
     echo Incorrect machine-wide autostart entry removed.
 )
 
+@REM Clean up machine-wide autostart entry (HKLM)
+echo Cleaning up machine-wide autostart entries...
+reg delete "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" /v "KamiwazaAutoStart" /f 2>nul
+if errorlevel 1 (
+    echo No machine-wide autostart entry found.
+) else (
+    echo Machine-wide autostart entry removed.
+)
+
 @REM Clean up per-user autostart entry
 echo Cleaning up per-user autostart entries...
 reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "KamiwazaAutoStart" /f 2>nul

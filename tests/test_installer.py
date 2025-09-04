@@ -72,7 +72,6 @@ def test_required_files():
         ("setup_intel_arc_gpu.sh", "Intel Arc GPU setup script"),
         ("config.yaml", "Configuration file"),
         ("cleanup_wsl_kamiwaza.ps1", "WSL cleanup script"),
-        ("start_platform.bat", "Platform start script"),
         ("kamiwaza_start.bat", "Kamiwaza start script"),
         ("kamiwaza_stop.bat", "Kamiwaza stop script"),
         ("create_autostart_registry.ps1", "Autostart registry script"),
