@@ -39,10 +39,10 @@ def build_gui_exe():
         "--onefile",                    # Single executable
         "--windowed",                   # No console window
         "--name=KamiwazaGUIManager",    # Executable name
-        "--icon=kamiwaza.ico",          # Icon file
-        "--add-data=kamiwaza.ico;.",    # Include icon
-        "--add-data=detect_gpu.ps1;.",  # Include GPU detection script
-        "--add-data=cleanup_wsl_kamiwaza.ps1;.",  # Include cleanup script
+        "--icon=../assets/kamiwaza.ico",          # Icon file
+        "--add-data=../assets/kamiwaza.ico;.",    # Include icon
+        "--add-data=../scripts/detect_gpu.ps1;.",  # Include GPU detection script
+        "--add-data=../scripts/cleanup_wsl_kamiwaza.ps1;.",  # Include cleanup script
         "--hidden-import=tkinter",      # Ensure tkinter is included
         "--hidden-import=tkinter.ttk",  # Include ttk widgets
         "--hidden-import=subprocess",   # Include subprocess

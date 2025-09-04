@@ -23,7 +23,7 @@ echo ===============================================
 
 REM Read values from config.yaml using PowerShell
 echo [INFO] Reading config from config.yaml...
-for /f "tokens=1,2 delims==" %%A in ('powershell -Command "Get-Content config.yaml | Where-Object { $_ -match '^[^#]' -and $_ -match ':' } | ForEach-Object { $line = $_.Trim(); if ($line -match '^([^:]+):\s*(.+?)(?:\s+#|$)') { $matches[1].Trim() + '=' + $matches[2].Trim() } else { $line -replace ':\s*', '=' } }"') do (
+for /f "tokens=1,2 delims==" %%A in ('powershell -Command "Get-Content installer\configs\config.yaml | Where-Object { $_ -match '^[^#]' -and $_ -match ':' } | ForEach-Object { $line = $_.Trim(); if ($line -match '^([^:]+):\s*(.+?)(?:\s+#|$)') { $matches[1].Trim() + '=' + $matches[2].Trim() } else { $line -replace ':\s*', '=' } }"') do (
     if "%%A"=="kamiwaza_version" set KAMIWAZA_VERSION=%%B
     if "%%A"=="codename" set CODENAME=%%B
     if "%%A"=="build_number" set BUILD_NUMBER=%%B
@@ -98,7 +98,7 @@ if "%SKIP_UPLOAD%"=="1" (
     
     REM Try regular wrapper first
     set BUILD_CHECK_SUCCESS=0
-    for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper.ps1 -Operation "find-build" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%" 2^>nul') do (
+    for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File installer\scripts\aws_wrapper.ps1 -Operation "find-build" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%" 2^>nul') do (
         if "%%A"=="FINAL_BUILD_NUMBER" (
             set FINAL_BUILD_NUMBER=%%B
             set BUILD_CHECK_SUCCESS=1
@@ -108,7 +108,7 @@ if "%SKIP_UPLOAD%"=="1" (
     REM If regular build check failed, try fallback wrapper
     if "%BUILD_CHECK_SUCCESS%"=="0" (
         echo [WARN] Regular build check failed, trying fallback method...
-        for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper_fallback.ps1 -Operation "find-build" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%"') do (
+        for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File installer\scripts\aws_wrapper_fallback.ps1 -Operation "find-build" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%"') do (
             if "%%A"=="FINAL_BUILD_NUMBER" set FINAL_BUILD_NUMBER=%%B
         )
     )
@@ -119,7 +119,7 @@ if "%SKIP_UPLOAD%"=="1" (
 set /a NEXT_BUILD=!FINAL_BUILD_NUMBER!+1
 REM Update config.yaml with next build number for future (move this up)
 echo [INFO] Updating config.yaml for next build: !NEXT_BUILD!
-powershell -Command "(Get-Content config.yaml) -replace 'build_number: [0-9]+', 'build_number: !NEXT_BUILD!' | Set-Content config.yaml"
+powershell -Command "(Get-Content installer\configs\config.yaml) -replace 'build_number: [0-9]+', 'build_number: !NEXT_BUILD!' | Set-Content installer\configs\config.yaml"
 if errorlevel 1 (
     echo [ERROR] Failed to update config.yaml
 ) else (
@@ -132,8 +132,8 @@ echo.
 
 REM Create a working copy and inject DEB_FILE_URL into template
 echo [INFO] Creating working copy and injecting DEB_FILE_URL...
-copy kamiwaza_headless_installer.py kamiwaza_headless_installer_template.py.backup >nul
-powershell -Command "(Get-Content kamiwaza_headless_installer.py) -replace '{{DEB_FILE_URL}}', '%DEB_FILE_URL%' | Set-Content kamiwaza_headless_installer_build.py"
+copy installer\build-tools\kamiwaza_headless_installer.py kamiwaza_headless_installer_template.py.backup >nul
+powershell -Command "(Get-Content installer\build-tools\kamiwaza_headless_installer.py) -replace '{{DEB_FILE_URL}}', '%DEB_FILE_URL%' | Set-Content kamiwaza_headless_installer_build.py"
 if errorlevel 1 (
     echo [ERROR] Failed to inject DEB_FILE_URL into working copy
     pause
@@ -144,31 +144,26 @@ if errorlevel 1 (
 
 REM Build the GUI executable for MSI installer
 echo [INFO] Building Kamiwaza GUI Manager executable...
-if exist "kamiwaza_gui_manager.py" (
+if exist "installer\build-tools\kamiwaza_gui_manager.py" (
     echo [INFO] GUI source found, building executable...
+    cd installer\build-tools
     python build_gui_exe.py
-    if errorlevel 1 (
-        echo [ERROR] GUI build failed! Check the output above for details.
-        echo [INFO] You can continue without GUI by removing GUI references from installer.wxs
-        echo [INFO] Or fix the GUI build issues and try again.
+    cd ..\..
+    echo [SUCCESS] GUI executable built successfully
+        
+    REM Copy executable to current directory for MSI installer
+    if exist "installer\output\dist\KamiwazaGUIManager.exe" (
+        copy "installer\output\dist\KamiwazaGUIManager.exe" "KamiwazaGUIManager.exe" >nul
+        echo [SUCCESS] GUI executable copied to current directory
+    ) else (
+        echo [ERROR] GUI executable not found in dist folder after build!
         pause
         exit /b 1
-    ) else (
-        echo [SUCCESS] GUI executable built successfully
-        
-        REM Copy executable to current directory for MSI installer
-        if exist "dist\KamiwazaGUIManager.exe" (
-            copy "dist\KamiwazaGUIManager.exe" "KamiwazaGUIManager.exe" >nul
-            echo [SUCCESS] GUI executable copied to current directory
-        ) else (
-            echo [ERROR] GUI executable not found in dist folder after build!
-            pause
-            exit /b 1
-        )
     )
+
 ) else (
     echo [WARN] GUI source not found - skipping GUI build
-    echo [INFO] If you want to include GUI, ensure kamiwaza_gui_manager.py exists
+    echo [INFO] If you want to include GUI, ensure installer\build-tools\kamiwaza_gui_manager.py exists
     echo [INFO] You may need to remove GUI references from installer.wxs
 )
 
@@ -213,7 +208,7 @@ if exist "KamiwazaGUIManager.exe" (
 REM Build WiX installer
 echo [INFO] Building MSI installer...
 echo [INFO] Version components: Major=%VERSION_MAJOR%, Minor=%VERSION_MINOR%, Patch=%VERSION_PATCH%
-candle -dKAMIWAZA_VERSION=%KAMIWAZA_VERSION% -dKAMIWAZA_VERSION_MAJOR=%VERSION_MAJOR% -dKAMIWAZA_VERSION_MINOR=%VERSION_MINOR% -dKAMIWAZA_VERSION_PATCH=%VERSION_PATCH% -dCODENAME=%CODENAME% -dBUILD_NUMBER=!FINAL_BUILD_NUMBER! -dARCH=%ARCH% -dDEB_FILE_URL="%DEB_FILE_URL%" -dEmbeddedPythonPath=embedded_python installer.wxs python_components.wxs
+candle -dKAMIWAZA_VERSION=%KAMIWAZA_VERSION% -dKAMIWAZA_VERSION_MAJOR=%VERSION_MAJOR% -dKAMIWAZA_VERSION_MINOR=%VERSION_MINOR% -dKAMIWAZA_VERSION_PATCH=%VERSION_PATCH% -dCODENAME=%CODENAME% -dBUILD_NUMBER=!FINAL_BUILD_NUMBER! -dARCH=%ARCH% -dDEB_FILE_URL="%DEB_FILE_URL%" -dEmbeddedPythonPath=installer\python-runtime\embedded_python installer\wix\installer.wxs installer\wix\python_components.wxs
 if errorlevel 1 (
     echo [ERROR] WiX compile failed! Check the output above for details.
     del kamiwaza_headless_installer_build.py 2>nul
@@ -223,7 +218,9 @@ if errorlevel 1 (
     echo [SUCCESS] WiX compilation completed
 )
 
-light -ext WixUIExtension -sval -out kamiwaza_installer.msi installer.wixobj python_components.wixobj
+cd installer\wix
+light -ext WixUIExtension -sval -out ..\output\kamiwaza_installer.msi installer.wixobj python_components.wixobj
+cd ..\..
 if errorlevel 1 (
     echo [ERROR] WiX link failed! Check the output above for details.
     del kamiwaza_headless_installer_build.py 2>nul
@@ -236,7 +233,7 @@ if errorlevel 1 (
 REM Sign MSI using PowerShell script
 if not "%SKIP_SIGNING%"=="1" (
     echo [INFO] Signing executables...
-    powershell -ExecutionPolicy Bypass -File "sign_files.ps1" -MSIPath "kamiwaza_installer.msi"
+    powershell -ExecutionPolicy Bypass -File "installer\scripts\sign_files.ps1" -MSIPath "installer\output\kamiwaza_installer.msi"
     if errorlevel 1 (
         echo [WARN] Failed to sign files - continuing anyway
     ) else (
@@ -252,7 +249,7 @@ echo.
 echo ===============================================
 echo BUILD COMPLETED SUCCESSFULLY
 echo ===============================================
-echo MSI: kamiwaza_installer.msi
+echo MSI: installer\output\kamiwaza_installer.msi
 echo.
 
 REM Set MSI file name (will be updated by PowerShell wrapper)
@@ -272,7 +269,7 @@ echo [INFO] Uploading files to AWS...
 
 REM Try the regular AWS wrapper first
 set UPLOAD_SUCCESS=0
-for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%" 2^>nul') do (
+for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File installer\scripts\aws_wrapper.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%" 2^>nul') do (
     echo [DEBUG] Parsing output: %%A=%%B
     if "%%A"=="MSI_SUCCESS" (
         if "%%B"=="True" (
@@ -305,7 +302,7 @@ for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File a
 REM If regular upload failed, try the fallback wrapper
 if "%UPLOAD_SUCCESS%"=="0" (
     echo [WARN] Regular upload failed, trying fallback method...
-    for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper_fallback.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%"') do (
+    for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File installer\scripts\aws_wrapper_fallback.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%"') do (
         echo [DEBUG] Fallback parsing output: %%A=%%B
         if "%%A"=="MSI_SUCCESS" (
             if "%%B"=="True" (
@@ -367,7 +364,7 @@ if "%MSI_SUCCESS%"=="1" (
     echo ===============================================
     echo UPLOAD STATUS
     echo ===============================================
-    echo [INFO] MSI file created locally: kamiwaza_installer.msi
+    echo [INFO] MSI file created locally: installer\output\kamiwaza_installer.msi
     echo [INFO] Upload was not successful - no public URL available
     echo ===============================================
 )
