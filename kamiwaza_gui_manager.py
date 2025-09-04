@@ -25,6 +25,66 @@ import webbrowser
 import time
 import pystray
 from PIL import Image, ImageDraw
+import psutil
+import tempfile
+import atexit
+
+class SingleInstance:
+    """Ensure only one instance of the application runs"""
+    
+    def __init__(self, app_name="KamiwazaManager"):
+        self.app_name = app_name
+        self.lock_file = None
+        self.lock_path = os.path.join(tempfile.gettempdir(), f"{app_name}.lock")
+        
+    def is_already_running(self):
+        """Check if another instance is already running"""
+        try:
+            # Check for existing lock file
+            if os.path.exists(self.lock_path):
+                with open(self.lock_path, 'r') as f:
+                    existing_pid = int(f.read().strip())
+                
+                # Check if the process is still running
+                try:
+                    if psutil.pid_exists(existing_pid):
+                        proc = psutil.Process(existing_pid)
+                        # Check if it's actually our application
+                        if self.app_name.lower() in proc.name().lower() or "python" in proc.name().lower():
+                            return True
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+                
+                # Clean up stale lock file
+                try:
+                    os.remove(self.lock_path)
+                except:
+                    pass
+            
+            return False
+            
+        except Exception:
+            return False
+    
+    def create_lock(self):
+        """Create lock file with current PID"""
+        try:
+            with open(self.lock_path, 'w') as f:
+                f.write(str(os.getpid()))
+            
+            # Register cleanup on exit
+            atexit.register(self.cleanup)
+            return True
+        except Exception:
+            return False
+    
+    def cleanup(self):
+        """Clean up lock file"""
+        try:
+            if self.lock_path and os.path.exists(self.lock_path):
+                os.remove(self.lock_path)
+        except Exception:
+            pass
 
 class KamiwazaManager:
     def __init__(self, root):
@@ -1259,6 +1319,13 @@ class KamiwazaManager:
         except:
             pass
         
+        # Clean up single instance lock (atexit should handle this, but be explicit)
+        try:
+            if hasattr(self, 'single_instance'):
+                self.single_instance.cleanup()
+        except:
+            pass
+        
         # Force exit
         os._exit(0)
 
@@ -1268,9 +1335,33 @@ def main():
     
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Kamiwaza Manager')
-    parser.add_argument('--minimized', action='store_true', 
-                       help='Start minimized to system tray')
+    parser.add_argument('--show', action='store_true', 
+                       help='Start with window visible (default is tray only)')
     args = parser.parse_args()
+    
+    # Check for single instance
+    single_instance = SingleInstance("KamiwazaManager")
+    if single_instance.is_already_running():
+        print("Kamiwaza Manager is already running in the system tray.")
+        print("Check your system tray for the Kamiwaza icon.")
+        # Show a message box if we're not in a console environment
+        try:
+            if hasattr(sys, 'ps1') or not hasattr(sys.stderr, 'isatty') or not sys.stderr.isatty():
+                # We're in an interactive environment or GUI, show message box
+                root = tk.Tk()
+                root.withdraw()  # Hide the main window
+                messagebox.showinfo("Kamiwaza Manager", 
+                                  "Kamiwaza Manager is already running in the system tray.\n\n"
+                                  "Look for the Kamiwaza icon in your system tray and right-click it to access the menu.")
+                root.destroy()
+        except Exception:
+            pass
+        return
+    
+    # Create lock file
+    if not single_instance.create_lock():
+        print("Failed to create lock file. Another instance may be starting.")
+        return
     
     root = tk.Tk()
     
@@ -1283,21 +1374,23 @@ def main():
         pass
     
     app = KamiwazaManager(root)
+    # Store single instance reference for cleanup
+    app.single_instance = single_instance
     
-    # Center the window
+    # Center the window (for when it's shown later)
     root.update_idletasks()
     x = (root.winfo_screenwidth() // 2) - (root.winfo_width() // 2)
     y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
     root.geometry(f"+{x}+{y}")
     
-    # Start minimized if requested
-    if args.minimized:
+    # Always start minimized to tray by default, unless --show is specified
+    if not args.show:
         # Hide window immediately and minimize to tray
         root.withdraw()
         app.is_minimized_to_tray = True
         # Show notification that it's running in tray
-        if app.tray_icon:
-            app.tray_icon.notify("Kamiwaza Manager started", "Running in system tray")
+        # Wait a moment for tray icon to be ready
+        root.after(1000, lambda: app.tray_icon.notify("Kamiwaza Manager started", "Running in system tray. Click 'Show Kamiwaza Manager' to open.") if app.tray_icon else None)
     
     # Start the GUI
     root.mainloop()
