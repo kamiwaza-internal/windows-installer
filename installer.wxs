@@ -386,7 +386,7 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
 
         <!-- Setup Kamiwaza Manager Autostart (Conditional) -->
         <CustomAction Id="SetupManagerAutostart"
-                      ExeCommand='powershell.exe -Command "Set-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"KamiwazaManager\" -Value \"[INSTALLFOLDER]KamiwazaGUIManager.exe --minimized\" -Force; Write-Host \"Manager autostart configured (minimized)\""'
+                      ExeCommand='powershell.exe -Command "Set-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"KamiwazaManager\" -Value \"[INSTALLFOLDER]KamiwazaGUIManager.exe\" -Force; Write-Host \"Manager autostart configured (starts in tray by default)\""'
                       Directory="TARGETDIR"
                       Execute="deferred"
                       Impersonate="yes"

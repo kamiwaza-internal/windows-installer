@@ -59,6 +59,13 @@ The installer automatically:
 
 ## Features
 
+### System Tray Integration
+- **Always starts minimized to system tray** by default
+- Right-click tray icon for quick actions (Start/Stop Kamiwaza)
+- Click "Show Kamiwaza Manager" to open the full interface
+- Real-time status updates in tray icon title
+- Use `--show` command line flag to start with window visible
+
 ### Quick Actions
 - Start/Stop Kamiwaza services
 - Check service status
@@ -86,6 +93,12 @@ The installer automatically:
 2. Verify Start Menu shortcuts are created
 3. Check Windows Event Viewer for errors
 4. Try running from command line: `%LOCALAPPDATA%\Kamiwaza\GUI\KamiwazaGUIManager.exe`
+5. **Note**: The GUI starts in system tray by default - look for the Kamiwaza icon in your system tray
+
+### Can't Find GUI Window
+1. **Check system tray** - the GUI starts minimized to tray by default
+2. Right-click the Kamiwaza tray icon and select "Show Kamiwaza Manager"
+3. If you want the window visible on startup, use: `KamiwazaGUIManager.exe --show`
 
 ### Missing Shortcuts
 1. Check if `install_gui_manager.ps1` ran successfully
