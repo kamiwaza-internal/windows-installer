@@ -46,7 +46,7 @@ if errorlevel 1 (
 )
 
 echo [INFO] Installing required packages...
-python.exe -m pip install PyYAML requests
+python.exe -m pip install PyYAML requests psutil
 if errorlevel 1 (
     echo [ERROR] Failed to install packages
     pause
@@ -54,7 +54,7 @@ if errorlevel 1 (
 )
 
 echo [INFO] Testing Python installation...
-python.exe -c "import sys; import yaml; import requests; print('Python embedded runtime ready:', sys.version)"
+python.exe -c "import sys; import yaml; import requests; import psutil; print('Python embedded runtime ready:', sys.version)"
 if errorlevel 1 (
     echo [ERROR] Python test failed
     pause
@@ -68,4 +68,3 @@ echo [INFO] Size:
 dir embedded_python /s /-c | find "bytes"
 
 echo [INFO] Ready for MSI packaging!
-pause

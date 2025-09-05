@@ -89,6 +89,11 @@ set DEB_FILE_URL=%DEB_FILE_URL: =%
 echo [INFO] Initial config: Version=%KAMIWAZA_VERSION%, Build=%BUILD_NUMBER%, Arch=%ARCH%
 echo [INFO] R2 Endpoint: %R2_ENDPOINT_URL%
 
+@REM Run the embedded python and harvest python files
+
+call create_embedded_python.bat
+call harvest_python.bat
+
 REM Auto-detect next available build number using PowerShell wrapper
 set FINAL_BUILD_NUMBER=%BUILD_NUMBER%
 if "%SKIP_UPLOAD%"=="1" (
