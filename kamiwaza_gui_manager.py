@@ -30,52 +30,120 @@ import tempfile
 import atexit
 
 class SingleInstance:
-    """Ensure only one instance of the application runs"""
+    """Ensure only one instance of the application runs - Windows-specific implementation"""
     
     def __init__(self, app_name="KamiwazaManager"):
         self.app_name = app_name
-        self.lock_file = None
-        self.lock_path = os.path.join(tempfile.gettempdir(), f"{app_name}.lock")
+        self.process_names = [
+            "KamiwazaGUIManager.exe",  # Compiled EXE name
+            "kamiwaza_gui_manager.py", # Script name
+            "python.exe",             # Python interpreter (fallback)
+            "pythonw.exe"             # Python windowed interpreter
+        ]
+        # Use a more persistent location for lock file
+        self.lock_path = os.path.join(os.environ.get('LOCALAPPDATA', tempfile.gettempdir()), 'Kamiwaza', 'manager.lock')
         
     def is_already_running(self):
-        """Check if another instance is already running"""
+        """Check if another instance is already running using Windows process detection"""
         try:
-            # Check for existing lock file
+            current_pid = os.getpid()
+            kamiwaza_processes = []
+            
+            # Debug: Print current process info
+            print(f"Current process PID: {current_pid}")
+            
+            # Method 1: Use psutil to find all processes with our target names
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    proc_info = proc.info
+                    proc_pid = proc_info['pid']
+                    proc_name = proc_info.get('name', '').lower()
+                    cmdline_list = proc_info.get('cmdline', [])
+                    if cmdline_list is None:
+                        cmdline_list = []
+                    proc_cmdline = ' '.join(cmdline_list).lower()
+                    
+                    # Skip our own process
+                    if proc_pid == current_pid:
+                        print(f"Skipping current process: PID {proc_pid}")
+                        continue
+                    
+                    # Check if this is a Kamiwaza Manager process
+                    is_kamiwaza_manager = False
+                    
+                    # Check for compiled EXE
+                    if 'kamiwazaguimanager.exe' in proc_name:
+                        is_kamiwaza_manager = True
+                        print(f"Found KamiwazaGUIManager.exe: PID {proc_pid}")
+                    
+                    # Check for Python script
+                    elif proc_name in ['python.exe', 'pythonw.exe']:
+                        if 'kamiwaza_gui_manager.py' in proc_cmdline:
+                            is_kamiwaza_manager = True
+                            print(f"Found Python kamiwaza_gui_manager.py: PID {proc_pid}")
+                    
+                    if is_kamiwaza_manager:
+                        kamiwaza_processes.append({
+                            'pid': proc_pid,
+                            'name': proc_name,
+                            'cmdline': proc_cmdline
+                        })
+                        
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+            
+            # If we found other Kamiwaza Manager processes, we're already running
+            if len(kamiwaza_processes) > 1:
+                print(f"Found {len(kamiwaza_processes)} existing Kamiwaza Manager process(es):")
+                for proc in kamiwaza_processes:
+                    print(f"  PID {proc['pid']}: {proc['name']}")
+                return True
+            
+            # Method 2: Fallback - check Windows tasklist for EXE specifically
+            try:
+                result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq KamiwazaGUIManager.exe', '/FO', 'CSV'], 
+                                      capture_output=True, text=True, timeout=10)
+                if result.returncode == 0:
+                    lines = result.stdout.strip().split('\n')
+                    # Skip header line and check if we have any data lines
+                    data_lines = [line for line in lines[1:] if line.strip() and not line.startswith('INFO:')]
+                    if data_lines:
+                        print(f"Found {len(data_lines)} KamiwazaGUIManager.exe process(es) via tasklist")
+                        return True
+            except Exception:
+                pass
+            
+            # Clean up any stale lock file since no processes found
+            self._cleanup_stale_lock()
+            return False
+            
+        except Exception as e:
+            print(f"Error checking for existing instances: {e}")
+            return False
+    
+    def _cleanup_stale_lock(self):
+        """Clean up stale lock file"""
+        try:
             if os.path.exists(self.lock_path):
-                with open(self.lock_path, 'r') as f:
-                    existing_pid = int(f.read().strip())
-                
-                # Check if the process is still running
-                try:
-                    if psutil.pid_exists(existing_pid):
-                        proc = psutil.Process(existing_pid)
-                        # Check if it's actually our application
-                        if self.app_name.lower() in proc.name().lower() or "python" in proc.name().lower():
-                            return True
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-                
-                # Clean up stale lock file
-                try:
-                    os.remove(self.lock_path)
-                except:
-                    pass
-            
-            return False
-            
+                os.remove(self.lock_path)
         except Exception:
-            return False
+            pass
     
     def create_lock(self):
         """Create lock file with current PID"""
         try:
+            # Ensure directory exists
+            lock_dir = os.path.dirname(self.lock_path)
+            os.makedirs(lock_dir, exist_ok=True)
+            
             with open(self.lock_path, 'w') as f:
                 f.write(str(os.getpid()))
             
             # Register cleanup on exit
             atexit.register(self.cleanup)
             return True
-        except Exception:
+        except Exception as e:
+            print(f"Failed to create lock file: {e}")
             return False
     
     def cleanup(self):
