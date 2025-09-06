@@ -22,6 +22,38 @@ def build_gui_exe():
         print("PyInstaller not found. Installing...")
         subprocess.run([sys.executable, "-m", "pip", "install", "pyinstaller"], check=True)
     
+    # Check for required dependencies and install if missing
+    required_packages = ['psutil', 'pystray', 'pillow', 'sv-ttk', 'pywinstyles']  # pillow provides PIL
+    missing_packages = []
+    
+    for package in required_packages:
+        try:
+            if package == 'pillow':
+                import PIL
+                print(f"PIL (Pillow) is available")
+            elif package == 'sv-ttk':
+                import sv_ttk
+                print(f"sv-ttk is available")
+            elif package == 'pywinstyles':
+                import pywinstyles
+                print(f"pywinstyles is available")
+            else:
+                __import__(package)
+                print(f"{package} is available")
+        except ImportError:
+            missing_packages.append(package)
+    
+    if missing_packages:
+        print(f"Missing packages: {missing_packages}")
+        print("Installing missing packages...")
+        for package in missing_packages:
+            try:
+                subprocess.run([sys.executable, "-m", "pip", "install", package], check=True)
+                print(f"Successfully installed {package}")
+            except subprocess.CalledProcessError as e:
+                print(f"Failed to install {package}: {e}")
+                return False
+    
     # Source file
     source_file = "kamiwaza_gui_manager.py"
     if not os.path.exists(source_file):
@@ -30,8 +62,16 @@ def build_gui_exe():
     
     # Output directory
     output_dir = "dist"
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
+    exe_path = os.path.join(output_dir, "KamiwazaGUIManager.exe")
+    
+    # Try to remove existing EXE, but continue if it fails (process might be running)
+    if os.path.exists(exe_path):
+        try:
+            os.remove(exe_path)
+            print("Removed existing executable")
+        except PermissionError:
+            print("Warning: Could not remove existing executable (may be running)")
+            print("PyInstaller will overwrite it during build")
     
     # Build command
     build_cmd = [
@@ -50,6 +90,16 @@ def build_gui_exe():
         "--hidden-import=json",         # Include JSON
         "--hidden-import=datetime",     # Include datetime
         "--hidden-import=pathlib",      # Include pathlib
+        "--hidden-import=psutil",       # Include psutil for process management
+        "--hidden-import=pystray",      # Include pystray for system tray
+        "--hidden-import=PIL",          # Include PIL for image handling
+        "--hidden-import=PIL.Image",    # Include PIL.Image
+        "--hidden-import=PIL.ImageDraw", # Include PIL.ImageDraw
+        "--hidden-import=webbrowser",   # Include webbrowser
+        "--hidden-import=tempfile",     # Include tempfile
+        "--hidden-import=atexit",       # Include atexit
+        "--hidden-import=sv_ttk",       # Include Sun Valley theme
+        "--hidden-import=pywinstyles",  # Include Windows styling
         source_file
     ]
     

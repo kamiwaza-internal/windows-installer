@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-Simple Kamiwaza Installer Test Runner
+Pytest-compatible Kamiwaza Installer Test Suite
 Quick validation of installer components without running anything.
 """
 
 import os
 import sys
 import xml.etree.ElementTree as ET
+import pytest
 from pathlib import Path
 
-def test_file_exists(file_path, description):
-    """Test if a file exists and return result."""
+def check_file_exists(file_path, description):
+    """Check if a file exists and return result."""
     exists = os.path.exists(file_path)
     status = "[OK]" if exists else "[FAIL]"
     print(f"{status} {description}: {file_path}")
@@ -21,7 +22,7 @@ def test_wxs_file():
     print("\n=== TESTING WIX INSTALLER FILE ===")
     
     wxs_file = "installer.wxs"
-    if not test_file_exists(wxs_file, "WiX installer file"):
+    if not check_file_exists(wxs_file, "WiX installer file"):
         return False
     
     try:
@@ -75,12 +76,12 @@ def test_required_files():
         ("kamiwaza_start.bat", "Kamiwaza start script"),
         ("kamiwaza_stop.bat", "Kamiwaza stop script"),
         ("create_autostart_registry.ps1", "Autostart registry script"),
-        ("install_manager.ps1", "GUI manager installer")
+        ("install_gui_manager.ps1", "GUI manager installer")
     ]
     
     all_exist = True
     for file_path, description in required_files:
-        if not test_file_exists(file_path, description):
+        if not check_file_exists(file_path, description):
             all_exist = False
     
     return all_exist
@@ -91,7 +92,7 @@ def test_wsl_integration():
     
     # Check WSL memory configuration
     wsl_script = "configure_wsl_memory.ps1"
-    if test_file_exists(wsl_script, "WSL memory configuration"):
+    if check_file_exists(wsl_script, "WSL memory configuration"):
         print("[OK] WSL memory configuration script found")
     else:
         print("[FAIL] WSL memory configuration script missing")
@@ -100,7 +101,7 @@ def test_wsl_integration():
     # Check WSL cleanup scripts
     cleanup_scripts = ["cleanup_wsl_kamiwaza.ps1", "cleanup_installs.bat"]
     for script in cleanup_scripts:
-        test_file_exists(script, f"WSL cleanup script: {script}")
+        check_file_exists(script, f"WSL cleanup script: {script}")
     
     print("[OK] WSL integration components validated")
     return True
@@ -112,7 +113,7 @@ def test_gpu_scripts():
     # GPU detection scripts
     detection_scripts = ["detect_gpu.ps1", "detect_gpu_cmd.bat"]
     for script in detection_scripts:
-        test_file_exists(script, f"GPU detection script: {script}")
+        check_file_exists(script, f"GPU detection script: {script}")
     
     # GPU setup scripts
     setup_scripts = [
@@ -121,7 +122,7 @@ def test_gpu_scripts():
         "setup_intel_integrated_gpu.sh"
     ]
     for script in setup_scripts:
-        test_file_exists(script, f"GPU setup script: {script}")
+        check_file_exists(script, f"GPU setup script: {script}")
     
     print("[OK] GPU scripts validated")
     return True
@@ -223,8 +224,33 @@ def test_registry_and_cleanup():
         print(f"[FAIL] Failed to test registry and cleanup: {e}")
         return False
 
+# Pytest test functions - these will be automatically discovered by pytest
+def test_installer_wxs_file():
+    """Test the WiX installer file - pytest compatible."""
+    assert test_wxs_file(), "WiX installer file validation failed"
+
+def test_installer_required_files():
+    """Test that all required files exist - pytest compatible."""
+    assert test_required_files(), "Required files validation failed"
+
+def test_installer_wsl_integration():
+    """Test WSL integration components - pytest compatible."""
+    assert test_wsl_integration(), "WSL integration validation failed"
+
+def test_installer_gpu_scripts():
+    """Test GPU detection and setup scripts - pytest compatible."""
+    assert test_gpu_scripts(), "GPU scripts validation failed"
+
+def test_installer_execution_sequence():
+    """Test custom action execution sequence - pytest compatible."""
+    assert test_execution_sequence(), "Execution sequence validation failed"
+
+def test_installer_registry_and_cleanup():
+    """Test registry entries and cleanup actions - pytest compatible."""
+    assert test_registry_and_cleanup(), "Registry and cleanup validation failed"
+
 def main():
-    """Main test runner."""
+    """Main test runner for direct execution (non-pytest)."""
     print("Kamiwaza Installer Simple Test Runner")
     print("=" * 50)
     

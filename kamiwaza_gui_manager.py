@@ -28,54 +28,84 @@ from PIL import Image, ImageDraw
 import psutil
 import tempfile
 import atexit
+import sv_ttk
+try:
+    import pywinstyles
+    PYWINSTYLES_AVAILABLE = True
+except ImportError:
+    PYWINSTYLES_AVAILABLE = False
 
 class SingleInstance:
-    """Ensure only one instance of the application runs"""
+    """Ensure only one instance of the application runs - Windows-specific implementation"""
     
     def __init__(self, app_name="KamiwazaManager"):
         self.app_name = app_name
-        self.lock_file = None
-        self.lock_path = os.path.join(tempfile.gettempdir(), f"{app_name}.lock")
+        self.process_names = [
+            "KamiwazaGUIManager.exe",  # Compiled EXE name
+            "kamiwaza_gui_manager.py", # Script name
+            "python.exe",             # Python interpreter (fallback)
+            "pythonw.exe"             # Python windowed interpreter
+        ]
+        # Use a more persistent location for lock file
+        self.lock_path = os.path.join(os.environ.get('LOCALAPPDATA', tempfile.gettempdir()), 'Kamiwaza', 'manager.lock')
         
     def is_already_running(self):
-        """Check if another instance is already running"""
+        """Check if another instance is already running using file lock method"""
         try:
-            # Check for existing lock file
+            # First, try to acquire the lock file
             if os.path.exists(self.lock_path):
-                with open(self.lock_path, 'r') as f:
-                    existing_pid = int(f.read().strip())
-                
-                # Check if the process is still running
+                # Check if the PID in the lock file is still running
                 try:
-                    if psutil.pid_exists(existing_pid):
-                        proc = psutil.Process(existing_pid)
-                        # Check if it's actually our application
-                        if self.app_name.lower() in proc.name().lower() or "python" in proc.name().lower():
+                    with open(self.lock_path, 'r') as f:
+                        old_pid = int(f.read().strip())
+                    
+                    # Check if that PID is still running and is our process
+                    try:
+                        old_process = psutil.Process(old_pid)
+                        old_name = old_process.name().lower()
+                        
+                        # Check if it's actually our process type
+                        if ('kamiwazaguimanager.exe' in old_name or 
+                            ('python' in old_name and 'kamiwaza_gui_manager.py' in ' '.join(old_process.cmdline()).lower())):
                             return True
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-                
-                # Clean up stale lock file
-                try:
-                    os.remove(self.lock_path)
-                except:
-                    pass
+                        else:
+                            self._cleanup_stale_lock()
+                    except psutil.NoSuchProcess:
+                        self._cleanup_stale_lock()
+                    except Exception:
+                        self._cleanup_stale_lock()
+                        
+                except (ValueError, FileNotFoundError):
+                    self._cleanup_stale_lock()
             
             return False
             
         except Exception:
             return False
     
+    def _cleanup_stale_lock(self):
+        """Clean up stale lock file"""
+        try:
+            if os.path.exists(self.lock_path):
+                os.remove(self.lock_path)
+        except Exception:
+            pass
+    
     def create_lock(self):
         """Create lock file with current PID"""
         try:
+            # Ensure directory exists
+            lock_dir = os.path.dirname(self.lock_path)
+            os.makedirs(lock_dir, exist_ok=True)
+            
             with open(self.lock_path, 'w') as f:
                 f.write(str(os.getpid()))
             
             # Register cleanup on exit
             atexit.register(self.cleanup)
             return True
-        except Exception:
+        except Exception as e:
+            print(f"Failed to create lock file: {e}")
             return False
     
     def cleanup(self):
@@ -87,26 +117,25 @@ class SingleInstance:
             pass
 
 class KamiwazaManager:
-    def __init__(self, root):
+    def __init__(self, root, tray_only_mode=False):
         self.root = root
-        self.root.title("Kamiwaza Manager")
-        self.root.geometry("1000x800")  # Increased window size
-        self.root.resizable(True, True)
+        self.tray_only_mode = tray_only_mode
         
-        # Set icon if available
-        try:
-            icon_path = os.path.join(os.path.dirname(__file__), 'kamiwaza.ico')
-            if os.path.exists(icon_path):
-                self.root.iconbitmap(icon_path)
-        except:
-            pass
-        
-        # Initialize variables
+        # Initialize variables first
         self.wsl_distribution = "kamiwaza"  # Default WSL distribution
         self.is_running = False
         self.output_text = None
         self.all_buttons = []
         self._busy_count = 0
+        
+        # UI variables (may be None in tray-only mode)
+        self.dist_var = None
+        self.dist_combo = None
+        self.notebook = None
+        self.status_var = None
+        self.progress = None
+        self.btn_go_ui = None
+        self.btn_go_api = None
         
         # Tray icon variables
         self.tray_icon = None
@@ -131,10 +160,13 @@ class KamiwazaManager:
         
         self.find_script = find_script
         
-        # Create the main interface
-        self.create_widgets()
+        # Only setup full UI if not in tray-only mode
+        if not tray_only_mode:
+            self.setup_full_ui()
+        else:
+            self.setup_minimal_ui()
         
-        # Setup tray icon
+        # Setup tray icon (always needed)
         self.setup_tray_icon()
         
         # Override window close behavior
@@ -145,6 +177,44 @@ class KamiwazaManager:
         
         # Initial status check (delayed to ensure GUI is ready)
         self.root.after(500, self.check_kamiwaza_status)
+        
+        # Set initial web button states (delayed to ensure GUI is ready)
+        self.root.after(1000, self.update_web_button_states)
+    
+    def setup_full_ui(self):
+        """Setup the complete GUI interface"""
+        self.root.title("Kamiwaza Manager")
+        self.root.geometry("1000x800")  # Increased window size
+        self.root.resizable(True, True)
+        
+        # Set icon if available
+        try:
+            icon_path = os.path.join(os.path.dirname(__file__), 'kamiwaza.ico')
+            if os.path.exists(icon_path):
+                self.root.iconbitmap(icon_path)
+        except:
+            pass
+        
+        # Create the main interface
+        self.create_widgets()
+    
+    def setup_minimal_ui(self):
+        """Setup minimal UI for tray-only mode"""
+        self.root.title("Kamiwaza Manager")
+        # Make window very small and hidden
+        self.root.geometry("1x1")
+        self.root.resizable(False, False)
+        # Immediately withdraw the window
+        self.root.withdraw()
+        self.is_minimized_to_tray = True
+        
+        # Set icon if available (for taskbar icon if shown)
+        try:
+            icon_path = os.path.join(os.path.dirname(__file__), 'kamiwaza.ico')
+            if os.path.exists(icon_path):
+                self.root.iconbitmap(icon_path)
+        except:
+            pass
 
     def create_widgets(self):
         """Create the main GUI widgets"""
@@ -235,13 +305,15 @@ class KamiwazaManager:
         web_frame = ttk.LabelFrame(tab_home, text="Web Access", padding="10", style="Card.TLabelframe")
         web_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        btn_go_ui = ttk.Button(web_frame, text="Go to UI", command=self.go_to_ui)
-        btn_go_ui.grid(row=0, column=0, padx=6, pady=6, sticky=(tk.W, tk.E))
-        self.all_buttons.append(btn_go_ui)
+        self.btn_go_ui = ttk.Button(web_frame, text="Go to UI", command=self.go_to_ui, style="Accent.TButton")
+        self.btn_go_ui.grid(row=0, column=0, padx=6, pady=6, sticky=(tk.W, tk.E))
+        self.all_buttons.append(self.btn_go_ui)
         
-        btn_go_api = ttk.Button(web_frame, text="Go to API", command=self.go_to_api)
-        btn_go_api.grid(row=0, column=1, padx=6, pady=6, sticky=(tk.W, tk.E))
-        self.all_buttons.append(btn_go_api)
+        self.btn_go_api = ttk.Button(web_frame, text="Go to API", command=self.go_to_api, style="Accent.TButton")
+        self.btn_go_api.grid(row=0, column=1, padx=6, pady=6, sticky=(tk.W, tk.E))
+        self.all_buttons.append(self.btn_go_api)
+        
+        # Web buttons will use Sun Valley theme styling automatically
         
         for i in range(2):
             web_frame.columnconfigure(i, weight=1)
@@ -282,7 +354,7 @@ class KamiwazaManager:
         for i in range(3):
             gpu_frame.columnconfigure(i, weight=1)
         
-        danger_frame = ttk.LabelFrame(tab_advanced, text="Danger Zone (Destructive)", padding="10", style="Card.TLabelframe")
+        danger_frame = ttk.LabelFrame(tab_advanced, text="⚠️ Danger Zone (Destructive)", padding="10", style="Danger.TLabelframe")
         danger_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         
         btn_reinstall = ttk.Button(danger_frame, text="Reinstall Kamiwaza", command=self.reinstall_kamiwaza)
@@ -350,44 +422,116 @@ class KamiwazaManager:
         self.configure_styles()
 
     def configure_styles(self):
-        """Configure theme and styles for a cleaner, native look"""
-        style = ttk.Style()
+        """Configure Sun Valley theme for modern Windows 11 look"""
         try:
-            # Prefer native Windows themes when available
-            if 'vista' in style.theme_names():
-                style.theme_use('vista')
-            elif 'xpnative' in style.theme_names():
-                style.theme_use('xpnative')
-            else:
-                style.theme_use('clam')
+            # Apply Sun Valley theme - modern Windows 11 style
+            sv_ttk.set_theme("dark")
+            print("Applied Sun Valley dark theme")
+        except Exception as e:
+            print(f"Failed to apply Sun Valley theme: {e}")
+            # Fallback to default styling
+            style = ttk.Style()
+            try:
+                if 'vista' in style.theme_names():
+                    style.theme_use('vista')
+                elif 'xpnative' in style.theme_names():
+                    style.theme_use('xpnative')
+                else:
+                    style.theme_use('clam')
+            except Exception:
+                pass
+        
+        # Apply Windows title bar styling for better integration
+        self.apply_title_bar_styling()
+        
+        # Configure additional custom styles that work with Sun Valley
+        style = ttk.Style()
+        
+        # Title styling
+        style.configure("Title.TLabel", font=("Segoe UI", 16, "bold"))
+        
+        # Danger Zone styling - red accent
+        try:
+            style.configure("Danger.TLabelframe.Label", font=("Segoe UI", 10, "bold"), foreground="#ff4444")
+            print("Applied Danger Zone styling")
         except Exception:
             pass
         
-        # Palette
-        accent = "#2563eb"
-        accent_active = "#1d4ed8"
-        danger = "#b91c1c"
-        danger_active = "#991b1b"
-        secondary_bg = "#e5e7eb"
-        secondary_active = "#d1d5db"
-        text_dark = "#111827"
+        # Enhance scrollbar styling for better theme integration
+        self.enhance_scrollbar_styling()
+
+    def apply_title_bar_styling(self):
+        """Apply Windows title bar styling for better theme integration"""
+        if not PYWINSTYLES_AVAILABLE:
+            print("pywinstyles not available - skipping title bar styling")
+            return
         
-        style.configure("Title.TLabel", font=("Segoe UI", 16, "bold"))
-        style.configure("Card.TLabelframe", padding=12)
-        style.configure("Card.TLabelframe.Label", font=("Segoe UI", 10, "bold"))
+        try:
+            import sys
+            version = sys.getwindowsversion()
+            
+            if version.major == 10 and version.build >= 22000:
+                # Windows 11 - set title bar color to match dark theme
+                pywinstyles.change_header_color(self.root, "#1c1c1c")
+                print("Applied Windows 11 title bar styling")
+            elif version.major == 10:
+                # Windows 10 - apply dark style
+                pywinstyles.apply_style(self.root, "dark")
+                # Hacky way to update title bar color on Windows 10
+                self.root.wm_attributes("-alpha", 0.99)
+                self.root.wm_attributes("-alpha", 1)
+                print("Applied Windows 10 dark title bar styling")
+        except Exception as e:
+            print(f"Failed to apply title bar styling: {e}")
+
+    def enhance_scrollbar_styling(self):
+        """Enhance scrollbar styling for better theme integration"""
+        try:
+            style = ttk.Style()
+            
+            # Configure scrollbar colors to match the dark theme
+            style.configure("Vertical.TScrollbar",
+                           background="#2d2d2d",
+                           troughcolor="#1c1c1c",
+                           bordercolor="#2d2d2d",
+                           arrowcolor="#ffffff",
+                           darkcolor="#2d2d2d",
+                           lightcolor="#2d2d2d")
+            
+            style.map("Vertical.TScrollbar",
+                     background=[('active', '#404040'), ('pressed', '#505050')])
+            
+            # Also configure horizontal scrollbar
+            style.configure("Horizontal.TScrollbar",
+                           background="#2d2d2d",
+                           troughcolor="#1c1c1c", 
+                           bordercolor="#2d2d2d",
+                           arrowcolor="#ffffff",
+                           darkcolor="#2d2d2d",
+                           lightcolor="#2d2d2d")
+            
+            style.map("Horizontal.TScrollbar",
+                     background=[('active', '#404040'), ('pressed', '#505050')])
+            
+            print("Enhanced scrollbar styling")
+        except Exception as e:
+            print(f"Failed to enhance scrollbar styling: {e}")
 
     def switch_to_logs_tab(self):
         """Switch to the logs tab to monitor results"""
-        try:
-            self.notebook.select(2)  # Select the logs tab (index 2)
-        except Exception:
-            pass
+        if self.notebook:
+            try:
+                self.notebook.select(2)  # Select the logs tab (index 2)
+            except Exception:
+                pass
 
     def _enter_busy(self, message):
         self._busy_count += 1
         if self._busy_count == 1:
-            self.status_var.set(message)
-            self.progress.start(12)
+            if self.status_var:
+                self.status_var.set(message)
+            if self.progress:
+                self.progress.start(12)
             for b in self.all_buttons:
                 try:
                     b.configure(state=tk.DISABLED)
@@ -398,16 +542,38 @@ class KamiwazaManager:
         if self._busy_count > 0:
             self._busy_count -= 1
         if self._busy_count == 0:
-            self.status_var.set("Ready")
-            try:
-                self.progress.stop()
-            except Exception:
-                pass
+            if self.status_var:
+                self.status_var.set("Ready")
+            if self.progress:
+                try:
+                    self.progress.stop()
+                except Exception:
+                    pass
             for b in self.all_buttons:
                 try:
                     b.configure(state=tk.NORMAL)
                 except Exception:
                     pass
+            # Update web navigation button states
+            self.update_web_button_states()
+
+    def update_web_button_states(self):
+        """Update the state of web navigation buttons based on Kamiwaza running status"""
+        if not self.btn_go_ui or not self.btn_go_api:
+            return  # Skip if buttons don't exist (tray-only mode)
+        
+        # Check if Kamiwaza is running (silently)
+        is_running = self.run_wsl_command_silent(['kamiwaza', 'status'])
+        
+        try:
+            if is_running:
+                self.btn_go_ui.configure(state=tk.NORMAL, text="Go to UI", style="Accent.TButton")
+                self.btn_go_api.configure(state=tk.NORMAL, text="Go to API", style="Accent.TButton")
+            else:
+                self.btn_go_ui.configure(state=tk.DISABLED, text="Go to UI (Start Kamiwaza first)")
+                self.btn_go_api.configure(state=tk.DISABLED, text="Go to API (Start Kamiwaza first)")
+        except Exception:
+            pass  # Ignore errors if buttons are not available
 
     def log_output(self, message, level="INFO"):
         """Add message to output area with timestamp and color tags"""
@@ -589,12 +755,14 @@ class KamiwazaManager:
                     self.detect_wsl_distribution_verbose()
                     return
                 
-                # Update dropdown values and selection
-                try:
-                    self.dist_combo['values'] = distributions
-                except Exception:
-                    pass
-                self.dist_var.set(self.wsl_distribution)
+                # Update dropdown values and selection (only if UI exists)
+                if self.dist_combo:
+                    try:
+                        self.dist_combo['values'] = distributions
+                    except Exception:
+                        pass
+                if self.dist_var:
+                    self.dist_var.set(self.wsl_distribution)
                 self.log_output(f"Selected distribution: {self.wsl_distribution}", level="SUCCESS")
                 
             else:
@@ -650,23 +818,27 @@ class KamiwazaManager:
                 else:
                     self.wsl_distribution = 'kamiwaza'  # Default
                 
-                # Update dropdown values and selection
-                try:
-                    self.dist_combo['values'] = distributions
-                except Exception:
-                    pass
-                self.dist_var.set(self.wsl_distribution)
+                # Update dropdown values and selection (only if UI exists)
+                if self.dist_combo:
+                    try:
+                        self.dist_combo['values'] = distributions
+                    except Exception:
+                        pass
+                if self.dist_var:
+                    self.dist_var.set(self.wsl_distribution)
                 self.log_output(f"Selected distribution: {self.wsl_distribution}", level="SUCCESS")
                 
             else:
                 self.log_output("Verbose detection also failed", level="ERROR")
                 self.wsl_distribution = 'kamiwaza'  # Default fallback
-                self.dist_var.set(self.wsl_distribution)
+                if self.dist_var:
+                    self.dist_var.set(self.wsl_distribution)
                 
         except Exception as e:
             self.log_output(f"Verbose detection error: {e}", level="ERROR")
             self.wsl_distribution = 'kamiwaza'  # Default fallback
-            self.dist_var.set(self.wsl_distribution)
+            if self.dist_var:
+                self.dist_var.set(self.wsl_distribution)
 
     def refresh_all(self):
         """Refresh all status information"""
@@ -701,7 +873,8 @@ class KamiwazaManager:
             
             # Clear operation in progress flag
             self.operation_in_progress = False
-            #self.check_kamiwaza_status()
+            # Update web button states after start operation
+            self.update_web_button_states()
         
         threading.Thread(target=start_thread, daemon=True).start()
 
@@ -733,7 +906,8 @@ class KamiwazaManager:
             
             # Clear operation in progress flag
             self.operation_in_progress = False
-            #self.check_kamiwaza_status()
+            # Update web button states after stop operation
+            self.update_web_button_states()
         
         threading.Thread(target=stop_thread, daemon=True).start()
 
@@ -764,6 +938,8 @@ class KamiwazaManager:
             
             # Clear operation in progress flag
             self.operation_in_progress = False
+            # Update web button states after status check
+            self.update_web_button_states()
         
         threading.Thread(target=status_thread, daemon=True).start()
 
@@ -1075,6 +1251,14 @@ class KamiwazaManager:
     # === WEB NAVIGATION FUNCTIONS ===
     def go_to_ui(self):
         """Open the Kamiwaza UI in the default browser"""
+        # Check if Kamiwaza is running first
+        if not self.run_wsl_command_silent(['kamiwaza', 'status']):
+            self.log_output("Cannot open UI - Kamiwaza is not running. Please start Kamiwaza first.", level="ERROR")
+            if not self.tray_only_mode:
+                messagebox.showwarning("Kamiwaza Not Running", 
+                                     "Kamiwaza is not running. Please start Kamiwaza first before accessing the UI.")
+            return
+            
         try:
             self.log_output("Opening UI: https://localhost/", level="INFO")
             webbrowser.open('https://localhost/', new=2)
@@ -1084,6 +1268,14 @@ class KamiwazaManager:
 
     def go_to_api(self):
         """Open the Kamiwaza API docs in the default browser"""
+        # Check if Kamiwaza is running first
+        if not self.run_wsl_command_silent(['kamiwaza', 'status']):
+            self.log_output("Cannot open API - Kamiwaza is not running. Please start Kamiwaza first.", level="ERROR")
+            if not self.tray_only_mode:
+                messagebox.showwarning("Kamiwaza Not Running", 
+                                     "Kamiwaza is not running. Please start Kamiwaza first before accessing the API.")
+            return
+            
         try:
             self.log_output("Opening API docs: http://localhost:7777/api/docs", level="INFO")
             webbrowser.open('http://localhost:7777/api/docs', new=2)
@@ -1131,20 +1323,33 @@ class KamiwazaManager:
 
     def validate_distribution(self, *args):
         """Validate the WSL distribution name"""
+        if not self.dist_var:
+            return  # Skip validation in tray-only mode
         dist_name = self.dist_var.get().strip()
         if len(dist_name) < 2:
-            self.status_var.set("Invalid distribution name - too short")
+            if self.status_var:
+                self.status_var.set("Invalid distribution name - too short")
         elif '\x00' in dist_name:
-            self.status_var.set("Invalid distribution name - contains null characters")
+            if self.status_var:
+                self.status_var.set("Invalid distribution name - contains null characters")
         else:
-            self.status_var.set("Ready")
+            if self.status_var:
+                self.status_var.set("Ready")
             self.wsl_distribution = dist_name
 
     def test_wsl_distribution(self):
         """Test if the current WSL distribution is accessible"""
-        dist_name = self.dist_var.get().strip()
+        if not self.dist_var:
+            # In tray-only mode, use the current wsl_distribution value
+            dist_name = self.wsl_distribution
+        else:
+            dist_name = self.dist_var.get().strip()
+        
         if len(dist_name) < 2:
-            messagebox.showerror("Invalid Distribution", "Distribution name is too short")
+            if not self.tray_only_mode:
+                messagebox.showerror("Invalid Distribution", "Distribution name is too short")
+            else:
+                self.log_output("Invalid distribution name - too short", level="ERROR")
             return
         
         self.log_output(f"Testing WSL distribution: {dist_name}", level="INFO")
@@ -1275,6 +1480,16 @@ class KamiwazaManager:
     
     def show_window(self, icon=None, item=None):
         """Show the main window"""
+        # If in tray-only mode, we need to create the full UI first
+        if self.tray_only_mode:
+            self.tray_only_mode = False
+            self.setup_full_ui()
+            # Center the window
+            self.root.update_idletasks()
+            x = (self.root.winfo_screenwidth() // 2) - (self.root.winfo_width() // 2)
+            y = (self.root.winfo_screenheight() // 2) - (self.root.winfo_height() // 2)
+            self.root.geometry(f"+{x}+{y}")
+        
         self.root.deiconify()  # Show window
         self.root.lift()  # Bring to front
         self.root.focus_force()  # Focus
@@ -1350,9 +1565,6 @@ def main():
                 # We're in an interactive environment or GUI, show message box
                 root = tk.Tk()
                 root.withdraw()  # Hide the main window
-                messagebox.showinfo("Kamiwaza Manager", 
-                                  "Kamiwaza Manager is already running in the system tray.\n\n"
-                                  "Look for the Kamiwaza icon in your system tray and right-click it to access the menu.")
                 root.destroy()
         except Exception:
             pass
@@ -1373,22 +1585,21 @@ def main():
     except:
         pass
     
-    app = KamiwazaManager(root)
+    # Use tray-only mode unless --show is specified
+    tray_only_mode = not args.show
+    app = KamiwazaManager(root, tray_only_mode=tray_only_mode)
     # Store single instance reference for cleanup
     app.single_instance = single_instance
     
-    # Center the window (for when it's shown later)
-    root.update_idletasks()
-    x = (root.winfo_screenwidth() // 2) - (root.winfo_width() // 2)
-    y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
-    root.geometry(f"+{x}+{y}")
-    
-    # Always start minimized to tray by default, unless --show is specified
-    if not args.show:
-        # Hide window immediately and minimize to tray
-        root.withdraw()
-        app.is_minimized_to_tray = True
-        # Show notification that it's running in tray
+    # If showing the window, center it
+    if args.show:
+        # Center the window
+        root.update_idletasks()
+        x = (root.winfo_screenwidth() // 2) - (root.winfo_width() // 2)
+        y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
+        root.geometry(f"+{x}+{y}")
+    else:
+        # Show notification that it's running in tray (tray-only mode)
         # Wait a moment for tray icon to be ready
         root.after(1000, lambda: app.tray_icon.notify("Kamiwaza Manager started", "Running in system tray. Click 'Show Kamiwaza Manager' to open.") if app.tray_icon else None)
     

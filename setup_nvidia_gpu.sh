@@ -575,11 +575,62 @@ main() {
     
     # 6. Install NVIDIA Container Toolkit for Docker GPU access
     log "6. Installing NVIDIA Container Toolkit for Docker GPU access..."
+    
+    # 6.0. Ensure basic prerequisites are available
+    log "  6.0. Installing basic prerequisites..."
+    if sudo apt-get update && sudo apt-get install -y ca-certificates curl gnupg; then
+        log "  [OK] Basic prerequisites installed"
+    else
+        warn "  [WARN] Failed to install basic prerequisites - continuing anyway"
+    fi
+    
+    # 6.1. Clean any old/bad repository file (optional but helps)
+    log "  6.1. Cleaning any old NVIDIA container toolkit repository files..."
+    sudo rm -f /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    log "  [OK] Old repository files cleaned"
+    
+    # 6.2. Add the libnvidia-container GPG key
+    log "  6.2. Adding NVIDIA Container Toolkit GPG key..."
+    if sudo mkdir -p /etc/apt/keyrings && \
+       curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+       sudo gpg --dearmor -o /etc/apt/keyrings/nvidia-container-toolkit.gpg; then
+        log "  [OK] NVIDIA Container Toolkit GPG key added"
+    else
+        warn "  [WARN] Failed to add NVIDIA Container Toolkit GPG key"
+    fi
+    
+    # 6.3. Add the repository (works for Noble 24.04)
+    log "  6.3. Adding NVIDIA Container Toolkit repository for Ubuntu 24.04..."
+    if curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+       sed 's#deb https://#deb [signed-by=/etc/apt/keyrings/nvidia-container-toolkit.gpg] https://#' | \
+       sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null; then
+        log "  [OK] NVIDIA Container Toolkit repository added"
+    else
+        warn "  [WARN] Failed to add NVIDIA Container Toolkit repository"
+    fi
+    
+    # 6.4. Update and verify apt sees the package
+    log "  6.4. Updating package lists and verifying NVIDIA Container Toolkit availability..."
+    if sudo apt-get update; then
+        log "  [OK] Package lists updated"
+        
+        # Verify the package is available
+        if apt-cache policy nvidia-container-toolkit | grep -q "nvidia.github.io"; then
+            log "  [OK] NVIDIA Container Toolkit package found in repository"
+        else
+            warn "  [WARN] NVIDIA Container Toolkit package not found - may still install from other sources"
+        fi
+    else
+        warn "  [WARN] Failed to update package lists"
+    fi
+    
+    # 6.5. Install the toolkit (userspace only; do NOT install cuda-drivers in WSL)
+    log "  6.5. Installing NVIDIA Container Toolkit (userspace only)..."
     if sudo apt-get install -y nvidia-container-toolkit; then
         log "  [OK] NVIDIA Container Toolkit installed"
         
-        # Configure Docker to use NVIDIA runtime
-        log "  Configuring Docker NVIDIA runtime..."
+        # 6.6. Configure Docker runtime (Desktop-backed on WSL)
+        log "  6.6. Configuring Docker runtime for NVIDIA Container Toolkit..."
         if sudo nvidia-ctk runtime configure --runtime=docker; then
             log "  [OK] Docker NVIDIA runtime configured"
             

@@ -55,11 +55,6 @@ if %ERRORLEVEL% EQU 0 (
     >> "%LOGFILE%" echo [%DATE% %TIME%] Kamiwaza start command returned error code: %ERRORLEVEL%
 )
 
-echo.
-echo [INFO] Checking Kamiwaza status...
->> "%LOGFILE%" echo [%DATE% %TIME%] Checking Kamiwaza status
-wsl -d %WSL_INSTANCE% -- kamiwaza status
-
 REM Launch GUI Monitor if present
 set GUI_PATH=%LOCALAPPDATA%\Kamiwaza\KamiwazaGUIManager.exe
 if exist "%GUI_PATH%" (
