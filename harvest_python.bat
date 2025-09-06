@@ -13,4 +13,3 @@ if errorlevel 1 (
 )
 
 echo [INFO] You can now include this in your main installer.wxs
-pause

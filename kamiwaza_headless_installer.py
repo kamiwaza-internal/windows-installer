@@ -30,6 +30,39 @@ import shutil
 import tempfile
 import ctypes
 import importlib.util
+import psutil
+import winreg
+
+
+def get_ram_gb():
+    return psutil.virtual_memory().total / (1024 ** 3)
+
+def get_windows_version():
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion") as key:
+            # Try to get detailed version info including build number
+            try:
+                major_version, _ = winreg.QueryValueEx(key, "CurrentMajorVersionNumber")
+                minor_version, _ = winreg.QueryValueEx(key, "CurrentMinorVersionNumber")
+                build_number, _ = winreg.QueryValueEx(key, "CurrentBuildNumber")
+                
+                # Convert build number to int for comparison
+                build_num = int(build_number)
+                
+                # Windows 11 detection: build 22000 and higher
+                if major_version == 10 and build_num >= 22000:
+                    return f"11.0.{build_number}"
+                else:
+                    return f"{major_version}.{minor_version}.{build_number}"
+                    
+            except FileNotFoundError:
+                # Fall back to CurrentVersion for older Windows versions
+                version, _ = winreg.QueryValueEx(key, "CurrentVersion")
+                return version
+    except Exception as e:
+        # Fall back to platform module if registry fails
+        import platform
+        return platform.release()
 
 class HeadlessKamiwazaInstaller:
     def __init__(self, memory="14GB", version=None, codename=None, build=None, arch=None, 
@@ -43,6 +76,8 @@ class HeadlessKamiwazaInstaller:
         self.license_key = license_key
         self.usage_reporting = usage_reporting
         self.install_mode = install_mode
+        self.ram_gb = get_ram_gb()
+        self.windows_version = get_windows_version()
         
         # Note: GPU restart logic is now handled directly in GPU setup scripts
         
@@ -88,14 +123,13 @@ class HeadlessKamiwazaInstaller:
         # Detect Windows Server and provide guidance
         try:
             import platform
-            windows_version = platform.platform()
-            self.log_output(f"Windows Version: {windows_version}")
+            self.log_output(f"Windows Version: {self.windows_version}")
             
-            if "Server" in windows_version:
+            if "Server" in self.windows_version:
                 self.log_output("Windows Server detected - WSL may require manual setup")
-                if "2019" in windows_version:
+                if "2019" in self.windows_version:
                     self.log_output("Server 2019: WSL 1 only, manual feature enable required")
-                elif "2022" in windows_version:
+                elif "2022" in self.windows_version:
                     self.log_output("Server 2022: WSL 2 supported (except Server Core)")
                 else:
                     self.log_output("Server version: Check WSL compatibility")
@@ -416,6 +450,41 @@ class HeadlessKamiwazaInstaller:
             self.log_output("WSL installation may fail without administrator privileges")
             self.log_output("Consider running this installer as Administrator for best results")
             self.log_output("")
+
+        # Check to ensure 16GB+ RAM
+        if self.ram_gb < 16:
+            self.log_output("ERROR: 16GB+ RAM required for installation")
+            self.log_output("Installation cannot continue")
+            self._wait_for_user_input("Press Enter to exit...")
+            return 1
+        
+        # Check to ensure Windows 11+
+        try:
+            version_parts = self.windows_version.split('.')
+            major_version = int(version_parts[0])
+            
+            # Windows 11 is detected as major version 11, or Windows 10 with build >= 22000
+            is_windows_11_or_higher = False
+            
+            if major_version >= 11:
+                is_windows_11_or_higher = True
+            elif major_version == 10 and len(version_parts) >= 3:
+                # Check build number for Windows 10 vs Windows 11
+                try:
+                    build_number = int(version_parts[2])
+                    if build_number >= 22000:
+                        is_windows_11_or_higher = True
+                except (ValueError, IndexError):
+                    pass
+            
+            if not is_windows_11_or_higher:
+                self.log_output(f"ERROR: Windows 11+ required for installation (detected: Windows {self.windows_version})")
+                self.log_output("Installation cannot continue")
+                self._wait_for_user_input("Press Enter to exit...")
+                return 1
+        except (ValueError, AttributeError, IndexError):
+            self.log_output(f"WARNING: Could not determine Windows version (detected: {self.windows_version})")
+            self.log_output("Proceeding with installation, but compatibility issues may occur")
         
         # Test basic WSL availability
         ret, out, err = self.run_command(['wsl', '--version'])

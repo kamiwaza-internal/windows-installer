@@ -311,14 +311,6 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
                 <ListItem Text="64GB" Value="64GB" />
             </ComboBox>
         </UI>
-
-        <!-- Safety check to prevent automatic restarts -->
-        <CustomAction Id="CheckRemotePC"
-                      ExeCommand='powershell.exe -NoProfile -WindowStyle Hidden -Command "try { $isRemote = (Get-WmiObject -Class Win32_ComputerSystem).PrimaryOwnerName -ne $env:USERNAME; if ($isRemote) { Write-Output \"Remote PC detected\" | Out-File -FilePath \"$env:TEMP\\kamiwaza_remote_warn.log\" -Encoding utf8 -Append } } catch { }"'
-                      Directory="TARGETDIR"
-                      Execute="deferred"
-                      Impersonate="yes"
-                      Return="ignore" />
                       
         <!-- Custom Actions -->
         <CustomAction Id="DetectGPUCmd"
@@ -384,33 +376,15 @@ IMPORTANT: GPU acceleration has been configured but requires SYSTEM RESTART to a
                       Impersonate="yes"
                       Return="ignore" />
 
-        <!-- Setup Kamiwaza Manager Autostart (Conditional) -->
-        <CustomAction Id="SetupManagerAutostart"
-                      ExeCommand='powershell.exe -Command "Set-ItemProperty -Path \"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" -Name \"KamiwazaManager\" -Value \"[INSTALLFOLDER]KamiwazaGUIManager.exe --minimized\" -Force; Write-Host \"Manager autostart configured (minimized)\""'
-                      Directory="TARGETDIR"
-                      Execute="deferred"
-                      Impersonate="yes"
-                      Return="ignore" />
-
-        <!-- Launch Kamiwaza Manager if requested -->
-        <CustomAction Id="LaunchDiagnosticGUI"
-                      ExeCommand='powershell.exe -Command "$p=Join-Path $env:LOCALAPPDATA \"Kamiwaza\\GUI\\KamiwazaGUIManager.exe\"; if (Test-Path $p) { Start-Process $p }"'
-                      Directory="TARGETDIR"
-                      Execute="immediate"
-                      Impersonate="yes"
-                      Return="ignore" />
 
         <!-- Install Execute Sequence - automatically run Kamiwaza installation -->
         <InstallExecuteSequence>
             <!-- Run during both fresh install AND repair mode (NOT REMOVE) -->
             <Custom Action="ReservePorts" After="InstallFiles">NOT REMOVE</Custom>
-            <Custom Action="CheckRemotePC" After="ReservePorts">NOT REMOVE</Custom>
-            <Custom Action="DetectGPUCmd" After="CheckRemotePC">NOT REMOVE</Custom>
+            <Custom Action="DetectGPUCmd" After="ReservePorts">NOT REMOVE</Custom>
             <Custom Action="RunKamiwazaInstaller" After="DetectGPUCmd">NOT REMOVE</Custom>
             <Custom Action="InstallGUIManager" After="RunKamiwazaInstaller">NOT REMOVE</Custom>
-            <Custom Action="SetupManagerAutostart" After="InstallGUIManager">NOT REMOVE AND AUTOSTART_TRAY = "1"</Custom>
-            <Custom Action="LaunchDiagnosticGUI" After="SetupManagerAutostart">NOT REMOVE AND LAUNCH_GUI = "1"</Custom>
-            <ScheduleReboot After="SetupManagerAutostart">NOT REMOVE</ScheduleReboot>
+            <ScheduleReboot After="InstallGUIManager">NOT REMOVE</ScheduleReboot>
             
             <!-- Uninstall actions only -->
             <Custom Action="ComprehensiveCleanup" Before="RemoveFiles">Installed AND REMOVE</Custom>
