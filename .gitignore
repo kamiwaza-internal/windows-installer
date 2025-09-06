@@ -32,3 +32,4 @@ kamiwaza_headless_installer_template.py.backup
 *.bmp
 test_installer.pykamiwaza_headless_installer_build.py
 env.sh
+kamiwaza_headless_installer_build.py
