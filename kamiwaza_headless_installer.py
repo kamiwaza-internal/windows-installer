@@ -197,12 +197,6 @@ class HeadlessKamiwazaInstaller:
                     results['intel_gpu_name'] = 'Intel Arc GPU (independent detection)'
                     results['gpu_acceleration'] = 'INTEL_ARC'
                     
-                # Check for Intel Integrated (less specific to catch variations)
-                elif any(x in gpu_info for x in ['Intel(R) UHD', 'Intel(R) HD', 'Intel(R) Iris', 'Intel UHD', 'Intel HD', 'Intel Iris', 'UHD Graphics', 'HD Graphics', 'Iris Graphics', 'Intel Graphics']):
-                    self.log_output("INTEL INTEGRATED GPU DETECTED by independent detection!")
-                    results['intel_integrated_detected'] = True
-                    results['intel_gpu_name'] = 'Intel Integrated GPU (independent detection)'
-                    results['gpu_acceleration'] = 'INTEL_INTEGRATED'
                     
                 # Check for NVIDIA RTX (less specific to catch variations)
                 elif any(x in gpu_info for x in ['NVIDIA GeForce RTX', 'NVIDIA RTX', 'RTX 20', 'RTX 30', 'RTX 40', 'RTX 50', 'GeForce RTX']):
@@ -258,13 +252,7 @@ class HeadlessKamiwazaInstaller:
                 results['intel_arc_detected'] = True
                 results['intel_gpu_name'] = 'Intel Arc GPU (detected by PowerShell)'
                 results['gpu_acceleration'] = 'INTEL_ARC'
-                
-            elif os.path.exists(intel_integrated_script):
-                self.log_output("Intel integrated GPU detected by PowerShell - setup script exists")
-                results['intel_integrated_detected'] = True
-                results['intel_gpu_name'] = 'Intel Integrated GPU (detected by PowerShell)'
-                results['gpu_acceleration'] = 'INTEL_INTEGRATED'
-                
+                                
             else:
                 self.log_output("No GPU setup scripts found - running in CPU-only mode")
                 self.log_output("PowerShell detected no supported GPUs")
