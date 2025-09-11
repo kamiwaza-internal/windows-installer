@@ -71,7 +71,7 @@ class HeadlessKamiwazaInstaller:
         self.kamiwaza_version = version or '0.5.0-rc1'
         self.codename = codename or 'noble'
         self.build_number = build or 1
-        self.arch = arch or 'amd64'
+        self.arch = arch or 'x86_64'
         self.user_email = user_email
         self.license_key = license_key
         self.usage_reporting = usage_reporting
@@ -2398,7 +2398,12 @@ class HeadlessKamiwazaInstaller:
         
         # Download Ubuntu 24.04 WSL rootfs
         self.log_output("Downloading Ubuntu 24.04 WSL rootfs from cloud images...")
-        download_url = "https://cloud-images.ubuntu.com/wsl/releases/24.04/current/ubuntu-noble-wsl-amd64-wsl.rootfs.tar.gz"
+        if self.arch == 'x86_64':
+            download_url = "https://cloud-images.ubuntu.com/wsl/releases/24.04/current/ubuntu-noble-wsl-amd64-wsl.rootfs.tar.gz"
+        elif self.arch == 'arm64':
+            download_url = "https://cloud-images.ubuntu.com/wsl/releases/24.04/current/ubuntu-noble-wsl-arm64-wsl.rootfs.tar.gz"
+        else:
+            raise ValueError(f"Unsupported architecture: {self.arch}")
         
         # Use curl to download (more reliable and shows progress)
         download_cmd = [
