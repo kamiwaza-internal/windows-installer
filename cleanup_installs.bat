@@ -26,6 +26,14 @@ echo.
 echo Starting cleanup...
 echo.
 
+echo [DEBUG] Checking and killing all KamiwazaGUIManager processes...
+taskkill /F /IM KamiwazaGUIManager.exe 2>nul
+if %errorlevel% neq 0 (
+    echo [DEBUG] No KamiwazaGUIManager.exe processes found or already terminated.
+) else (
+    echo [DEBUG] KamiwazaGUIManager.exe processes terminated successfully.
+)
+
 REM Run the PowerShell cleanup script
 powershell.exe -ExecutionPolicy Bypass -File "%~dp0cleanup_wsl_kamiwaza.ps1" -Force
 

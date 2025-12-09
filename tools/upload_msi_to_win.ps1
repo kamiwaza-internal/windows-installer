@@ -2,8 +2,14 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$MsiFilePath,
     
-    [string]$EnvFile = "tools/env.sh"
+    [string]$EnvFile = ""
 )
+
+# Auto-detect environment file location
+if ([string]::IsNullOrWhiteSpace($EnvFile)) {
+    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $EnvFile = Join-Path $scriptDir "env.sh"
+}
 
 # Enhanced SSL configuration for PowerShell
 $env:PYTHONHTTPSVERIFY = "0"
