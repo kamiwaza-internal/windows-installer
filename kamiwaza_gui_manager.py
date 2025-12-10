@@ -305,15 +305,22 @@ class KamiwazaManager:
         web_frame = ttk.LabelFrame(tab_home, text="Web Access", padding="10", style="Card.TLabelframe")
         web_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        self.btn_go_ui = ttk.Button(web_frame, text="Go to UI", command=self.go_to_ui, style="Accent.TButton")
+        # Green color for buttons
+        GREEN_COLOR = "#238636"
+        
+        self.btn_go_ui = tk.Button(web_frame, text="Go to UI", command=self.go_to_ui,
+                                   bg=GREEN_COLOR, fg="white", activebackground="#2a9d42",
+                                   activeforeground="white", relief=tk.FLAT, cursor="hand2",
+                                   font=("Segoe UI", 10))
         self.btn_go_ui.grid(row=0, column=0, padx=6, pady=6, sticky=(tk.W, tk.E))
         self.all_buttons.append(self.btn_go_ui)
         
-        self.btn_go_api = ttk.Button(web_frame, text="Go to API", command=self.go_to_api, style="Accent.TButton")
+        self.btn_go_api = tk.Button(web_frame, text="Go to API", command=self.go_to_api,
+                                    bg=GREEN_COLOR, fg="white", activebackground="#2a9d42",
+                                    activeforeground="white", relief=tk.FLAT, cursor="hand2",
+                                    font=("Segoe UI", 10))
         self.btn_go_api.grid(row=0, column=1, padx=6, pady=6, sticky=(tk.W, tk.E))
         self.all_buttons.append(self.btn_go_api)
-        
-        # Web buttons will use Sun Valley theme styling automatically
         
         for i in range(2):
             web_frame.columnconfigure(i, weight=1)
@@ -565,13 +572,22 @@ class KamiwazaManager:
         # Check if Kamiwaza is running (silently)
         is_running = self.run_wsl_command_silent(['kamiwaza', 'status'])
         
+        # Green color for buttons
+        GREEN_COLOR = "#238636"
+        
         try:
             if is_running:
-                self.btn_go_ui.configure(state=tk.NORMAL, text="Go to UI", style="Accent.TButton")
-                self.btn_go_api.configure(state=tk.NORMAL, text="Go to API", style="Accent.TButton")
+                self.btn_go_ui.configure(state=tk.NORMAL, text="Go to UI", 
+                                        bg=GREEN_COLOR, fg="white", 
+                                        activebackground="#2a9d42", activeforeground="white")
+                self.btn_go_api.configure(state=tk.NORMAL, text="Go to API",
+                                         bg=GREEN_COLOR, fg="white",
+                                         activebackground="#2a9d42", activeforeground="white")
             else:
-                self.btn_go_ui.configure(state=tk.DISABLED, text="Go to UI (Start Kamiwaza first)")
-                self.btn_go_api.configure(state=tk.DISABLED, text="Go to API (Start Kamiwaza first)")
+                self.btn_go_ui.configure(state=tk.DISABLED, text="Go to UI (Start Kamiwaza first)",
+                                        bg="#555555", fg="#999999")
+                self.btn_go_api.configure(state=tk.DISABLED, text="Go to API (Start Kamiwaza first)",
+                                         bg="#555555", fg="#999999")
         except Exception:
             pass  # Ignore errors if buttons are not available
 
@@ -1380,9 +1396,9 @@ class KamiwazaManager:
             # Create icon image
             icon_image = self.create_tray_icon_image()
             
-            # Create menu items
+            # Create menu items - make "Show Kamiwaza Manager" the default action (clickable)
             menu = pystray.Menu(
-                pystray.MenuItem("Show Kamiwaza Manager", self.show_window),
+                pystray.MenuItem("Show Kamiwaza Manager", self.show_window, default=True),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Kamiwaza Status", self.tray_show_status),
                 pystray.Menu.SEPARATOR,
@@ -1479,7 +1495,7 @@ class KamiwazaManager:
             self.tray_icon.notify("Kamiwaza Manager minimized to tray", "Click the tray icon to restore")
     
     def show_window(self, icon=None, item=None):
-        """Show the main window"""
+        """Show or toggle the main window (clickable tray icon action)"""
         # If in tray-only mode, we need to create the full UI first
         if self.tray_only_mode:
             self.tray_only_mode = False
@@ -1490,10 +1506,23 @@ class KamiwazaManager:
             y = (self.root.winfo_screenheight() // 2) - (self.root.winfo_height() // 2)
             self.root.geometry(f"+{x}+{y}")
         
-        self.root.deiconify()  # Show window
-        self.root.lift()  # Bring to front
-        self.root.focus_force()  # Focus
-        self.is_minimized_to_tray = False
+        # Toggle window visibility - if visible, hide it; if hidden, show it
+        try:
+            if self.root.winfo_viewable():
+                # Window is visible, hide it
+                self.minimize_to_tray()
+            else:
+                # Window is hidden, show it
+                self.root.deiconify()  # Show window
+                self.root.lift()  # Bring to front
+                self.root.focus_force()  # Focus
+                self.is_minimized_to_tray = False
+        except tk.TclError:
+            # Window might not exist yet, just show it
+            self.root.deiconify()
+            self.root.lift()
+            self.root.focus_force()
+            self.is_minimized_to_tray = False
     
     def tray_show_status(self, icon=None, item=None):
         """Show status from tray"""
