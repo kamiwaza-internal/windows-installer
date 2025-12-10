@@ -1,8 +1,12 @@
 param(
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
     [string]$MsiFilePath,
     
-    [string]$EnvFile = ""
+    [string]$EnvFile = "",
+    
+    [switch]$Delete,
+    [string]$Version = "",
+    [string]$Arch = ""
 )
 
 # Auto-detect environment file location
@@ -159,6 +163,84 @@ function Upload-MsiFile {
     return $uploadSuccess
 }
 
+# Function to delete MSI files
+function Delete-MsiFiles {
+    param(
+        [string]$Version,
+        [string]$Arch,
+        [string]$BucketName,
+        [string]$EndpointUrl
+    )
+    
+    Write-Host "`[INFO`] Deleting MSI files for version $Version, architecture $Arch"
+    
+    # If Arch is empty or "all", search for all architectures
+    if ([string]::IsNullOrWhiteSpace($Arch) -or $Arch -eq "all") {
+        Write-Host "`[INFO`] Searching for all architectures for version $Version"
+        $filesToDelete = @(
+            "kamiwaza_installer_${Version}_*.msi",
+            "kamiwaza_installer_${Version}_*_build*.msi"
+        )
+    } else {
+        $filesToDelete = @(
+            "kamiwaza_installer_${Version}_${Arch}.msi",
+            "kamiwaza_installer_${Version}_${Arch}_build*.msi"
+        )
+    }
+    
+    $deletedCount = 0
+    
+    try {
+        $awsCmd = "aws"
+        if (Test-Path "venv\Scripts\aws.cmd") {
+            $awsCmd = "venv\Scripts\aws.cmd"
+        }
+        
+        foreach ($filePattern in $filesToDelete) {
+            Write-Host "`[DEBUG`] Searching for files matching: $filePattern"
+            
+            # List files matching the pattern
+            $listCmd = "$awsCmd s3 ls s3://$BucketName/win/ --endpoint-url $EndpointUrl --no-verify-ssl"
+            $listResult = Invoke-Expression $listCmd
+            
+            if ($LASTEXITCODE -eq 0) {
+                # Convert wildcard pattern to regex pattern
+                $regexPattern = $filePattern.Replace('*', '.*')
+                
+                foreach ($line in $listResult) {
+                    # Extract filename from the S3 ls output format: "2025-09-29 14:46:59   39337882 kamiwaza_installer_0.5.1_x86_64.msi"
+                    if ($line -match '\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+\d+\s+(.+)$') {
+                        $fileName = $matches[1]
+                        
+                        if ($fileName -match $regexPattern) {
+                            Write-Host "`[INFO`] Deleting: $fileName"
+                            
+                            $deleteCmd = "$awsCmd s3 rm s3://$BucketName/win/$fileName --endpoint-url $EndpointUrl --no-verify-ssl"
+                            Invoke-Expression $deleteCmd
+                            
+                            if ($LASTEXITCODE -eq 0) {
+                                Write-Host "`[SUCCESS`] Deleted: $fileName"
+                                $deletedCount++
+                            } else {
+                                Write-Host "`[ERROR`] Failed to delete: $fileName"
+                            }
+                        }
+                    }
+                }
+            } else {
+                Write-Host "`[WARNING`] Could not list files for pattern: $filePattern"
+            }
+        }
+        
+        Write-Host "`[INFO`] Deleted $deletedCount files"
+        return $deletedCount
+    }
+    catch {
+        Write-Host "`[ERROR`] Delete operation failed: $($_.Exception.Message)"
+        return 0
+    }
+}
+
 # Function to list bucket contents
 function List-BucketContents {
     param(
@@ -190,18 +272,103 @@ function List-BucketContents {
 
 # Main script execution
 Write-Host "==============================================="
-Write-Host "Kamiwaza MSI Upload Script (PowerShell)"
+Write-Host "Kamiwaza MSI Management Script (PowerShell)"
 Write-Host "==============================================="
 
-# Validate MSI file argument
-if ([string]::IsNullOrWhiteSpace($MsiFilePath)) {
-    Write-Host "`[ERROR`] Please provide an MSI file path as an argument"
-    Write-Host "Usage: .\upload_msi_to_win.ps1 -MsiFilePath `"path\to\your\installer.msi`""
-    Write-Host "       .\upload_msi_to_win.ps1 -MsiFilePath `"path\to\your\installer.msi`" -EnvFile `"custom\env\file.sh`""
+# Handle delete operation
+if ($Delete) {
+    if ([string]::IsNullOrWhiteSpace($Version)) {
+        Write-Host "`[ERROR`] Version is required for delete operation"
+        Write-Host "Usage: .\upload_msi_to_win.ps1 -Delete -Version `"0.5.0`" -Arch `"x86_64`""
+        Write-Host "       .\upload_msi_to_win.ps1 -Delete -Version `"0.5.0`" -Arch `"arm64`" -EnvFile `"custom\env\file.sh`""
+        Write-Host "       .\upload_msi_to_win.ps1 -Delete -Version `"0.5.0`" (deletes all architectures)"
+        Write-Host ""
+        Write-Host "`[DEBUG`] Script completed. Press any key to close..."
+        Read-Host
+        exit 1
+    }
+    
+    # Set default architecture if not specified
+    if ([string]::IsNullOrWhiteSpace($Arch)) {
+        $Arch = "all"
+        Write-Host "`[INFO`] Delete Mode: Version=$Version, Arch=all (searching all architectures)"
+    } else {
+        Write-Host "`[INFO`] Delete Mode: Version=$Version, Arch=$Arch"
+    }
+    Write-Host "`[INFO`] Environment File: $EnvFile"
+    Write-Host ""
+    
+    # Load environment variables
+    $envVars = Load-EnvFile -FilePath $EnvFile
+    
+    # Set AWS environment
+    Set-AwsEnvironment -EnvVars $envVars
+    
+    # Display configuration
+    Write-Host ""
+    Write-Host "`[INFO`] Delete Configuration:"
+    Write-Host "`[INFO`] AWS_ACCESS_KEY_ID: $($env:AWS_ACCESS_KEY_ID)"
+    Write-Host "`[INFO`] AWS_SECRET_ACCESS_KEY: $($env:AWS_SECRET_ACCESS_KEY -replace '.', '*')"
+    Write-Host "`[INFO`] AWS_ENDPOINT_URL: $($env:AWS_ENDPOINT_URL)"
+    Write-Host "`[INFO`] BUCKET_NAME: $($env:BUCKET_NAME)"
+    Write-Host ""
+    
+    # Delete MSI files
+    Write-Host "`[INFO`] Deleting MSI files..."
+    $deletedCount = Delete-MsiFiles -Version $Version -Arch $Arch -BucketName $env:BUCKET_NAME -EndpointUrl $env:AWS_ENDPOINT_URL
+    
+    # Show results
+    Write-Host ""
+    Write-Host "==============================================="
+    Write-Host "DELETE RESULTS"
+    Write-Host "==============================================="
+    
+    if ($deletedCount -gt 0) {
+        if ($Arch -eq "all") {
+            Write-Host "`[SUCCESS`] Deleted $deletedCount MSI files for version $Version (all architectures)"
+        } else {
+            Write-Host "`[SUCCESS`] Deleted $deletedCount MSI files for version $Version ($Arch)"
+        }
+    } else {
+        if ($Arch -eq "all") {
+            Write-Host "`[WARNING`] No MSI files found for version $Version (any architecture)"
+        } else {
+            Write-Host "`[WARNING`] No MSI files found for version $Version ($Arch)"
+        }
+    }
+    
+    Write-Host "==============================================="
+    
+    # List current bucket contents
+    Write-Host ""
+    List-BucketContents -BucketName $env:BUCKET_NAME -EndpointUrl $env:AWS_ENDPOINT_URL
+    
     Write-Host ""
     Write-Host "`[DEBUG`] Script completed. Press any key to close..."
     Read-Host
-    exit 1
+    exit 0
+}
+
+# Handle upload operation
+# Auto-detect MSI file if not provided but EnvFile looks like an MSI file
+if ([string]::IsNullOrWhiteSpace($MsiFilePath)) {
+    if (-not [string]::IsNullOrWhiteSpace($EnvFile) -and $EnvFile.EndsWith('.msi')) {
+        Write-Host "`[INFO`] Auto-detected MSI file from EnvFile parameter: $EnvFile"
+        $MsiFilePath = $EnvFile
+        # Reset EnvFile to default since it was actually the MSI file
+        $EnvFile = ""
+    } else {
+        Write-Host "`[ERROR`] Please provide an MSI file path as an argument or use -Delete flag"
+        Write-Host "Upload Usage: .\upload_msi_to_win.ps1 -MsiFilePath `"path\to\your\installer.msi`""
+        Write-Host "             .\upload_msi_to_win.ps1 -MsiFilePath `"path\to\your\installer.msi`" -EnvFile `"custom\env\file.sh`""
+        Write-Host "Delete Usage: .\upload_msi_to_win.ps1 -Delete -Version `"0.5.0`" -Arch `"x86_64`""
+        Write-Host "             .\upload_msi_to_win.ps1 -Delete -Version `"0.5.0`" -Arch `"arm64`" -EnvFile `"custom\env\file.sh`""
+        Write-Host "             .\upload_msi_to_win.ps1 -Delete -Version `"0.5.0`" (deletes all architectures)"
+        Write-Host ""
+        Write-Host "`[DEBUG`] Script completed. Press any key to close..."
+        Read-Host
+        exit 1
+    }
 }
 
 # Validate that the MSI file exists
@@ -233,10 +400,57 @@ Write-Host "`[INFO`] AWS_ENDPOINT_URL: $($env:AWS_ENDPOINT_URL)"
 Write-Host "`[INFO`] BUCKET_NAME: $($env:BUCKET_NAME)"
 Write-Host ""
 
-# Prepare MSI file for upload
+# Prepare MSI file for upload with new naming convention
 Write-Host "`[INFO`] Preparing MSI file for upload..."
-$uploadMsiName = "kamiwaza_installer.msi"
+
+# Extract version and architecture from MSI filename if not provided
+if ([string]::IsNullOrWhiteSpace($Version) -or [string]::IsNullOrWhiteSpace($Arch)) {
+    Write-Host "`[INFO`] Extracting version and architecture from MSI filename..."
+    
+    $msiFileName = Split-Path $MsiFilePath -Leaf
+    Write-Host "`[DEBUG`] MSI filename: $msiFileName"
+    
+    # Parse filename pattern: kamiwaza_installer_VERSION_ARCH.msi
+    if ($msiFileName -match 'kamiwaza_installer_([^_]+)_([^.]+)\.msi$') {
+        $Version = $matches[1]
+        $Arch = $matches[2]
+        Write-Host "`[SUCCESS`] Extracted from filename - Version: $Version, Arch: $Arch"
+    } else {
+        Write-Host "`[WARNING`] Could not parse version/arch from filename, trying config.yaml..."
+        try {
+            $configContent = Get-Content "config.yaml" -ErrorAction Stop
+            foreach ($line in $configContent) {
+                if ($line -match '^kamiwaza_version:\s*(.+)$') {
+                    $Version = $matches[1].Trim()
+                }
+                if ($line -match '^arch:\s*(.+?)(?:\s+#|$)') {
+                    $Arch = $matches[1].Trim()
+                }
+            }
+            Write-Host "`[INFO`] Using config.yaml values - Version: $Version, Arch: $Arch"
+        }
+        catch {
+            Write-Host "`[ERROR`] Could not read config.yaml and filename parsing failed"
+            Write-Host "`[ERROR`] Please provide version and architecture explicitly or use proper filename format"
+            Write-Host "`[ERROR`] Expected format: kamiwaza_installer_VERSION_ARCH.msi"
+            Write-Host "`[ERROR`] Example: kamiwaza_installer_0.5.1_x86_64.msi"
+            Write-Host ""
+            Write-Host "`[DEBUG`] Script completed. Press any key to close..."
+            Read-Host
+            exit 1
+        }
+    }
+}
+
+# Clean up values
+$Version = $Version.Trim()
+$Arch = $Arch.Trim()
+
+# Create new naming convention: kamiwaza_installer_version_arch.msi
+$uploadMsiName = "kamiwaza_installer_${Version}_${Arch}.msi"
 $tempMsiPath = Join-Path $PWD $uploadMsiName
+
+Write-Host "`[INFO`] Using naming convention: $uploadMsiName"
 
 try {
     Copy-Item $MsiFilePath $tempMsiPath -Force
@@ -262,12 +476,15 @@ Write-Host "UPLOAD RESULTS"
 Write-Host "==============================================="
 
 if ($uploadSuccess) {
-    $genericMsiUrl = "https://packages.kamiwaza.ai/win/kamiwaza_installer.msi"
+    $genericMsiUrl = "https://packages.kamiwaza.ai/win/$uploadMsiName"
     Write-Host "`[SUCCESS`] MSI uploaded successfully!"
-    Write-Host "`[SUCCESS`] Generic MSI URL: $genericMsiUrl"
+    Write-Host "`[SUCCESS`] MSI URL: $genericMsiUrl"
     Write-Host ""
     Write-Host "`[INFO`] Copy this URL for distribution:"
     Write-Host "       $genericMsiUrl"
+    Write-Host ""
+    Write-Host "`[INFO`] File naming convention: kamiwaza_installer_version_arch.msi"
+    Write-Host "`[INFO`] Example: kamiwaza_installer_0.5.0_x86_64.msi"
 } else {
     Write-Host "`[ERROR`] Upload failed!"
     Write-Host "`[INFO`] MSI file is available locally: $uploadMsiName"

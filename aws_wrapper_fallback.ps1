@@ -4,7 +4,9 @@ param(
     [string]$Arch,
     [int]$StartBuild,
     [string]$EndpointUrl,
-    [switch]$SkipGeneric
+    [switch]$SkipGeneric,
+    [Parameter(Position=0, ValueFromRemainingArguments=$false)]
+    [string]$FilePath
 )
 
 # Enhanced SSL configuration for PowerShell
@@ -17,7 +19,7 @@ $env:AWS_CLI_SSL_NO_VERIFY = "true"
 function Test-BuildExists {
     param([int]$BuildNumber)
     
-    $fileName = "kamiwaza_installer_${Version}_${Arch}_build${BuildNumber}.exe"
+    $fileName = "kamiwaza_installer_${Version}_${Arch}.exe"
     
     # Method 1: Try AWS CLI with SSL bypass
     Write-Host "[DEBUG] Trying AWS CLI method for build check..."
@@ -100,17 +102,44 @@ function Test-BuildExists {
     return $false
 }
 
+# Handle file path as unbound argument (when called like: script.ps1 upload filepath)
+if (-not $FilePath -and $args.Count -gt 0) {
+    $potentialPath = $args[0]
+    if ($potentialPath -and (Test-Path $potentialPath -ErrorAction SilentlyContinue)) {
+        $FilePath = $potentialPath
+        Write-Host "[DEBUG] Detected file path from unbound argument: $FilePath"
+    }
+}
+
 # Function to upload files with fallback methods
 function Upload-Files {
     param([int]$BuildNumber)
     
-    $exeName = "kamiwaza_installer_${Version}_${Arch}_build${BuildNumber}.exe"
-    $msiName = "kamiwaza_installer_${Version}_${Arch}_build${BuildNumber}.msi"
+    $exeName = "kamiwaza_installer_${Version}_${Arch}.exe"
+    $msiName = "kamiwaza_installer_${Version}_${Arch}.msi"
     $genericMsiName = "kamiwaza_installer_${Version}_${Arch}.msi"
     
     $exeSuccess = $false
     $msiSuccess = $false
     $genericMsiSuccess = $false
+    
+    # Determine MSI source path and name
+    $msiSourcePath = $null
+    if ($FilePath -and (Test-Path $FilePath)) {
+        $msiSourcePath = $FilePath
+        $msiName = Split-Path -Leaf $FilePath
+        Write-Host "[DEBUG] Using provided MSI file: $msiName"
+    } else {
+        # Check for renamed MSI file first (with build number), then fall back to default name
+        $msiFiles = Get-ChildItem -Path "." -Filter "kamiwaza_installer_*.msi" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
+        if ($msiFiles -and $msiFiles.Count -gt 0) {
+            $msiSourcePath = $msiFiles[0].FullName
+            $msiName = $msiFiles[0].Name
+            Write-Host "[DEBUG] Found renamed MSI file: $msiName"
+        } elseif (Test-Path "kamiwaza_installer.msi") {
+            $msiSourcePath = "kamiwaza_installer.msi"
+        }
+    }
     
     # Upload EXE (if exists)
     if (Test-Path "dist\kamiwaza_installer.exe") {
@@ -149,13 +178,13 @@ function Upload-Files {
     }
     
     # Upload MSI
-    if (Test-Path "kamiwaza_installer.msi") {
-        Write-Host "[INFO] Uploading MSI: $msiName"
+    if ($msiSourcePath -and (Test-Path $msiSourcePath)) {
+        Write-Host "[INFO] Uploading MSI: $msiName from $msiSourcePath"
         
         # Method 1: AWS CLI with SSL bypass
         try {
             Write-Host "[DEBUG] Trying AWS CLI upload for MSI..."
-            & "venv\Scripts\aws.cmd" s3 cp "kamiwaza_installer.msi" "s3://packages/win/$msiName" --endpoint-url $EndpointUrl --no-verify-ssl
+            & "venv\Scripts\aws.cmd" s3 cp $msiSourcePath "s3://packages/win/$msiName" --endpoint-url $EndpointUrl --no-verify-ssl
             $msiSuccess = $LASTEXITCODE -eq 0
             if ($msiSuccess) {
                 Write-Host "[SUCCESS] MSI uploaded successfully via AWS CLI"
@@ -170,7 +199,7 @@ function Upload-Files {
             try {
                 Write-Host "[DEBUG] Trying AWS CLI MSI upload with additional options..."
                 $env:AWS_CA_BUNDLE = ""
-                & "venv\Scripts\aws.cmd" s3 cp "kamiwaza_installer.msi" "s3://packages/win/$msiName" --endpoint-url $EndpointUrl --no-verify-ssl --cli-read-timeout 60 --cli-connect-timeout 20
+                & "venv\Scripts\aws.cmd" s3 cp $msiSourcePath "s3://packages/win/$msiName" --endpoint-url $EndpointUrl --no-verify-ssl --cli-read-timeout 60 --cli-connect-timeout 20
                 $msiSuccess = $LASTEXITCODE -eq 0
                 if ($msiSuccess) {
                     Write-Host "[SUCCESS] MSI uploaded successfully via AWS CLI (with additional options)"
@@ -181,20 +210,20 @@ function Upload-Files {
             }
         }
     } else {
-        Write-Host "[WARN] MSI file not found at kamiwaza_installer.msi"
+        Write-Host "[WARN] MSI file not found"
     }
     
     # Upload generic MSI (if MSI exists and not skipped)
     if ($SkipGeneric) {
         Write-Host "[INFO] Skipping generic MSI upload as requested"
         $genericMsiSuccess = $true  # Set to true since we're intentionally skipping
-    } elseif (Test-Path "kamiwaza_installer.msi") {
-        Write-Host "[INFO] Uploading generic MSI: $genericMsiName"
+    } elseif ($msiSourcePath -and (Test-Path $msiSourcePath)) {
+        Write-Host "[INFO] Uploading generic MSI: $genericMsiName from $msiSourcePath"
         
         # Method 1: AWS CLI with SSL bypass
         try {
             Write-Host "[DEBUG] Trying AWS CLI upload for generic MSI..."
-            & "venv\Scripts\aws.cmd" s3 cp "kamiwaza_installer.msi" "s3://packages/win/$genericMsiName" --endpoint-url $EndpointUrl --no-verify-ssl
+            & "venv\Scripts\aws.cmd" s3 cp $msiSourcePath "s3://packages/win/$genericMsiName" --endpoint-url $EndpointUrl --no-verify-ssl
             $genericMsiSuccess = $LASTEXITCODE -eq 0
             if ($genericMsiSuccess) {
                 Write-Host "[SUCCESS] Generic MSI uploaded successfully via AWS CLI"
@@ -209,7 +238,7 @@ function Upload-Files {
             try {
                 Write-Host "[DEBUG] Trying AWS CLI generic MSI upload with additional options..."
                 $env:AWS_CA_BUNDLE = ""
-                & "venv\Scripts\aws.cmd" s3 cp "kamiwaza_installer.msi" "s3://packages/win/$genericMsiName" --endpoint-url $EndpointUrl --no-verify-ssl --cli-read-timeout 60 --cli-connect-timeout 20
+                & "venv\Scripts\aws.cmd" s3 cp $msiSourcePath "s3://packages/win/$genericMsiName" --endpoint-url $EndpointUrl --no-verify-ssl --cli-read-timeout 60 --cli-connect-timeout 20
                 $genericMsiSuccess = $LASTEXITCODE -eq 0
                 if ($genericMsiSuccess) {
                     Write-Host "[SUCCESS] Generic MSI uploaded successfully via AWS CLI (with additional options)"
@@ -220,7 +249,7 @@ function Upload-Files {
             }
         }
     } else {
-        Write-Host "[WARN] MSI file not found at kamiwaza_installer.msi for generic upload"
+        Write-Host "[WARN] MSI file not found for generic upload"
     }
     
     # Output results for batch script to read

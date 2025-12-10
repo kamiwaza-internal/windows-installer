@@ -90,6 +90,9 @@ detect_gpu() {
     elif echo "$GPU_NAME" | grep -qi "RTX 4070"; then
         success "RTX 4070 detected! Configuring for balanced performance..."
         GPU_TYPE="RTX_4070"
+    elif echo "$GPU_NAME" | grep -qi "RTX 4060"; then
+        success "RTX 4060 detected! Configuring for balanced performance..."
+        GPU_TYPE="RTX_4060"
     elif echo "$GPU_NAME" | grep -qi "RTX 3090"; then
         success "RTX 3090 detected! Configuring for high performance..."
         GPU_TYPE="RTX_3090"
@@ -212,6 +215,36 @@ configure_gpu_optimizations() {
             
             success "$GPU_TYPE optimizations applied!"
             ;;
+
+        "RTX_4060")
+            header "Entry-Level GPU Optimizations (8GB VRAM)"
+            log "Configuring $GPU_TYPE for standard performance..."
+            
+            # Set environment variables for entry-level GPUs
+            export CUDA_VISIBLE_DEVICES=0
+            export CUDA_LAUNCH_BLOCKING=0
+            export CUDA_CACHE_DISABLE=0
+            export CUDA_CACHE_PATH=/tmp/cuda_cache
+            
+            # Create CUDA cache directory
+            sudo mkdir -p /tmp/cuda_cache
+            sudo chmod 777 /tmp/cuda_cache
+            
+            # Optimize memory management
+            log "Optimizing memory management..."
+            sudo sysctl -w vm.max_map_count=268435456
+            sudo sysctl -w vm.swappiness=40
+            
+            # Set GPU memory fraction for better utilization
+            export TF_FORCE_GPU_ALLOW_GROWTH=true
+            export TF_GPU_MEMORY_FRACTION=0.80
+            
+            # Entry-level GPU specific PyTorch optimizations
+            export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:64
+            export TORCH_CUDNN_V8_API_ENABLED=1
+            
+            success "$GPU_TYPE optimizations applied!"
+            ;;
             
         "RTX_3060")
             header "Entry-Level GPU Optimizations (12GB VRAM)"
@@ -239,6 +272,16 @@ configure_gpu_optimizations() {
             # Entry-level GPU specific PyTorch optimizations
             export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:64
             export TORCH_CUDNN_V8_API_ENABLED=1
+            
+            # vLLM specific optimizations for RTX 3060
+            export VLLM_USE_MODELSCOPE=false
+            export VLLM_ATTENTION_BACKEND=FLASHINFER
+            export VLLM_WORKER_MULTIPROC_METHOD=spawn
+            
+            # Docker shared memory optimization for vLLM
+            log "Setting up shared memory for vLLM Docker containers..."
+            sudo mkdir -p /dev/shm/vllm_cache
+            sudo chmod 777 /dev/shm/vllm_cache
             
             success "$GPU_TYPE optimizations applied!"
             ;;
@@ -303,7 +346,7 @@ check_prerequisites() {
     log "Prerequisites verified. Ensure you have:"
     log "1. Latest Windows 11 and WSL2"
     log "2. Updated NVIDIA GPU drivers from NVIDIA's official site"
-    log "3. NVIDIA GeForce RTX 5080/5090 GPU"
+    log "3. NVIDIA GeForce RTX GPU (30xx, 40xx, or 50xx series)"
     log "4. Ubuntu 24.04 (Noble) with Python 3.12"
     echo
 }

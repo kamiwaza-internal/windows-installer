@@ -1,9 +1,12 @@
 param(
+    [Parameter(Position=0)]
     [string]$Operation,
     [string]$Version,
     [string]$Arch,
-    [int]$StartBuild,
-    [string]$EndpointUrl
+    [int]$StartBuild = 0,
+    [string]$EndpointUrl,
+    [Parameter(Position=1, ValueFromRemainingArguments=$false)]
+    [string]$FilePath
 )
 
 # Enhanced SSL configuration for PowerShell
@@ -12,11 +15,108 @@ $env:AWS_CLI_SSL_NO_VERIFY = "true"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
 
+# Load defaults from config.yaml FIRST (before any other processing)
+$configVersion = $null
+$configArch = $null
+$configEndpointUrl = $null
+$configBuildNumber = $null
+
+if (Test-Path "config.yaml") {
+    Write-Host "[DEBUG] Loading configuration from config.yaml..."
+    $configContent = Get-Content "config.yaml" -Raw
+    
+    if ($configContent -match 'kamiwaza_version:\s*([^\s#]+)') {
+        $configVersion = $matches[1].Trim()
+        Write-Host "[DEBUG] Found version in config: $configVersion"
+    }
+    if ($configContent -match 'arch:\s*([^\s#]+)') {
+        $configArch = $matches[1].Trim()
+        Write-Host "[DEBUG] Found architecture in config: $configArch"
+    }
+    if ($configContent -match 'r2_endpoint_url:\s*([^\s#]+)') {
+        $configEndpointUrl = $matches[1].Trim()
+        Write-Host "[DEBUG] Found endpoint URL in config"
+    }
+    if ($configContent -match 'build_number:\s*([^\s#]+)') {
+        $configBuildNumber = [int]$matches[1].Trim()
+        Write-Host "[DEBUG] Found build number in config: $configBuildNumber"
+    }
+} else {
+    Write-Host "[DEBUG] config.yaml not found, using command-line parameters only"
+}
+
+# Apply config.yaml values as defaults (only if not provided via command-line)
+if (-not $Version -and $configVersion) {
+    $Version = $configVersion
+    Write-Host "[DEBUG] Using version from config.yaml: $Version"
+}
+if (-not $Arch -and $configArch) {
+    $Arch = $configArch
+    Write-Host "[DEBUG] Using architecture from config.yaml: $Arch"
+}
+if (-not $EndpointUrl -and $configEndpointUrl) {
+    $EndpointUrl = $configEndpointUrl
+    Write-Host "[DEBUG] Using endpoint URL from config.yaml"
+}
+if ($StartBuild -eq 0 -and $configBuildNumber) {
+    $StartBuild = $configBuildNumber
+    Write-Host "[DEBUG] Using build number from config.yaml: $StartBuild"
+}
+
+# Handle file path as unbound argument (when called like: script.ps1 upload filepath)
+if (-not $FilePath -and $args.Count -gt 0) {
+    $potentialPath = $args[0]
+    if ($potentialPath -and (Test-Path $potentialPath -ErrorAction SilentlyContinue)) {
+        $FilePath = $potentialPath
+        Write-Host "[DEBUG] Detected file path from unbound argument: $FilePath"
+    }
+}
+
+# Parse file path if provided (for direct file upload)
+# Filename extraction will override config.yaml values if file path is provided
+if ($FilePath -and $Operation -eq "upload") {
+    Write-Host "[DEBUG] File path provided: $FilePath"
+    
+    if (-not (Test-Path $FilePath)) {
+        Write-Host "[ERROR] File not found: $FilePath"
+        exit 1
+    }
+    
+    $fileName = Split-Path -Leaf $FilePath
+    Write-Host "[DEBUG] Extracted filename: $fileName"
+    
+    # Parse filename pattern: kamiwaza_installer_<version>_<arch>.<ext>
+    if ($fileName -match 'kamiwaza_installer_([^_]+)_([^.]+)\.(msi|exe)') {
+        # Filename values override config.yaml and command-line (if not explicitly provided)
+        if (-not $Version -or $Version -eq $configVersion) {
+            $Version = $matches[1]
+            Write-Host "[DEBUG] Extracted version from filename: $Version"
+        }
+        if (-not $Arch -or $Arch -eq $configArch) {
+            $Arch = $matches[2]
+            Write-Host "[DEBUG] Extracted architecture from filename: $Arch"
+        }
+        $fileExtension = $matches[3]
+        Write-Host "[DEBUG] File extension: $fileExtension"
+    } else {
+        Write-Host "[ERROR] Filename does not match expected pattern: kamiwaza_installer_<version>_<arch>.<ext>"
+        Write-Host "[ERROR] Got: $fileName"
+        exit 1
+    }
+    
+    # Store file path and extension for use in upload function
+    $script:SourceFilePath = $FilePath
+    $script:SourceFileExtension = $fileExtension
+} else {
+    $script:SourceFilePath = $null
+    $script:SourceFileExtension = $null
+}
+
 # Function to check if a build exists with fallback methods
 function Test-BuildExists {
     param([int]$BuildNumber)
     
-    $fileName = "kamiwaza_installer_${Version}_${Arch}_build${BuildNumber}.exe"
+    $fileName = "kamiwaza_installer_${Version}_${Arch}.exe"
     
     # Method 1: Try AWS CLI with SSL bypass
     Write-Host "[DEBUG] Trying AWS CLI method for build check..."
@@ -103,20 +203,51 @@ function Test-BuildExists {
 function Upload-Files {
     param([int]$BuildNumber)
     
-    $exeName = "kamiwaza_installer_${Version}_${Arch}_build${BuildNumber}.exe"
-    $msiName = "kamiwaza_installer_${Version}_${Arch}_build${BuildNumber}.msi"
+    $exeName = "kamiwaza_installer_${Version}_${Arch}.exe"
+    $msiName = "kamiwaza_installer_${Version}_${Arch}.msi"
     
     $exeSuccess = $false
     $msiSuccess = $false
     
+    # Determine source file paths
+    $exeSourcePath = $null
+    $msiSourcePath = $null
+    
+    if ($script:SourceFilePath) {
+        # Use provided file path
+        if ($script:SourceFileExtension -eq "exe") {
+            $exeSourcePath = $script:SourceFilePath
+            # Use the actual filename for upload target
+            $exeName = Split-Path -Leaf $script:SourceFilePath
+        } elseif ($script:SourceFileExtension -eq "msi") {
+            $msiSourcePath = $script:SourceFilePath
+            # Use the actual filename for upload target
+            $msiName = Split-Path -Leaf $script:SourceFilePath
+        }
+    } else {
+        # Use default paths
+        if (Test-Path "dist\kamiwaza_installer.exe") {
+            $exeSourcePath = "dist\kamiwaza_installer.exe"
+        }
+        # Check for renamed MSI file first (with build number), then fall back to default name
+        $msiFiles = Get-ChildItem -Path "." -Filter "kamiwaza_installer_*.msi" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
+        if ($msiFiles -and $msiFiles.Count -gt 0) {
+            $msiSourcePath = $msiFiles[0].FullName
+            $msiName = $msiFiles[0].Name
+            Write-Host "[DEBUG] Found renamed MSI file: $msiName"
+        } elseif (Test-Path "kamiwaza_installer.msi") {
+            $msiSourcePath = "kamiwaza_installer.msi"
+        }
+    }
+    
     # Upload EXE (if exists)
-    if (Test-Path "dist\kamiwaza_installer.exe") {
-        Write-Host "[INFO] Uploading EXE: $exeName"
+    if ($exeSourcePath -and (Test-Path $exeSourcePath)) {
+        Write-Host "[INFO] Uploading EXE: $exeName from $exeSourcePath"
         
         # Method 1: AWS CLI with SSL bypass
         try {
             Write-Host "[DEBUG] Trying AWS CLI upload for EXE..."
-            & "venv\Scripts\aws.cmd" s3 cp "dist\kamiwaza_installer.exe" "s3://k-ubuntu/$exeName" --endpoint-url $EndpointUrl --no-verify-ssl
+            & "venv\Scripts\aws.cmd" s3 cp $exeSourcePath "s3://k-ubuntu/$exeName" --endpoint-url $EndpointUrl --no-verify-ssl
             $exeSuccess = $LASTEXITCODE -eq 0
             if ($exeSuccess) {
                 Write-Host "[SUCCESS] EXE uploaded successfully via AWS CLI"
@@ -131,7 +262,7 @@ function Upload-Files {
             try {
                 Write-Host "[DEBUG] Trying AWS CLI EXE upload with additional options..."
                 $env:AWS_CA_BUNDLE = ""
-                & "venv\Scripts\aws.cmd" s3 cp "dist\kamiwaza_installer.exe" "s3://k-ubuntu/$exeName" --endpoint-url $EndpointUrl --no-verify-ssl --cli-read-timeout 60 --cli-connect-timeout 20
+                & "venv\Scripts\aws.cmd" s3 cp $exeSourcePath "s3://k-ubuntu/$exeName" --endpoint-url $EndpointUrl --no-verify-ssl --cli-read-timeout 60 --cli-connect-timeout 20
                 $exeSuccess = $LASTEXITCODE -eq 0
                 if ($exeSuccess) {
                     Write-Host "[SUCCESS] EXE uploaded successfully via AWS CLI (with additional options)"
@@ -142,17 +273,17 @@ function Upload-Files {
             }
         }
     } else {
-        Write-Host "[WARN] EXE file not found at dist\kamiwaza_installer.exe"
+        Write-Host "[WARN] EXE file not found"
     }
     
     # Upload MSI
-    if (Test-Path "kamiwaza_installer.msi") {
-        Write-Host "[INFO] Uploading MSI: $msiName"
+    if ($msiSourcePath -and (Test-Path $msiSourcePath)) {
+        Write-Host "[INFO] Uploading MSI: $msiName from $msiSourcePath"
         
         # Method 1: AWS CLI with SSL bypass
         try {
             Write-Host "[DEBUG] Trying AWS CLI upload for MSI..."
-            & "venv\Scripts\aws.cmd" s3 cp "kamiwaza_installer.msi" "s3://k-ubuntu/$msiName" --endpoint-url $EndpointUrl --no-verify-ssl
+            & "venv\Scripts\aws.cmd" s3 cp $msiSourcePath "s3://k-ubuntu/$msiName" --endpoint-url $EndpointUrl --no-verify-ssl
             $msiSuccess = $LASTEXITCODE -eq 0
             if ($msiSuccess) {
                 Write-Host "[SUCCESS] MSI uploaded successfully via AWS CLI"
@@ -167,7 +298,7 @@ function Upload-Files {
             try {
                 Write-Host "[DEBUG] Trying AWS CLI MSI upload with additional options..."
                 $env:AWS_CA_BUNDLE = ""
-                & "venv\Scripts\aws.cmd" s3 cp "kamiwaza_installer.msi" "s3://k-ubuntu/$msiName" --endpoint-url $EndpointUrl --no-verify-ssl --cli-read-timeout 60 --cli-connect-timeout 20
+                & "venv\Scripts\aws.cmd" s3 cp $msiSourcePath "s3://k-ubuntu/$msiName" --endpoint-url $EndpointUrl --no-verify-ssl --cli-read-timeout 60 --cli-connect-timeout 20
                 $msiSuccess = $LASTEXITCODE -eq 0
                 if ($msiSuccess) {
                     Write-Host "[SUCCESS] MSI uploaded successfully via AWS CLI (with additional options)"
@@ -178,7 +309,7 @@ function Upload-Files {
             }
         }
     } else {
-        Write-Host "[WARN] MSI file not found at kamiwaza_installer.msi"
+        Write-Host "[WARN] MSI file not found"
     }
     
     # Output results for batch script to read
@@ -192,6 +323,22 @@ function Upload-Files {
         Write-Host "[ERROR] Both uploads failed. Check AWS CLI configuration and network connectivity."
         Write-Host "[DEBUG] Endpoint URL: $EndpointUrl"
         Write-Host "[DEBUG] Working directory: $PWD"
+    }
+}
+
+# Validate required parameters for upload operation
+if ($Operation -eq "upload") {
+    if (-not $Version) {
+        Write-Host "[ERROR] Version is required. Provide -Version parameter or ensure config.yaml contains kamiwaza_version"
+        exit 1
+    }
+    if (-not $Arch) {
+        Write-Host "[ERROR] Architecture is required. Provide -Arch parameter or ensure config.yaml contains arch"
+        exit 1
+    }
+    if (-not $EndpointUrl) {
+        Write-Host "[ERROR] Endpoint URL is required. Provide -EndpointUrl parameter or ensure config.yaml contains r2_endpoint_url"
+        exit 1
     }
 }
 

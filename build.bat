@@ -17,6 +17,17 @@ if "%1"=="--no-upload" (
     echo [INFO] Upload to AWS will be skipped
 )
 
+REM Check for --no-build-in-url flag
+set OMIT_BUILD_FROM_URL=0
+if "%1"=="--no-build-in-url" (
+    set OMIT_BUILD_FROM_URL=1
+    echo [INFO] Build number will be omitted from URL
+)
+if "%2"=="--no-build-in-url" (
+    set OMIT_BUILD_FROM_URL=1
+    echo [INFO] Build number will be omitted from URL
+)
+
 echo ===============================================
 echo Kamiwaza Build Script
 echo ===============================================
@@ -238,10 +249,31 @@ if errorlevel 1 (
     echo [SUCCESS] MSI installer built successfully
 )
 
+REM Set MSI file name using new naming convention
+REM Include build number by default for record keeping, omit only when --no-build-in-url flag is set
+if "%OMIT_BUILD_FROM_URL%"=="1" (
+    set MSI_NAME=kamiwaza_installer_%KAMIWAZA_VERSION%_%ARCH%.msi
+) else (
+    set MSI_NAME=kamiwaza_installer_%KAMIWAZA_VERSION%_build!FINAL_BUILD_NUMBER!_%ARCH%.msi
+)
+
+REM Rename MSI file to match new naming convention
+echo [INFO] Renaming MSI file to new naming convention...
+if exist "kamiwaza_installer.msi" (
+    ren "kamiwaza_installer.msi" "!MSI_NAME!"
+    if errorlevel 1 (
+        echo [WARN] Failed to rename MSI file, keeping original name
+    ) else (
+        echo [SUCCESS] MSI file renamed to: !MSI_NAME!
+    )
+) else (
+    echo [ERROR] MSI file not found for renaming
+)
+
 REM Sign MSI using PowerShell script
 if not "%SKIP_SIGNING%"=="1" (
     echo [INFO] Signing executables...
-    powershell -ExecutionPolicy Bypass -File "sign_files.ps1" -MSIPath "kamiwaza_installer.msi"
+    powershell -ExecutionPolicy Bypass -File "sign_files.ps1" -MSIPath "!MSI_NAME!"
     if errorlevel 1 (
         echo [WARN] Failed to sign files - continuing anyway
     ) else (
@@ -257,11 +289,8 @@ echo.
 echo ===============================================
 echo BUILD COMPLETED SUCCESSFULLY
 echo ===============================================
-echo MSI: kamiwaza_installer.msi
+echo MSI: !MSI_NAME!
 echo.
-
-REM Set MSI file name (will be updated by PowerShell wrapper)
-set MSI_NAME=kamiwaza_installer_%KAMIWAZA_VERSION%_%ARCH%_build%FINAL_BUILD_NUMBER%.msi
 
 REM Upload files using PowerShell wrapper
 if "%SKIP_UPLOAD%"=="1" (
@@ -277,7 +306,7 @@ echo [INFO] Uploading files to AWS...
 
 REM Try the regular AWS wrapper first
 set UPLOAD_SUCCESS=0
-for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%" 2^>nul') do (
+for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%" "!MSI_NAME!" 2^>nul') do (
     echo [DEBUG] Parsing output: %%A=%%B
     if "%%A"=="MSI_SUCCESS" (
         if "%%B"=="True" (
@@ -297,7 +326,7 @@ for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File a
 REM If regular upload failed, try the fallback wrapper
 if "%UPLOAD_SUCCESS%"=="0" (
     echo [WARN] Regular upload failed, trying fallback method...
-    for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper_fallback.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%"') do (
+    for /f "tokens=1,2 delims==" %%A in ('powershell -ExecutionPolicy Bypass -File aws_wrapper_fallback.ps1 -Operation "upload" -Version "%KAMIWAZA_VERSION%" -Arch "%ARCH%" -StartBuild %FINAL_BUILD_NUMBER% -EndpointUrl "%R2_ENDPOINT_URL%" "!MSI_NAME!"') do (
         echo [DEBUG] Fallback parsing output: %%A=%%B
         if "%%A"=="MSI_SUCCESS" (
             if "%%B"=="True" (
@@ -335,7 +364,7 @@ if "%MSI_SUCCESS%"=="1" (
     echo ===============================================
     echo UPLOAD STATUS
     echo ===============================================
-    echo [INFO] MSI file created locally: kamiwaza_installer.msi
+    echo [INFO] MSI file created locally: !MSI_NAME!
     echo [INFO] Upload was not successful - no public URL available
     echo ===============================================
 )
